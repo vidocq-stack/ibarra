@@ -20,4 +20,3 @@
 module io.vidocq.ibarra.example.pages {
     requires io.vidocq.ibarra.api;
 }
-

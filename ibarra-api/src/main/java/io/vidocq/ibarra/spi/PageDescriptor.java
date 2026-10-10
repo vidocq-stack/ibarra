@@ -40,4 +40,3 @@ public record PageDescriptor(String path, Supplier<? extends HttpJspPage> factor
     /** Allocates a new servlet; deployment owns initialization, reuse and destruction. */
     public HttpJspPage createPage() { return Objects.requireNonNull(factory.get(), "Page factory returned null"); }
 }
-

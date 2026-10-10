@@ -78,4 +78,3 @@ class PrecompileMojoTest {
         assertThrows(IllegalArgumentException.class, () -> WebXmlProperties.read(descriptor));
     }
 }
-

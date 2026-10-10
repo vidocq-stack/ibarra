@@ -62,4 +62,3 @@ class PrecompiledPagesTest {
         public void _jspService(HttpServletRequest request, HttpServletResponse response) { }
     }
 }
-

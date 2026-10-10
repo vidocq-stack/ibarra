@@ -226,4 +226,3 @@ public final class PagePrecompiler {
         }
     }
 }
-

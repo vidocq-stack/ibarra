@@ -63,4 +63,3 @@ public final class PrecompileMojo extends AbstractMojo {
         }
     }
 }
-

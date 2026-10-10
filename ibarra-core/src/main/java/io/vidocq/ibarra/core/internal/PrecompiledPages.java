@@ -38,4 +38,3 @@ final class PrecompiledPages {
     }
     PageDescriptor find(String path) { return pages.get(path); }
 }
-

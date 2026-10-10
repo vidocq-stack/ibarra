@@ -256,4 +256,3 @@ class PagePrecompilerTest {
         return new String(Base64.getDecoder().decode(output.substring(output.indexOf("RESULT=") + 7).trim()), java.nio.charset.StandardCharsets.UTF_8);
     }
 }
-

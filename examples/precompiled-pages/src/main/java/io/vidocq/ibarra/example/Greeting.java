@@ -24,4 +24,3 @@ public final class Greeting {
     /** Returns the example greeting target. */
     public String getName() { return "Ibarra"; }
 }
-

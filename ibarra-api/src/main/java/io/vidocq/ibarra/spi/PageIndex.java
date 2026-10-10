@@ -27,4 +27,3 @@ public interface PageIndex {
     /** Immutable page descriptors; retrieving them must not construct servlets. */
     List<PageDescriptor> pages();
 }
-
