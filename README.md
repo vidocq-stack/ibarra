@@ -19,7 +19,7 @@ compilation, Java Modules layout, Foy JSP-engine SPI, TCK plan, milestones I0–
 ## Ecosystem rules
 
 Ibarra follows the transverse Vidocq philosophy (see the workspace
-[CLAUDE.md](https://codeberg.org/Vidocq/vidocq) conventions):
+[AGENTS.md](https://codefloe.com/Vidocq/vidocq-workspace/src/branch/main/AGENTS.md) conventions):
 
 - **Zero third-party dependency** — only the Jakarta Pages 4.0 API (which brings
   the Servlet 6.1 and Expression Language 6.0 APIs). No Jasper, no Eclipse JDT.

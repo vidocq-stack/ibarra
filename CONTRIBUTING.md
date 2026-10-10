@@ -115,6 +115,6 @@ By making a contribution to this project, I certify that:
 
 ## Code conventions
 
-See `CLAUDE.md` / `README.md` at the root of this repository for the project's
+See `AGENTS.md` / `README.md` at the root of this repository for the project's
 coding standards (strict Java Modules, zero runtime dependencies, virtual threads,
 TDD, English-only code and Javadoc).
