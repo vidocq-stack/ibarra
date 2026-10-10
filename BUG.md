@@ -34,3 +34,14 @@ Entry format: `short id · date · symptom · minimal repro · cause hypothesis 
   scoped-attribute resolver.
 - Status: fixed by providing an explicit resolver chain with scoped attributes
   as the final top-level resolver, without the standalone bean-name resolver.
+
+## IBARRA-004 · 2026-10-10 · PR validation cannot find Ibarra's dependency graph
+
+- Symptom: `pr-validate` fails after a successful producer build and all unit tests.
+- Minimal repro: PR #2, action run #7, downstream rebuild step: fetching
+  `Vidocq_ibarra.json` from `Vidocq/dep-graph` returns HTTP 404.
+- Cause: the new repository's dependency graph has not been bootstrapped; the
+  automatic updater only runs for POM changes on the default branch.
+- Status: fixed by dispatching the existing `update-dep-graph.yml` workflow on
+  `main` (successful action run #8). `data/Vidocq_ibarra.json` now exists in
+  `Vidocq/dep-graph`; the PR validation is rerun on the updated branch.
