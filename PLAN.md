@@ -1,10 +1,11 @@
 # Ibarra — Design plan
 
-> Status: **I1 runtime and I2 parser implemented**. This document is the design of record for Ibarra, the
+> Status: **I1/I2 implemented, I3 in progress**. This document is the design of record for Ibarra, the
 > Jakarta Pages 4.0 (formerly JavaServer Pages) implementation of the Vidocq
 > ecosystem. The scaffold (I0) and initial runtime (I1) are implemented.
-> JSP/JSPX parsing and an immutable page model are implemented (I2). Generation,
-> full Pages EL integration, tags and container binding remain planned.
+> JSP/JSPX parsing and an immutable page model are implemented (I2). Initial Java
+> generation and compiled fixtures exist (I3); static EL, remaining translation
+> semantics, tags and container binding remain planned.
 > Decisions marked **(to validate)** need the maintainer's sign-off before
 > the milestone that depends on them starts.
 
@@ -82,7 +83,7 @@ it at all.
 - **`ibarra-compiler`** holds the parser, the page model and the generator. It is
   a plain library used by the Maven plugin (build JVM) and, in development mode
   only, by the runtime.
-- **Generator output: Java source + `javax.tools` (to validate).** Scriptlets and
+- **Initial generator output: Java source + `javax.tools`.** Scriptlets and
   declarations *are* Java source fragments, so a Java compiler is needed for any
   page that uses them; generating Java source keeps one pipeline for all pages
   and gives readable output for debugging. **Alternative kept open:** emit
@@ -124,7 +125,7 @@ reflective fallback and Vauban's runtime fallbacks.
 |---|---|---|---|---|
 | `ibarra-api` | `io.vidocq.ibarra.api` | runtime | `transitive jakarta.servlet.jsp` | `io.vidocq.ibarra.spi` (generated-code SPI: `PageIndex`, page descriptor) |
 | `ibarra-core` | `io.vidocq.ibarra.core` | runtime | `transitive jakarta.servlet.jsp`, `io.vidocq.ibarra.api` | nothing — installs its `JspFactory` with `JspFactory.setDefaultFactory` at deployment (the spec defines no service lookup for it), `uses PageIndex` |
-| `ibarra-compiler` | `io.vidocq.ibarra.compiler` | build (+ dev mode planned) | `java.xml` today; SPI/Java compiler/Peano dependencies when generation needs them | `io.vidocq.ibarra.compiler` |
+| `ibarra-compiler` | `io.vidocq.ibarra.compiler` | build (+ dev mode planned) | `java.xml`, `static java.compiler`; SPI/Peano compiler dependencies when available | `io.vidocq.ibarra.compiler` |
 | `ibarra-maven-plugin` | (Maven plugin, class path) | build | `ibarra-compiler` | — |
 | `ibarra-foy` | `io.vidocq.ibarra.foy` | runtime | `io.vidocq.ibarra.core`, Foy's SPI module | nothing — `provides` Foy's JSP-engine SPI |
 | `ibarra-tck` | — | test, `-Ptck` | `ibarra-core` (+ Foy, Arquillian adapter later) | — |
@@ -223,7 +224,7 @@ the runtime's packaging goal, after I8.
 | I0 | Scaffold: reactor, `ibarra-core` module, `ibarra-tck` skeleton, docs, this plan | `./mvnw -ntp install` green (this commit) |
 | I1 | Runtime API: `JspFactory`, `PageContext`, `JspWriter` / `BodyContent` buffering, scopes, error pages — driven by hand-written `HttpJspPage` fixtures | implemented: unit tests against Foy-free servlet doubles, clean install green |
 | I2 | `ibarra-compiler` parser: standard + XML syntax, directives, scripting, template text, page model | implemented: 36 parser corpus tests, clean install green |
-| I3 | Generator: Java source for pages, standard actions, EL via `jakarta.el` (Peano in tests), `jsp-config` property groups | compiled fixture pages render expected output |
+| I3 | Generator: Java source for pages, standard actions, EL via `jakarta.el` (Peano in tests), `jsp-config` property groups | in progress: generated fixtures render; static EL and remaining semantics pending |
 | I4 | `ibarra-maven-plugin` precompile goal + page index; `ibarra-api` SPI | example webapp precompiled, no runtime translation |
 | I5 | `ibarra-foy` + Foy's JSP-engine SPI (Foy-side PR), `*.jsp` mapping, `addJspFile`, `getJspConfigDescriptor`, TLD listeners | end-to-end test on Foy/Chappe |
 | I6 | Custom tags: TLD parsing, classic + simple handlers, scripting variables, validators | |
@@ -274,10 +275,50 @@ DOCTYPE declarations and external entities are explicitly unsupported by this
 initial XML parser; it performs no external document lookup. The official TCK
 has not been run. Generator back-end questions below remain open.
 
+### Initial I3 generator (2026-10-10)
+
+`PageGenerator` produces `GeneratedPage` source and a source-location map.
+`PageCompiler` emits Java 25 classes with `javax.tools` at build time and keeps
+the generated `.ibarra-sources` for inspection. No generated classes are loaded
+by the compiler API. Java source is the initial back end for scripting pages;
+the later Class-File path for scriptless pages remains open.
+
+Supported fixtures cover text/scripting, lifecycle hooks, content type/buffering,
+static includes, preludes/codas, property-group matching, include/forward/param,
+useBean/getProperty/setProperty (including wildcard tables), and dynamic
+element/attribute/body generation. Bean metadata is read with the Class-File API
+and calls are direct. Property actions resolve the current named scoped bean.
+Javac enforces target-module access; inspection paths must supply non-base JDK
+class metadata when inheritance needs it.
+
+The runtime adds Pages scope, parameter, header, cookie and initialization-parameter
+implicit objects. Peano is test-scoped only. Generated expression fields are
+created against a dedicated initialization context before user `jspInit`, then
+evaluated with each request's context. This interpreter path is an explicit
+`withStartupEl(true)` preview option. The default rejects EL generation: Peano's
+P7 `peano-compiler` does not exist yet, so planned build-time expression compilation
+is unfinished. Generic EL bean access still uses the API's reflective fallback;
+generated standard bean actions themselves contain no reflection.
+
+Proof: `./mvnw -o -ntp clean install` under Temurin 25 passes 109 tests:
+41 runtime, 36 parser and 32 generator fixtures. Fixtures compile and run on
+the module path, construct pages directly and patch the core only to install
+its internal factory. They do not prove independent application packaging,
+page-index discovery or Foy deployment (I4/I5). Module, dependency, codegen and
+concurrency reviews have run; fixed regressions are recorded in `BUG.md`.
+
+Remaining I3 work: static EL and generated accessors after Peano P6/P7, EL imports
+and function bindings, strict missing-EL/undeclared-namespace policies, atomic
+shared-scope bean creation, broader output/attribute/translation validation,
+byte-source encoding handling and mixed-syntax includes. Unsupported constructs
+fail explicitly. New session/application beans are rejected; existing typed
+shared beans can be accessed. The official TCK has not been run.
+
 ## Open questions
 
-1. **Generator back end** — Java source + `javax.tools` for everything (simple,
-   one path) vs Class-File API for scriptless pages from the start?
+1. **Generator back end** — the initial I3 implementation uses Java source +
+   `javax.tools`; when should the Class-File path for scriptless pages be added
+   after the source path is TCK-green?
 2. **TCK deployment model** — runtime translation vs precompiling Arquillian
    adapter (see "TCK plan").
 3. **Foy SPI shape and module** — the `JspEngine` sketch above, which Foy module
@@ -289,6 +330,5 @@ has not been run. Generator back-end questions below remain open.
    or document as unsupported (pulls `java.desktop`)?
 6. **SMAP / JSR-045** line mapping for stack traces — needed for 1.0?
 7. **TCK coordinates** — confirm on Maven Central.
-8. **Remote repository and docs site** — `codefloe.com/Vidocq/ibarra` is assumed
-   in the POM `<scm>`; the repository, the `vidocq-docs` playbook entry and the
-   workspace `CLAUDE.md` listing are not created yet.
+8. **Docs aggregation** — the Codefloe repository exists; confirm the
+   `vidocq-docs` playbook entry and workspace project listing.

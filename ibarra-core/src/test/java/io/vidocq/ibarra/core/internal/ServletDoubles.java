@@ -24,6 +24,8 @@ final class ServletDoubles {
 static final class Context implements jakarta.servlet.ServletContext {
 final java.util.Map<String,Object> attributes = new java.util.HashMap<>();
 final java.util.Map<String,jakarta.servlet.RequestDispatcher> dispatchers = new java.util.HashMap<>();
+String lastDispatchPath;
+final java.util.Map<String,String> initParameters = new java.util.LinkedHashMap<>();
     @Override public java.lang.String getContextPath() { return ""; }
     @Override public jakarta.servlet.ServletContext getContext(java.lang.String a0) { throw new UnsupportedOperationException("getContext"); }
     @Override public int getMajorVersion() { throw new UnsupportedOperationException("getMajorVersion"); }
@@ -34,14 +36,17 @@ final java.util.Map<String,jakarta.servlet.RequestDispatcher> dispatchers = new 
     @Override public java.util.Set<java.lang.String> getResourcePaths(java.lang.String a0) { throw new UnsupportedOperationException("getResourcePaths"); }
     @Override public java.net.URL getResource(java.lang.String a0) throws java.net.MalformedURLException { throw new UnsupportedOperationException("getResource"); }
     @Override public java.io.InputStream getResourceAsStream(java.lang.String a0) { throw new UnsupportedOperationException("getResourceAsStream"); }
-    @Override public jakarta.servlet.RequestDispatcher getRequestDispatcher(java.lang.String a0) { return dispatchers.get(a0); }
+    @Override public jakarta.servlet.RequestDispatcher getRequestDispatcher(java.lang.String a0) {
+        lastDispatchPath = a0;
+        return dispatchers.get(a0.split("\\?", 2)[0]);
+    }
     @Override public jakarta.servlet.RequestDispatcher getNamedDispatcher(java.lang.String a0) { throw new UnsupportedOperationException("getNamedDispatcher"); }
     @Override public void log(java.lang.String a0) { throw new UnsupportedOperationException("log"); }
     @Override public void log(java.lang.String a0, java.lang.Throwable a1) { throw new UnsupportedOperationException("log"); }
     @Override public java.lang.String getRealPath(java.lang.String a0) { throw new UnsupportedOperationException("getRealPath"); }
     @Override public java.lang.String getServerInfo() { throw new UnsupportedOperationException("getServerInfo"); }
-    @Override public java.lang.String getInitParameter(java.lang.String a0) { throw new UnsupportedOperationException("getInitParameter"); }
-    @Override public java.util.Enumeration<java.lang.String> getInitParameterNames() { throw new UnsupportedOperationException("getInitParameterNames"); }
+    @Override public java.lang.String getInitParameter(java.lang.String a0) { return initParameters.get(a0); }
+    @Override public java.util.Enumeration<java.lang.String> getInitParameterNames() { return java.util.Collections.enumeration(initParameters.keySet()); }
     @Override public boolean setInitParameter(java.lang.String a0, java.lang.String a1) { throw new UnsupportedOperationException("setInitParameter"); }
     @Override public java.lang.Object getAttribute(java.lang.String a0) { return attributes.get(a0); }
     @Override public java.util.Enumeration<java.lang.String> getAttributeNames() { return java.util.Collections.enumeration(attributes.keySet()); }
@@ -99,17 +104,25 @@ final java.util.Map<String,Object> attributes = new java.util.HashMap<>();
 
 static final class Request implements jakarta.servlet.http.HttpServletRequest {
 final java.util.Map<String,Object> attributes = new java.util.HashMap<>();
+final java.util.Map<String,String[]> parameters = new java.util.LinkedHashMap<>();
+final java.util.Map<String,String> headers = new java.util.LinkedHashMap<>();
+jakarta.servlet.http.Cookie[] cookies;
 Session session;
 int sessionCalls;
 String servletPath = "/pages/view.jsp";
     @Override public java.lang.String getAuthType() { throw new UnsupportedOperationException("getAuthType"); }
-    @Override public jakarta.servlet.http.Cookie[] getCookies() { throw new UnsupportedOperationException("getCookies"); }
+    @Override public jakarta.servlet.http.Cookie[] getCookies() { return cookies; }
     @Override public long getDateHeader(java.lang.String a0) { throw new UnsupportedOperationException("getDateHeader"); }
-    @Override public java.lang.String getHeader(java.lang.String a0) { throw new UnsupportedOperationException("getHeader"); }
-    @Override public java.util.Enumeration<java.lang.String> getHeaders(java.lang.String a0) { throw new UnsupportedOperationException("getHeaders"); }
-    @Override public java.util.Enumeration<java.lang.String> getHeaderNames() { throw new UnsupportedOperationException("getHeaderNames"); }
+    @Override public java.lang.String getHeader(java.lang.String a0) {
+        return headers.entrySet().stream().filter(entry -> entry.getKey().equalsIgnoreCase(a0)).map(java.util.Map.Entry::getValue).findFirst().orElse(null);
+    }
+    @Override public java.util.Enumeration<java.lang.String> getHeaders(java.lang.String a0) {
+        var value = getHeader(a0);
+        return java.util.Collections.enumeration(value == null ? java.util.List.of() : java.util.List.of(value));
+    }
+    @Override public java.util.Enumeration<java.lang.String> getHeaderNames() { return java.util.Collections.enumeration(headers.keySet()); }
     @Override public int getIntHeader(java.lang.String a0) { throw new UnsupportedOperationException("getIntHeader"); }
-    @Override public java.lang.String getMethod() { throw new UnsupportedOperationException("getMethod"); }
+    @Override public java.lang.String getMethod() { return "GET"; }
     @Override public java.lang.String getPathInfo() { return null; }
     @Override public java.lang.String getPathTranslated() { throw new UnsupportedOperationException("getPathTranslated"); }
     @Override public java.lang.String getContextPath() { return ""; }
@@ -141,10 +154,12 @@ String servletPath = "/pages/view.jsp";
     @Override public long getContentLengthLong() { throw new UnsupportedOperationException("getContentLengthLong"); }
     @Override public java.lang.String getContentType() { throw new UnsupportedOperationException("getContentType"); }
     @Override public jakarta.servlet.ServletInputStream getInputStream() throws java.io.IOException { throw new UnsupportedOperationException("getInputStream"); }
-    @Override public java.lang.String getParameter(java.lang.String a0) { throw new UnsupportedOperationException("getParameter"); }
-    @Override public java.util.Enumeration<java.lang.String> getParameterNames() { throw new UnsupportedOperationException("getParameterNames"); }
-    @Override public java.lang.String[] getParameterValues(java.lang.String a0) { throw new UnsupportedOperationException("getParameterValues"); }
-    @Override public java.util.Map<java.lang.String, java.lang.String[]> getParameterMap() { throw new UnsupportedOperationException("getParameterMap"); }
+    @Override public java.lang.String getParameter(java.lang.String a0) {
+        var values = parameters.get(a0); return values == null || values.length == 0 ? null : values[0];
+    }
+    @Override public java.util.Enumeration<java.lang.String> getParameterNames() { return java.util.Collections.enumeration(parameters.keySet()); }
+    @Override public java.lang.String[] getParameterValues(java.lang.String a0) { return parameters.get(a0); }
+    @Override public java.util.Map<java.lang.String, java.lang.String[]> getParameterMap() { return java.util.Collections.unmodifiableMap(parameters); }
     @Override public java.lang.String getProtocol() { throw new UnsupportedOperationException("getProtocol"); }
     @Override public java.lang.String getScheme() { throw new UnsupportedOperationException("getScheme"); }
     @Override public java.lang.String getServerName() { throw new UnsupportedOperationException("getServerName"); }
@@ -176,6 +191,8 @@ String servletPath = "/pages/view.jsp";
 
 static final class Response implements jakarta.servlet.http.HttpServletResponse {
     int status = 200;
+    String contentType = "text/html";
+    String encoding = "UTF-8";
     @Override public void addCookie(jakarta.servlet.http.Cookie a0) { throw new UnsupportedOperationException("addCookie"); }
     @Override public boolean containsHeader(java.lang.String a0) { throw new UnsupportedOperationException("containsHeader"); }
     @Override public java.lang.String encodeURL(java.lang.String a0) { throw new UnsupportedOperationException("encodeURL"); }
@@ -200,14 +217,14 @@ int acquisitions;
 final java.io.PrintWriter writer = new java.io.PrintWriter(output) {
 @Override public void flush() { super.flush(); committed = true; }
 };
-    @Override public java.lang.String getCharacterEncoding() { return "UTF-8"; }
-    @Override public java.lang.String getContentType() { return "text/html"; }
+    @Override public java.lang.String getCharacterEncoding() { return encoding; }
+    @Override public java.lang.String getContentType() { return contentType; }
     @Override public jakarta.servlet.ServletOutputStream getOutputStream() throws java.io.IOException { throw new UnsupportedOperationException("getOutputStream"); }
     @Override public java.io.PrintWriter getWriter() throws java.io.IOException { acquisitions++; return writer; }
-    @Override public void setCharacterEncoding(java.lang.String a0) {  }
+    @Override public void setCharacterEncoding(java.lang.String a0) { encoding = a0; }
     @Override public void setContentLength(int a0) { throw new UnsupportedOperationException("setContentLength"); }
     @Override public void setContentLengthLong(long a0) { throw new UnsupportedOperationException("setContentLengthLong"); }
-    @Override public void setContentType(java.lang.String a0) {  }
+    @Override public void setContentType(java.lang.String a0) { contentType = a0; }
     @Override public void setBufferSize(int a0) { throw new UnsupportedOperationException("setBufferSize"); }
     @Override public int getBufferSize() { return 8192; }
     @Override public void flushBuffer() throws java.io.IOException { writer.flush(); }

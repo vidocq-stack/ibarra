@@ -2,8 +2,8 @@
 :description: How Ibarra will be used — initial runtime/parser implemented, precompilation planned.
 
 [.lead]
-Ibarra cannot serve JSP source files yet: the runtime and parser are implemented,
-but generation and container binding remain planned. This page shows the
+Ibarra cannot deploy JSP source files yet: the runtime/parser and initial Java
+generation are implemented, but packaging and container binding remain planned. This page shows the
 intended first steps so the target experience is explicit.
 
 == Prerequisites
@@ -58,6 +58,28 @@ var nodes = page.nodes();
 
 `PageParser` is in `io.vidocq.ibarra.compiler`. This parses source structure; it
 does not compile or render the page. See xref:internals.adoc[Internals] for scope.
+
+== Generating a servlet source (initial I3)
+
+With the compiler module and `java.compiler` resolved in a full Java 25 JDK:
+
+[source,java]
+----
+var generated = new PageGenerator(List.of()).generate(
+    "/hello.jsp", "<%@ page session='false' %><p>Hello!</p>",
+    "example.HelloPage", GenerationOptions.DEFAULT);
+var javaSource = generated.source();
+----
+
+`PageCompiler.compile` accepts generated sources, an output directory and javac
+options for the target application's module path. It emits classes and retains
+`.ibarra-sources` for inspection; it does not load pages. Peano's build-time EL
+compiler is not available yet, so EL generation fails by default. Tests/previews
+can explicitly select `GenerationOptions.DEFAULT.withStartupEl(true)`, which
+initializes interpreter expressions once per servlet instance at startup.
+
+The Maven goal, page-index discovery and runtime factory installation are still
+I4/I5 work. See xref:internals.adoc[Internals] for the current action boundaries.
 
 == Building Ibarra from source
 

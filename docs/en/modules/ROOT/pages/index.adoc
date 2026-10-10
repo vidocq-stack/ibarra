@@ -1,5 +1,5 @@
 = Ibarra
-:description: Jakarta Pages 4.0 implementation — initial runtime and JSP/JSPX parser implemented, generation and container binding planned.
+:description: Jakarta Pages 4.0 implementation — initial runtime/parser and Java generation available; I3 in progress.
 
 [.text-center]
 image::ibarra-logo.png[Ibarra,300,role=module-logo]
@@ -9,7 +9,7 @@ Ibarra is the Jakarta Pages 4.0 (formerly JavaServer Pages) implementation of th
 
 [IMPORTANT]
 ====
-Ibarra's **initial runtime (I1) and parser (I2) are implemented**. JSP/JSPX sources can be parsed into an immutable model with source diagnostics. Generation, source compilation and container integration remain planned. This documentation describes the intended `{project-version}` development line; every page states what exists today.
+Ibarra's **I3 generator is in progress**. The runtime/parser and initial Java servlet generation work in compiled fixtures. Static EL still awaits Peano's compiler; startup interpretation requires an explicit preview option. Packaging, container integration and certification remain planned. This documentation describes the intended `{project-version}` development line; every page states what exists today.
 ====
 
 == Origin of the name
@@ -27,7 +27,7 @@ The name is a nod to Cervantes, the MicroProfile JWT brick of the ecosystem. And
 | Java | 25 (LTS)
 | Java modules | `io.vidocq.ibarra.core`, `io.vidocq.ibarra.compiler` — see xref:internals.adoc[Internals]
 | Runtime dependencies | None beyond `jakarta.servlet.jsp` (which brings `jakarta.servlet` and `jakarta.el`)
-| Status | I1 runtime and I2 parser implemented — generation and container binding planned, not released
+| Status | I1/I2 implemented, I3 in progress — packaging/container binding planned, not released
 | Official TCK | planned (milestone I8) — see xref:tck.adoc[TCK status]
 |===
 

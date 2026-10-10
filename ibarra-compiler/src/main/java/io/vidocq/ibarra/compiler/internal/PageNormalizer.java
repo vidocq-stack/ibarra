@@ -74,7 +74,7 @@ public final class PageNormalizer {
                     if (jsp && local.equals("text") && element.children().stream().anyMatch(child -> !(child instanceof PageNode.Text)))
                         throw new PageParseException(element.location(), "jsp:text must contain only text");
                     result.add(new PageNode.Element(element.name(), element.namespace(), element.attributes(),
-                            structure(element.children(), jsp && local.equals("text")), element.selfClosing(), element.location()));
+                            structure(element.children(), jsp && (local.equals("text") || local.equals("attribute"))), element.selfClosing(), element.location()));
                 }
             } else if (node instanceof PageNode.Text text && syntax == Page.Syntax.XML && !preserveWhitespace
                     && text.value().chars().allMatch(c -> c == ' ' || c == '\t' || c == '\r' || c == '\n')) {

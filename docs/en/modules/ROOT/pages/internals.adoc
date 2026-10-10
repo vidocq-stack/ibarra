@@ -12,7 +12,7 @@ How Ibarra is designed to work inside. The runtime in `ibarra-core` implements m
 
 | `ibarra-core` | `io.vidocq.ibarra.core` | I1 runtime: factory, context, scopes, writers, dispatch and application EL context; tags planned
 | `ibarra-api` | `io.vidocq.ibarra.api` | Generated-code SPI (page index) — planned, I4
-| `ibarra-compiler` | `io.vidocq.ibarra.compiler` | I2 JSP/JSPX parser and immutable page model; generation planned, I3
+| `ibarra-compiler` | `io.vidocq.ibarra.compiler` | Parser/model, initial Java generator and build-time compiler; I3 in progress
 | `ibarra-maven-plugin` | — | `precompile` goal — planned, I4
 | `ibarra-foy` | `io.vidocq.ibarra.foy` | Binding to Foy's JSP-engine SPI — planned, I5
 | `ibarra-tck` | — | Official TCK runner, `-Ptck` profile only
@@ -57,12 +57,15 @@ EL context before notifying listeners so callbacks can retrieve it safely. A
 failed callback clears the cache for a later retry. Application and standard
 collection/bean resolvers precede the scoped-attribute resolver.
 
-The full Pages implicit-object/import chain, real Peano evaluation and generated
-expressions remain I3 work. Unit tests use a concrete EL factory double.
+Scope, parameter, header, cookie and initialization-parameter implicit objects
+are implemented and exercised with Peano. Headers use case-insensitive lookup.
+EL imports and function bindings remain open. Some API tests also use a concrete
+factory double to isolate lifecycle semantics.
 
 == Translation pipeline (planned)
 
-The first parsing stage exists; translation semantics and generation are still planned.
+Parsing, initial Java generation and build-time javac exist. Full translation
+semantics, static EL and page-index packaging remain unfinished.
 
 . Parse the page (standard or XML syntax) into a page model, applying `jsp-config` property groups and TLDs.
 . Generate the Java source of an `HttpJspPage`; page expressions are compiled by Peano's build-time compiler.
@@ -85,10 +88,38 @@ inside `jsp:text`. Node locations refer to the original source, including before
 XML decoding, with one-based lines and UTF-16 columns. `PageParseException`
 provides the location separately from its build-readable message.
 
-The module requires only `java.xml` and exports only the parser/model API.
-Attribute interpretation, include expansion, encoding detection, full semantic
-validation and generation are later stages. DOCTYPE declarations and external
+Parsing requires `java.xml`; generation/compilation additionally needs the
+optional `java.compiler` module. The module exports only its public API.
+Initial attribute handling and static include expansion exist; byte-source
+encoding detection and full semantic validation remain open. DOCTYPE declarations and external
 entities are unsupported in this initial parser; no external documents are read.
+
+== Initial Java generator (I3 in progress)
+
+`PageGenerator` emits a public page and a package-private lifecycle base. Final
+Servlet entry points initialize expression fields before invoking user `jspInit`
+and preserve `jspDestroy`. Generated request code obtains/releases a PageContext,
+handles errors and flushes buffered output without flushing after a forward.
+
+The current action set includes include/forward/param, useBean/getProperty/
+setProperty (including wildcard parameter tables), text, dynamic elements and
+named attribute/body capture. Bean construction and property calls are direct;
+metadata comes from the Class-File API. Javac checks module accessibility.
+Property actions resolve the current scoped attribute rather than a stale local.
+
+`PageCompiler` is build-only. It writes Java 25 classes and retains generated
+source under `.ibarra-sources`; compile errors map back to page locations.
+Fixtures run generated classes on the module path with direct construction.
+The core module is patched only for the unit fixture's internal factory access;
+independent application packaging and Foy integration remain I4/I5.
+
+The initial EL path requires `withStartupEl(true)` explicitly. It caches standard
+ValueExpressions at servlet initialization using a request-free context and
+evaluates against each request. The default rejects EL because `peano-compiler`
+is not implemented. Static expressions, generated EL accessors, imports/functions,
+strict missing-EL/namespace policies, atomic shared-scope bean creation and mixed
+syntax inclusion remain open. New shared-scope beans are rejected; existing
+typed shared beans are supported. This is not TCK certification.
 
 == Foy integration
 

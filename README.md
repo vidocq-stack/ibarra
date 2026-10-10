@@ -16,10 +16,11 @@ through [Peano](https://codefloe.com/Vidocq/peano), servlet container through
 
 ## Status
 
-🚧 **I1 runtime and I2 parser implemented.** The initial runtime is tested with
-hand-written pages and servlet doubles. `ibarra-compiler` parses standard JSP
-and JSPX into an immutable model with original source locations. Java generation,
-container integration and official TCK certification remain planned.
+🚧 **I3 in progress.** The runtime and parser are implemented. The initial
+generator emits Java servlet source, compiles it at build time and renders
+fixtures for scripting, standard actions, configuration and direct bean access.
+EL startup interpretation is an explicit preview option; build-time EL awaits
+Peano's compiler. Container integration and official TCK certification remain planned.
 The design of record is [PLAN.md](PLAN.md) (spec scope, build-time page
 compilation, Java Modules layout, Foy JSP-engine SPI, TCK plan, milestones I0–I9).
 
@@ -45,7 +46,7 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 | Module | Role | State |
 |---|---|---|
 | `ibarra-core` | Page runtime: factory, context, scopes, output, dispatch and application EL context; tags planned | I1 runtime implemented |
-| `ibarra-compiler` | JSP/JSPX parser and immutable page model; generation planned | I2 parser implemented |
+| `ibarra-compiler` | JSP/JSPX parser, page model, initial Java generator and build-time compiler | I2 implemented; I3 in progress |
 | `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | skeleton |
 
 Planned modules (`ibarra-api`, `ibarra-maven-plugin`,

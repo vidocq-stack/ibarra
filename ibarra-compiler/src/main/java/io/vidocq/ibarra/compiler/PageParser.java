@@ -40,9 +40,15 @@ public final class PageParser {
     public Page parse(String name, String source) {
         Objects.requireNonNull(name);
         Objects.requireNonNull(source);
-        var syntax = name.endsWith(".jspx") || name.endsWith(".tagx") || xmlRoot(source)
-                ? Page.Syntax.XML : Page.Syntax.STANDARD;
+        var syntax = detectSyntax(name, source);
         return parse(name, source, syntax, ParserOptions.DEFAULT);
+    }
+
+    /** Selects syntax from the source suffix and a namespace-aware JSP document root. */
+    public static Page.Syntax detectSyntax(String name, String source) {
+        Objects.requireNonNull(name); Objects.requireNonNull(source);
+        return name.endsWith(".jspx") || name.endsWith(".tagx") || xmlRoot(source)
+                ? Page.Syntax.XML : Page.Syntax.STANDARD;
     }
 
     public Page parse(String name, String source, Page.Syntax syntax, ParserOptions options) {

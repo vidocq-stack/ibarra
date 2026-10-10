@@ -17,9 +17,10 @@
  *
  * SPDX-License-Identifier: EPL-2.0 OR EUPL-1.2 OR GPL-2.0-or-later
  */
-/** Build-time page parsing; runtime and generation dependencies are added when needed. */
+/** Build-time page parsing and generation; java.compiler must be resolved when generation is used. */
 module io.vidocq.ibarra.compiler {
     requires java.xml;
+    requires static java.compiler;
     exports io.vidocq.ibarra.compiler;
 }
 

@@ -12,7 +12,7 @@ Reference data for Ibarra `{project-version}`. Entries marked _planned_ do not e
 
 | `io.vidocq.ibarra:ibarra-core` | `io.vidocq.ibarra.core` | I1 runtime implemented; container binding planned
 | `io.vidocq.ibarra:ibarra-api` | `io.vidocq.ibarra.api` | _planned_ — generated-code SPI
-| `io.vidocq.ibarra:ibarra-compiler` | `io.vidocq.ibarra.compiler` | I2 parser/model implemented; generation planned
+| `io.vidocq.ibarra:ibarra-compiler` | `io.vidocq.ibarra.compiler` | I2 parser/model and initial I3 generator/compiler
 | `io.vidocq.ibarra:ibarra-maven-plugin` | — | _planned_ — `precompile` goal, build time only
 | `io.vidocq.ibarra:ibarra-foy` | `io.vidocq.ibarra.foy` | _planned_ — Foy binding
 |===
@@ -24,8 +24,15 @@ Reference data for Ibarra `{project-version}`. Entries marked _planned_ do not e
 Build-time tooling may take a dependency when it saves rewriting something done elsewhere; each one will be named on this page. None so far.
 
 `ibarra-compiler` has no production library dependencies. Its parser requires the
-JDK `java.xml` module; JUnit is test-scoped. `ibarra-api` and Peano dependencies
-will be added when the generation stage needs them.
+JDK `java.xml` module; generation/compilation also needs the optional
+`java.compiler` module resolved in a full Java 25 JDK. JUnit, Peano and Ibarra
+core are test-scoped in the compiler; Peano is test-scoped in the core.
+The SPI and Peano compiler dependencies are deferred until their APIs exist.
+
+`GenerationOptions.DEFAULT` disables startup EL. `withStartupEl(true)` explicitly
+enables the initial preview interpreter path; build-time EL compilation remains
+unfinished. `PageGenerator`, `GeneratedPage`, `PageCompiler`, `JspPropertyGroup`
+and `GenerationOptions` are in `io.vidocq.ibarra.compiler`.
 
 == Configuration keys (planned)
 

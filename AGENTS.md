@@ -8,7 +8,7 @@ coding agent). `CLAUDE.md` only imports this file (`@AGENTS.md`): edit the rules
 > MicroProfile JWT brick. The Ibarra project implements **Jakarta Pages 4.0**: pages are
 > composed (translated and compiled) during the build, then rendered on each request.
 
-**Status: I1 runtime and I2 parser implemented; generation and container binding planned.** Read [PLAN.md](PLAN.md) before any change — it is the design of
+**Status: I1/I2 implemented; initial I3 generation available, full I3 and container binding pending.** Read [PLAN.md](PLAN.md) before any change — it is the design of
 record (spec scope, build-time page compilation, Java Modules layout, Foy JSP-engine SPI,
 Peano integration, TCK plan, milestones I0–I9, open questions). Structural decisions
 marked "to validate" there need the maintainer's sign-off first.
@@ -75,8 +75,8 @@ sdk env
 ```
 ibarra-core   ← I1 runtime: JspFactory, PageContext, JspWriter, BodyContent,
                 JspApplicationContext (tags and full Pages EL resolver chain planned)
-ibarra-compiler ← I2: JSP/JSPX parser, immutable page model and source diagnostics;
-                  only java.xml required, generation planned
+ibarra-compiler ← I2 parser/model; initial I3 Java generation and build-time javac;
+                  java.xml + static java.compiler, startup EL preview opt-in only
 ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
 (planned)     ibarra-api (generated-code SPI: page index),
               ibarra-maven-plugin (build-time precompilation),
@@ -102,6 +102,11 @@ ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
    fixtures and servlet doubles only.
 8. **Language** — code, Javadoc, comments, commit messages and every `.md` file are in
    **English**.
+
+9. **I3 boundary** — `GenerationOptions.DEFAULT` rejects EL generation until
+   Peano's build-time compiler is available. Tests/previews explicitly use
+   `withStartupEl(true)`; do not silently enable startup interpretation in
+   packaging or mark I3 complete while that dependency remains missing.
 
 ## Conventions
 

@@ -85,6 +85,7 @@ final class IbarraApplicationContext implements JspApplicationContext {
     ELContext createELContext(PageContext page) {
         var current = registration.getAndUpdate(value -> new Registration(value.resolvers(), value.listeners(), true));
         var resolvers = new CompositeELResolver();
+        resolvers.add(new PagesImplicitObjectResolver(page));
         for (var resolver : current.resolvers()) resolvers.add(resolver);
         resolvers.add(new MapELResolver());
         resolvers.add(new ResourceBundleELResolver());
@@ -115,7 +116,7 @@ final class IbarraApplicationContext implements JspApplicationContext {
         public Object getValue(ELContext context, Object base, Object property) {
             if (base != null || property == null) return null;
             var value = page.findAttribute(property.toString());
-            if (value != null) context.setPropertyResolved(true);
+            context.setPropertyResolved(true);
             return value;
         }
 
