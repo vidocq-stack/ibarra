@@ -2,7 +2,8 @@
 :description: Coming to Ibarra from Jasper (Tomcat, GlassFish) — what will map, what will differ.
 
 [.lead]
-Ibarra is in design: there is nothing to migrate to yet. This page records the intended contract so the expectation is clear.
+Ibarra is in early implementation (I1): there is no complete page engine to
+migrate to yet. This page records the intended contract so the expectation is clear.
 
 == The good news (target)
 

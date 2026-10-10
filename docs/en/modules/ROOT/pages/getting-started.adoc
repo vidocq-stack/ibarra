@@ -1,8 +1,10 @@
 = Getting started
-:description: How Ibarra will be used — Maven coordinates, precompilation, a first page. In design.
+:description: How Ibarra will be used — Maven coordinates, precompilation, a first page. I1 in progress.
 
 [.lead]
-Ibarra is not usable yet: the scaffold builds, but there is no page engine. This page shows the intended first steps so the target experience is explicit.
+Ibarra cannot serve JSP pages yet: internal page/body writers are implemented,
+but the rest of the runtime and compiler remain planned. This page shows the
+intended first steps so the target experience is explicit.
 
 == Prerequisites
 

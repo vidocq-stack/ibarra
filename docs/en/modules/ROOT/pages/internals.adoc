@@ -2,7 +2,7 @@
 :description: Ibarra's planned architecture — modules, translation pipeline, Foy SPI, Peano integration.
 
 [.lead]
-How Ibarra is designed to work inside. Only `ibarra-core` exists today, as a scaffold; the full design is `PLAN.md` in {repo-ibarra}[the repository].
+How Ibarra is designed to work inside. The runtime in `ibarra-core` currently implements page and body writers; the full design is `PLAN.md` in {repo-ibarra}[the repository].
 
 == Modules
 
@@ -10,7 +10,7 @@ How Ibarra is designed to work inside. Only `ibarra-core` exists today, as a sca
 |===
 | Artefact | Java module | Role
 
-| `ibarra-core` | `io.vidocq.ibarra.core` | Page runtime: `JspFactory`, `PageContext`, `JspWriter`, tag lifecycle (scaffold today)
+| `ibarra-core` | `io.vidocq.ibarra.core` | Page runtime: page/body writers implemented; `JspFactory`, `PageContext` and tag lifecycle planned
 | `ibarra-api` | `io.vidocq.ibarra.api` | Generated-code SPI (page index) — planned, I4
 | `ibarra-compiler` | `io.vidocq.ibarra.compiler` | Parser, page model, Java source generator — planned, I2–I3
 | `ibarra-maven-plugin` | — | `precompile` goal — planned, I4
@@ -18,7 +18,24 @@ How Ibarra is designed to work inside. Only `ibarra-core` exists today, as a sca
 | `ibarra-tck` | — | Official TCK runner, `-Ptck` profile only
 |===
 
-== Translation pipeline
+== Output writers (implemented)
+
+`BufferedJspWriter` acquires the response writer only when output must be sent.
+It uses a character buffer (8192 characters by default), flushes on overflow
+with `autoFlush=true`, and throws `IOException` on overflow otherwise.
+`clear()` fails after flushing; `clearBuffer()` discards pending buffered
+output. Closing flushes and closes the destination.
+
+`BufferedBodyContent` captures tag output without flushing to its enclosing
+writer. The body is unbounded, can be read or copied repeatedly, and can be
+cleared between iterations. Nested bodies remain independent. Its inherited
+`flush()` always throws `IOException`; closing never closes the enclosing writer.
+
+Both classes are internal and request-owned. They introduce no module exports,
+runtime dependencies, shared state or handler pooling. `PageContext` and
+container integration are still planned.
+
+== Translation pipeline (planned)
 
 . Parse the page (standard or XML syntax) into a page model, applying `jsp-config` property groups and TLDs.
 . Generate the Java source of an `HttpJspPage`; page expressions are compiled by Peano's build-time compiler.

@@ -1,5 +1,5 @@
 = Ibarra
-:description: Jakarta Pages 4.0 implementation — pages compiled at build time, Expression Language through Peano, servlet container through Foy. In design.
+:description: Jakarta Pages 4.0 implementation — pages compiled at build time, Expression Language through Peano, servlet container through Foy. I1 in progress.
 
 // TODO: add modules/ROOT/images/ibarra-logo.png and the module-logo image block
 // ([.text-center] image::ibarra-logo.png[Ibarra,300,role=module-logo]) once the logo exists.
@@ -9,7 +9,7 @@ Ibarra is the Jakarta Pages 4.0 (formerly JavaServer Pages) implementation of th
 
 [IMPORTANT]
 ====
-Ibarra is **in design**: the repository holds a buildable scaffold and the design plan (`PLAN.md`), no page engine yet. This documentation describes the intended `{project-version}` development line; every page states what exists today.
+Ibarra has **started implementation (I1)**: buffered page output and tag body capture are implemented internally. There is no complete page engine yet. This documentation describes the intended `{project-version}` development line; every page states what exists today.
 ====
 
 == Origin of the name
@@ -27,7 +27,7 @@ The name is a nod to Cervantes, the MicroProfile JWT brick of the ecosystem. And
 | Java | 25 (LTS)
 | Java modules | `io.vidocq.ibarra.core` (more as milestones land — see xref:internals.adoc[Internals])
 | Runtime dependencies | None beyond `jakarta.servlet.jsp` (which brings `jakarta.servlet` and `jakarta.el`)
-| Status | in design — scaffold only, not released
+| Status | I1 in progress — page/body writers implemented, not released
 | Official TCK | planned (milestone I8) — see xref:tck.adoc[TCK status]
 |===
 

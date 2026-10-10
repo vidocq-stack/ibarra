@@ -1,9 +1,10 @@
 # Ibarra — Design plan
 
-> Status: **in design**. This document is the design of record for Ibarra, the
+> Status: **I1 in progress**. This document is the design of record for Ibarra, the
 > Jakarta Pages 4.0 (formerly JavaServer Pages) implementation of the Vidocq
-> ecosystem. Nothing below is implemented yet beyond the scaffold (milestone
-> I0). Decisions marked **(to validate)** need the maintainer's sign-off before
+> ecosystem. The scaffold (I0) and internal page/body writers are implemented.
+> The remaining runtime, compiler and integration are still planned.
+> Decisions marked **(to validate)** need the maintainer's sign-off before
 > the milestone that depends on them starts.
 
 ## Vision
@@ -128,7 +129,7 @@ reflective fallback and Vauban's runtime fallbacks.
 | `ibarra-tck` | — | test, `-Ptck` | `ibarra-core` (+ Foy, Arquillian adapter later) | — |
 | `ibarra-bench` | — | JMH, not deployed | — | — |
 
-Today only `ibarra-core` (scaffold) and `ibarra-tck` (skeleton) exist. The
+Today only `ibarra-core` (page/body writers, I1 in progress) and `ibarra-tck` (skeleton) exist. The
 precompiler plugin is **declared in this design only**: the sibling bricks'
 initial scaffolds (Erasmus's first commit) carried no plugin module — plugin
 placeholders appeared with the first implementation milestone — so
@@ -227,6 +228,15 @@ the runtime's packaging goal, after I8.
 | I7 | Tag files, fragments, `jsp:invoke` / `jsp:doBody`; Peano compiled expressions in pages | |
 | I8 | Official TCK through `ibarra-tck` (Arquillian adapter on Foy) | 100 % PASS recorded in docs `tck` page |
 | I9 | Degraded runtime translation polish, Class-File API path for scriptless pages, `ibarra-bench` (vs Jasper), Vidocq Runtime extension | numbers in `BENCH.md` only |
+
+## Implementation progress
+
+I1 progress (2026-10-10): internal `BufferedJspWriter` and
+`BufferedBodyContent` are implemented, with contract tests for lazy output,
+buffer overflow, clearing, closing, I/O failure propagation, print conversions,
+Unicode and nested body capture. The default page buffer is 8192 characters.
+`PageContext`, `JspFactory`, scopes and error-page handling remain outstanding.
+This does not complete I1.
 
 ## Open questions
 
