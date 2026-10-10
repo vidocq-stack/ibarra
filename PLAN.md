@@ -1,9 +1,10 @@
 # Ibarra — Design plan
 
-> Status: **I1 runtime implemented**. This document is the design of record for Ibarra, the
+> Status: **I1 runtime and I2 parser implemented**. This document is the design of record for Ibarra, the
 > Jakarta Pages 4.0 (formerly JavaServer Pages) implementation of the Vidocq
 > ecosystem. The scaffold (I0) and initial runtime (I1) are implemented.
-> The compiler, full Pages EL integration, tags and container binding remain planned.
+> JSP/JSPX parsing and an immutable page model are implemented (I2). Generation,
+> full Pages EL integration, tags and container binding remain planned.
 > Decisions marked **(to validate)** need the maintainer's sign-off before
 > the milestone that depends on them starts.
 
@@ -123,13 +124,14 @@ reflective fallback and Vauban's runtime fallbacks.
 |---|---|---|---|---|
 | `ibarra-api` | `io.vidocq.ibarra.api` | runtime | `transitive jakarta.servlet.jsp` | `io.vidocq.ibarra.spi` (generated-code SPI: `PageIndex`, page descriptor) |
 | `ibarra-core` | `io.vidocq.ibarra.core` | runtime | `transitive jakarta.servlet.jsp`, `io.vidocq.ibarra.api` | nothing — installs its `JspFactory` with `JspFactory.setDefaultFactory` at deployment (the spec defines no service lookup for it), `uses PageIndex` |
-| `ibarra-compiler` | `io.vidocq.ibarra.compiler` | build (+ dev mode) | `io.vidocq.ibarra.api`, `java.compiler` (static), `io.vidocq.peano.compiler` | `io.vidocq.ibarra.compiler` |
+| `ibarra-compiler` | `io.vidocq.ibarra.compiler` | build (+ dev mode planned) | `java.xml` today; SPI/Java compiler/Peano dependencies when generation needs them | `io.vidocq.ibarra.compiler` |
 | `ibarra-maven-plugin` | (Maven plugin, class path) | build | `ibarra-compiler` | — |
 | `ibarra-foy` | `io.vidocq.ibarra.foy` | runtime | `io.vidocq.ibarra.core`, Foy's SPI module | nothing — `provides` Foy's JSP-engine SPI |
 | `ibarra-tck` | — | test, `-Ptck` | `ibarra-core` (+ Foy, Arquillian adapter later) | — |
 | `ibarra-bench` | — | JMH, not deployed | — | — |
 
-Today only `ibarra-core` (I1 page runtime) and `ibarra-tck` (skeleton) exist. The
+Today `ibarra-core` (I1 runtime), `ibarra-compiler` (I2 parser/model) and
+`ibarra-tck` (skeleton) exist. The
 precompiler plugin is **declared in this design only**: the sibling bricks'
 initial scaffolds (Erasmus's first commit) carried no plugin module — plugin
 placeholders appeared with the first implementation milestone — so
@@ -220,7 +222,7 @@ the runtime's packaging goal, after I8.
 |---|---|---|
 | I0 | Scaffold: reactor, `ibarra-core` module, `ibarra-tck` skeleton, docs, this plan | `./mvnw -ntp install` green (this commit) |
 | I1 | Runtime API: `JspFactory`, `PageContext`, `JspWriter` / `BodyContent` buffering, scopes, error pages — driven by hand-written `HttpJspPage` fixtures | implemented: unit tests against Foy-free servlet doubles, clean install green |
-| I2 | `ibarra-compiler` parser: standard + XML syntax, directives, scripting, template text, page model | parser corpus tests |
+| I2 | `ibarra-compiler` parser: standard + XML syntax, directives, scripting, template text, page model | implemented: 36 parser corpus tests, clean install green |
 | I3 | Generator: Java source for pages, standard actions, EL via `jakarta.el` (Peano in tests), `jsp-config` property groups | compiled fixture pages render expected output |
 | I4 | `ibarra-maven-plugin` precompile goal + page index; `ibarra-api` SPI | example webapp precompiled, no runtime translation |
 | I5 | `ibarra-foy` + Foy's JSP-engine SPI (Foy-side PR), `*.jsp` mapping, `addJspFile`, `getJspConfigDescriptor`, TLD listeners | end-to-end test on Foy/Chappe |
@@ -247,6 +249,30 @@ Proof: `./mvnw -o -ntp clean install` on Temurin Java 25/Maven 3.9.16 passes
 38 tests. The default page buffer is 8192 characters. No official TCK has been
 run, no JSP sources are translated, and no Foy deployment exists yet. The future
 container binding must drain requests before releasing an application context.
+
+### I2 parser
+
+I2 implementation (2026-10-10): `PageParser` accepts decoded source strings and
+returns immutable text, EL, directive, scripting and element nodes. Standard
+syntax preserves ordinary markup and HTML comments, discards JSP comments and
+resolves taglib prefixes across the translation unit. XML syntax uses StAX,
+recognizes the JSP namespace by URI, maps XML scripting/directive elements,
+decodes built-in/numeric references, and preserves whitespace within `jsp:text`.
+EL settings apply to the whole source; quotes and balanced braces delimit expressions.
+Locations refer to the original source, including entity/CDATA decoding, with
+one-based lines and UTF-16 columns. Errors contain the source path and location.
+
+The compiler module requires only `java.xml`; it exports the parser/model API
+and keeps implementation packages hidden. Module and dependency reviews pass.
+`./mvnw -o -ntp clean install` under Temurin 25 passes 74 tests: 38 runtime and
+36 parser tests. Parser regressions are tracked as fixed in `BUG.md`.
+
+Parsing is separate from translation semantics. Include expansion, encoding
+detection, full directive/action/TLD validation, Java generation and EL evaluation
+remain later work. Attribute values are retained for later interpretation.
+DOCTYPE declarations and external entities are explicitly unsupported by this
+initial XML parser; it performs no external document lookup. The official TCK
+has not been run. Generator back-end questions below remain open.
 
 ## Open questions
 

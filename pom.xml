@@ -84,6 +84,7 @@
     -->
     <modules>
         <module>ibarra-core</module>
+        <module>ibarra-compiler</module>
     </modules>
 
     <dependencyManagement>

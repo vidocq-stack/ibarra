@@ -12,7 +12,7 @@ How Ibarra is designed to work inside. The runtime in `ibarra-core` implements m
 
 | `ibarra-core` | `io.vidocq.ibarra.core` | I1 runtime: factory, context, scopes, writers, dispatch and application EL context; tags planned
 | `ibarra-api` | `io.vidocq.ibarra.api` | Generated-code SPI (page index) — planned, I4
-| `ibarra-compiler` | `io.vidocq.ibarra.compiler` | Parser, page model, Java source generator — planned, I2–I3
+| `ibarra-compiler` | `io.vidocq.ibarra.compiler` | I2 JSP/JSPX parser and immutable page model; generation planned, I3
 | `ibarra-maven-plugin` | — | `precompile` goal — planned, I4
 | `ibarra-foy` | `io.vidocq.ibarra.foy` | Binding to Foy's JSP-engine SPI — planned, I5
 | `ibarra-tck` | — | Official TCK runner, `-Ptck` profile only
@@ -62,11 +62,33 @@ expressions remain I3 work. Unit tests use a concrete EL factory double.
 
 == Translation pipeline (planned)
 
+The first parsing stage exists; translation semantics and generation are still planned.
+
 . Parse the page (standard or XML syntax) into a page model, applying `jsp-config` property groups and TLDs.
 . Generate the Java source of an `HttpJspPage`; page expressions are compiled by Peano's build-time compiler.
 . Compile with `javax.tools` in the build JVM; emit a page index registered through `ServiceLoader`.
 
 A Class-File API back end for scriptless pages (no `javac` at all) is a later option.
+
+== Page parser (implemented)
+
+`PageParser` consumes decoded source strings and produces immutable nodes for
+template text, EL expressions, directives, scripting and nested elements. It
+selects XML syntax for `.jspx`/`.tagx` and a document-level JSP root; callers can
+explicitly select syntax and supply EL defaults through `ParserOptions`.
+Page/tag EL directives apply to the whole document.
+
+Standard syntax preserves ordinary markup and HTML comments while removing
+JSP comments. XML syntax uses the JDK StAX parser, recognizes the JSP namespace
+by URI, decodes XML character references and CDATA, and preserves whitespace
+inside `jsp:text`. Node locations refer to the original source, including before
+XML decoding, with one-based lines and UTF-16 columns. `PageParseException`
+provides the location separately from its build-readable message.
+
+The module requires only `java.xml` and exports only the parser/model API.
+Attribute interpretation, include expansion, encoding detection, full semantic
+validation and generation are later stages. DOCTYPE declarations and external
+entities are unsupported in this initial parser; no external documents are read.
 
 == Foy integration
 

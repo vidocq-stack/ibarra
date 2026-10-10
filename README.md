@@ -16,10 +16,10 @@ through [Peano](https://codefloe.com/Vidocq/peano), servlet container through
 
 ## Status
 
-🚧 **I1 runtime implemented.** Internal factory, page context, application EL
-context and output writers are exercised through hand-written `HttpJspPage`
-fixtures and servlet doubles. JSP source compilation, container integration
-and official TCK certification remain planned.
+🚧 **I1 runtime and I2 parser implemented.** The initial runtime is tested with
+hand-written pages and servlet doubles. `ibarra-compiler` parses standard JSP
+and JSPX into an immutable model with original source locations. Java generation,
+container integration and official TCK certification remain planned.
 The design of record is [PLAN.md](PLAN.md) (spec scope, build-time page
 compilation, Java Modules layout, Foy JSP-engine SPI, TCK plan, milestones I0–I9).
 
@@ -45,9 +45,10 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 | Module | Role | State |
 |---|---|---|
 | `ibarra-core` | Page runtime: factory, context, scopes, output, dispatch and application EL context; tags planned | I1 runtime implemented |
+| `ibarra-compiler` | JSP/JSPX parser and immutable page model; generation planned | I2 parser implemented |
 | `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | skeleton |
 
-Planned modules (`ibarra-api`, `ibarra-compiler`, `ibarra-maven-plugin`,
+Planned modules (`ibarra-api`, `ibarra-maven-plugin`,
 `ibarra-foy`, `ibarra-bench`) are described in [PLAN.md](PLAN.md) and created by
 the milestone that needs them. JSTL is out of scope.
 

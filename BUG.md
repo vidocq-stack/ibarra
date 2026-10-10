@@ -45,3 +45,39 @@ Entry format: `short id · date · symptom · minimal repro · cause hypothesis 
 - Status: fixed by dispatching the existing `update-dep-graph.yml` workflow on
   `main` (successful action run #8). `data/Vidocq_ibarra.json` now exists in
   `Vidocq/dep-graph`; the PR validation is rerun on the updated branch.
+
+## IBARRA-005 · 2026-10-10 · JSP markers inside EL strings confuse the lexer
+
+- Symptom: `${'<%'}` is treated as an unclosed scripting element; directive
+  text inside an EL string can also introduce a fake taglib binding.
+- Minimal repro: `PageParserTest.scriptingAndDirectiveMarkersInsideElStringsStayInsideTheExpression`.
+- Cause: the structural lexer scans JSP delimiters before respecting EL boundaries.
+- Status: fixed by skipping balanced EL expressions, including quoted strings,
+  in both the directive prepass and structural scan.
+  Unbalanced candidate expressions do not hide later `isELIgnored` directives;
+  covered by `ignoredElDoesNotRequireBalancedExpressionDelimitersBeforeTheDirective`.
+
+## IBARRA-006 · 2026-10-10 · Root detection scans commented-out JSP text
+
+- Symptom: a `jsp:root` mentioned only in a JSP comment switches parsing to XML.
+- Minimal repro: `PageParserTest.xmlRootTextInsideJspCommentsDoesNotSelectXmlSyntax`.
+- Cause: syntax inference searches the complete source instead of the actual
+  document root.
+- Status: fixed by checking only the initial document element after whitespace,
+  XML comments and processing instructions.
+  Root inference also handles a default JSP namespace without a prefix; covered
+  by `defaultNamespaceRootAlsoSelectsXmlSyntax`.
+
+## IBARRA-007 · 2026-10-10 · XML formatting filtering removes meaningful Unicode spaces
+
+- Symptom: U+2003 template content is discarded in JSPX.
+- Minimal repro: `PageParserTest.xmlRetainsCharactersThatAreNotXmlFormattingWhitespace`.
+- Cause: `String.isBlank()` accepts characters beyond XML formatting whitespace.
+- Status: fixed by filtering only space, tab, CR and LF outside `jsp:text`.
+
+## IBARRA-008 · 2026-10-10 · Escaped EL in directive attributes is rejected
+
+- Symptom: a literal `\${...}` directive attribute is classified as dynamic.
+- Minimal repro: `PageParserTest.escapedElInDirectiveAttributesIsLiteral`.
+- Cause: a substring search ignores the Pages escaping rules.
+- Status: fixed by examining quoting before recognizing a dynamic delimiter.

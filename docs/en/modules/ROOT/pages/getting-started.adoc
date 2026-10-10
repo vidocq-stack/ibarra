@@ -1,9 +1,9 @@
 = Getting started
-:description: How Ibarra will be used — Maven coordinates, precompilation, a first page. I1 runtime implemented.
+:description: How Ibarra will be used — initial runtime/parser implemented, precompilation planned.
 
 [.lead]
-Ibarra cannot serve JSP source files yet: the initial runtime is implemented,
-but the compiler and container binding remain planned. This page shows the
+Ibarra cannot serve JSP source files yet: the runtime and parser are implemented,
+but generation and container binding remain planned. This page shows the
 intended first steps so the target experience is explicit.
 
 == Prerequisites
@@ -45,6 +45,19 @@ At run time, add `ibarra-foy` (binding to the Foy servlet container) and `peano-
 ----
 
 Placed in `src/main/webapp/hello.jsp`, it is compiled during the build and served by Foy at `/hello.jsp`.
+
+== Parsing a source (implemented)
+
+On the module path, require `io.vidocq.ibarra.compiler` and use:
+
+[source,java]
+----
+var page = new PageParser().parse("/hello.jsp", "<p>Hello, ${name}!</p>");
+var nodes = page.nodes();
+----
+
+`PageParser` is in `io.vidocq.ibarra.compiler`. This parses source structure; it
+does not compile or render the page. See xref:internals.adoc[Internals] for scope.
 
 == Building Ibarra from source
 
