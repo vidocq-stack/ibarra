@@ -1,5 +1,9 @@
 # Ibarra
 
+<p align="center">
+  <img src="docs/en/modules/ROOT/images/ibarra-logo.png" alt="Ibarra — Jakarta Pages" width="300">
+</p>
+
 **Jakarta Pages 4.0** (formerly JavaServer Pages) implementation for the
 [Vidocq](https://codeberg.org/Vidocq/vidocq) runtime — Expression Language
 through [Peano](https://codefloe.com/Vidocq/peano), servlet container through
