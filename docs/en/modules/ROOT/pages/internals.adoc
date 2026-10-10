@@ -11,9 +11,9 @@ How Ibarra is designed to work inside. The runtime in `ibarra-core` implements m
 | Artefact | Java module | Role
 
 | `ibarra-core` | `io.vidocq.ibarra.core` | I1 runtime: factory, context, scopes, writers, dispatch and application EL context; tags planned
-| `ibarra-api` | `io.vidocq.ibarra.api` | Immutable generated-page policy SPI; page index planned, I4
+| `ibarra-api` | `io.vidocq.ibarra.api` | Immutable page policy, descriptor and constructor-based index SPI
 | `ibarra-compiler` | `io.vidocq.ibarra.compiler` | Parser/model, initial Java generator and build-time compiler; I3 in progress
-| `ibarra-maven-plugin` | — | `precompile` goal — planned, I4
+| `ibarra-maven-plugin` | — | Build-only `precompile` goal — initial I4 implemented
 | `ibarra-foy` | `io.vidocq.ibarra.foy` | Binding to Foy's JSP-engine SPI — planned, I5
 | `ibarra-tck` | — | Official TCK runner, `-Ptck` profile only
 |===
@@ -69,7 +69,7 @@ factory double to isolate lifecycle semantics.
 == Translation pipeline (planned)
 
 Parsing, initial Java generation and build-time javac exist. Full translation
-semantics, static EL and page-index packaging remain unfinished.
+semantics and static EL remain unfinished. Page-index packaging is implemented.
 
 . Parse the page (standard or XML syntax) into a page model, applying `jsp-config` property groups and TLDs.
 . Generate the Java source of an `HttpJspPage`; page expressions are compiled by Peano's build-time compiler.
@@ -119,7 +119,26 @@ Property actions resolve the current scoped attribute rather than a stale local.
 source under `.ibarra-sources`; compile errors map back to page locations.
 Fixtures run generated classes on the module path with direct construction.
 The core module is patched only for the unit fixture's internal factory access;
-independent application packaging and Foy integration remain I4/I5.
+an additional I4 fixture packages a separate application JAR and discovers its
+unexported pages through the Java module service declaration, with compiler
+modules excluded. Foy integration remains I5.
+
+== Modular packaging (initial I4)
+
+`PagePrecompiler` emits application pages and a `PageIndex` with direct constructor
+references. The JDK Class-File API updates only the compiled module's service and
+package metadata; existing providers, exports, opens and requirements are preserved.
+The core's `PrecompiledPages` catalogue discovers indexes in a supplied module
+layer without creating servlet instances. Deployment creates and initializes pages.
+
+Compilation runs in a temporary staging area; generated Java does not enter the
+application JAR. An external ownership manifest records generated class digests
+so incremental removal cannot overwrite/delete classes replaced by application
+compilation. Generation/compilation failures retain the previous output.
+
+The xref:modules/maven-plugin.adoc[Maven goal] binds to `process-classes`, parses
+root `web.xml` JSP property groups without external documents, and compiles using
+the application module path. Maven's own plugin classpath is a build-only exception.
 
 The initial EL path requires `withStartupEl(true)` explicitly. It caches standard
 ValueExpressions at servlet initialization using a request-free context and

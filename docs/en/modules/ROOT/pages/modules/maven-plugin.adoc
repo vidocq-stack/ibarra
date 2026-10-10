@@ -1,0 +1,66 @@
+= Maven precompiler
+:description: Build-time page compilation, module index registration and Maven dependencies.
+
+The `io.vidocq.ibarra:ibarra-maven-plugin` artifact supplies the `precompile` goal,
+bound by default to `process-classes`. It runs after application Java compilation
+and before JAR packaging. The application must be a named Java module requiring
+`io.vidocq.ibarra.api`; automatic dependency modules are rejected.
+
+== Goal and parameters
+
+[cols="1,2,3",options="header"]
+|===
+| Parameter | Property | Default
+| `webSourceDirectory` | `ibarra.webSourceDirectory` | `src/main/webapp` below the project directory
+| `outputDirectory` | Maven project output | `target/classes`
+| `generatedPackage` | `ibarra.generatedPackage` | Application module name plus `.ibarra_generated`
+| `skip` | `ibarra.skip` | `false`
+|===
+
+Bind the goal as shown in xref:getting-started.adoc[]. It scans `.jsp` and `.jspx`
+entry pages, provides byte resources for static includes, and applies JSP property
+groups from `WEB-INF/web.xml`. Included fragments do not become entry pages unless
+they also have a page extension. Symlinked web resources are rejected.
+
+The goal writes compiled pages and a constructor-based `PageIndex` into the
+application module. Registration uses `provides` in `module-info.class`, with no
+exports/opens for generated pages and no classpath service file. Runtime catalogue
+discovery uses `ServiceLoader`; page construction uses direct generated factories.
+
+Generated Java and the ownership manifest stay outside packaged classes. The
+manifest checks class content before incremental replacement/removal. A failed
+generation/compilation leaves the previous compiled module and pages intact.
+
+== Build-only dependencies
+
+Maven executes plugins in its own classloader/classpath. This exception is limited
+to build tooling; application compilation and runtime execution use Java Modules.
+
+[cols="2,1,3",options="header"]
+|===
+| Dependency | Scope/version | Purpose
+| `io.vidocq.ibarra:ibarra-compiler` | Compile, project version | Page translation, strict byte decoding and modular packaging
+| `org.apache.maven:maven-plugin-api` | Provided, 3.9.16 | Standard Mojo lifecycle, logging and build failures
+| `org.apache.maven:maven-core` | Provided, 3.9.16 | Project model and resolved compile dependency paths
+| `org.apache.maven.plugin-tools:maven-plugin-annotations` | Provided, 3.15.2 | Goal/parameter metadata consumed during the plugin build
+| `org.apache.maven.plugins:maven-plugin-plugin` | Build plugin, 3.15.2 | Generates the standard Maven plugin descriptor
+|===
+
+These APIs reuse Maven's lifecycle, dependency resolution and descriptor machinery
+instead of implementing replacements. Provided/build dependencies do not enter
+application or Ibarra runtime artifacts. The compiler uses the internal Ibarra API
+to share path validation; it introduces no third-party runtime implementation.
+
+== Current boundary
+
+This is initial I4 packaging. Default generation rejects EL until compiled EL
+integration is available; startup interpretation cannot be enabled by packaging.
+Tag files, TLD handlers, `jsp-config/taglib`, web-fragment merging, custom page
+extension mappings, complete deployment-descriptor validation and Foy deployment
+remain pending. DOCTYPE/entity declarations are rejected and external schemas are
+not fetched. Supported descriptor namespaces are Jakarta EE, Java EE/J2EE and the
+unnamespaced form; foreign JSP configuration namespaces are rejected.
+
+`examples/precompiled-pages` is built by the actual goal locally and in PR CI.
+A separate application-JAR fixture verifies discovery and rendering with
+`java.compiler` and `ibarra-compiler` excluded from the runtime module graph.

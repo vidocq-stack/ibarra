@@ -11,28 +11,35 @@ Reference data for Ibarra `{project-version}`. Entries marked _planned_ do not e
 | Maven coordinates | Java module | Notes
 
 | `io.vidocq.ibarra:ibarra-core` | `io.vidocq.ibarra.core` | I1 runtime implemented; container binding planned
-| `io.vidocq.ibarra:ibarra-api` | `io.vidocq.ibarra.api` | Immutable `PageOptions` SPI implemented; page index planned
+| `io.vidocq.ibarra:ibarra-api` | `io.vidocq.ibarra.api` | Immutable page options, descriptors and constructor-based index SPI
 | `io.vidocq.ibarra:ibarra-compiler` | `io.vidocq.ibarra.compiler` | I2 parser/model and initial I3 generator/compiler
-| `io.vidocq.ibarra:ibarra-maven-plugin` | — | _planned_ — `precompile` goal, build time only
+| `io.vidocq.ibarra:ibarra-maven-plugin` | — | xref:modules/maven-plugin.adoc[`precompile` goal], build time only
 | `io.vidocq.ibarra:ibarra-foy` | `io.vidocq.ibarra.foy` | _planned_ — Foy binding
 |===
 
 == Runtime dependencies
 
-The core depends on the internal `ibarra-api` SPI and `jakarta.servlet.jsp:jakarta.servlet.jsp-api:4.0.0`, with `jakarta.servlet-api:6.1.0` and `jakarta.el-api:6.0.1`. The API module currently depends only on `java.base`. At run time an Expression Language implementation (Peano) and a servlet container (Foy) complete the picture.
+The core depends on the internal `ibarra-api` SPI and `jakarta.servlet.jsp:jakarta.servlet.jsp-api:4.0.0`, with `jakarta.servlet-api:6.1.0` and `jakarta.el-api:6.0.1`. The API module requires Jakarta Pages transitively because its public factories return `HttpJspPage`. At run time an Expression Language implementation (Peano) and a servlet container (Foy) complete the picture.
 
-Build-time tooling may take a dependency when it saves rewriting something done elsewhere; each one will be named on this page. None so far.
+Build-only Maven dependencies are named and justified in xref:modules/maven-plugin.adoc[the Maven plugin reference]. They do not ship in application runtime artifacts.
 
-`ibarra-compiler` has no production library dependencies. Its parser requires the
+`ibarra-compiler` depends on the internal API for shared page-path validation. Its parser requires the
 JDK `java.xml` module; generation/compilation also needs the optional
 `java.compiler` module resolved in a full Java 25 JDK. JUnit, Peano and Ibarra
 core are test-scoped in the compiler; Peano is test-scoped in the core.
-Production page-index SPI and Peano compiler dependencies remain deferred.
+Peano compiler integration remains deferred; the page-index SPI is implemented.
 
 `GenerationOptions.DEFAULT` disables startup EL. `withStartupEl(true)` explicitly
 enables the initial preview interpreter path; build-time EL compilation remains
 unfinished. `PageGenerator`, `GeneratedPage`, `PageCompiler`, `JspPropertyGroup`
 and `GenerationOptions` are in `io.vidocq.ibarra.compiler`.
+
+`PagePrecompiler` stages page compilation and constructor-based index generation,
+then updates the application's Java module service declaration with the JDK
+Class-File API. `PageIndex.pages()` returns immutable `PageDescriptor` values;
+`createPage()` calls a generated constructor factory. Core discovery uses
+`ServiceLoader` and rejects duplicate web resource paths. A page descriptor
+does not own servlet initialization or deployment lifecycle.
 
 == Generated-page policies
 

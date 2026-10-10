@@ -171,6 +171,23 @@ jobs:
         # install runs the full lifecycle incl. integration-test/verify.
         run: mvn -B -ntp install
 
+      - name: Build the independent precompiled application example
+        if: steps.changes.outputs.docs-only != 'true'
+        run: |
+          # The example is outside the reactor; align its parent with the locally installed PR version.
+          python3 - <<'PY'
+          import pathlib
+          import xml.etree.ElementTree as ET
+          ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
+          ET.register_namespace('', ns['m'])
+          version = ET.parse('pom.xml').find('m:version', ns).text
+          path = pathlib.Path('examples/precompiled-pages/pom.xml')
+          tree = ET.parse(path)
+          tree.find('m:parent/m:version', ns).text = version
+          tree.write(path, encoding='utf-8', xml_declaration=True)
+          PY
+          mvn -B -ntp -f examples/precompiled-pages/pom.xml clean package
+
       - name: Rebuild impacted downstream consumers against the local PR artifacts
         if: steps.changes.outputs.docs-only != 'true'
         uses: https://codefloe.com/Vidocq/ci/build-impacted@main

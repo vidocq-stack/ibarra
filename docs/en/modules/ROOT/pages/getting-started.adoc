@@ -1,10 +1,10 @@
 = Getting started
-:description: How Ibarra will be used — initial runtime/parser implemented, precompilation planned.
+:description: Precompile an application module with Ibarra; container integration remains planned.
 
 [.lead]
 Ibarra cannot deploy JSP source files yet: the runtime/parser and initial Java
-generation are implemented, but packaging and container binding remain planned. This page shows the
-intended first steps so the target experience is explicit.
+generation and modular packaging are implemented. Container binding remains
+planned; precompiled application JARs are tested against servlet doubles.
 
 == Prerequisites
 
@@ -12,13 +12,13 @@ intended first steps so the target experience is explicit.
 * **Maven 3.9.16** — pinned via `.sdkmanrc` at the repo root.
 * Strict Java Modules: one `module-info.java` per Maven module.
 
-== Maven setup (planned)
+== Maven setup (initial I4)
 
 [source,xml,subs=attributes+]
 ----
 <dependency>
     <groupId>io.vidocq.ibarra</groupId>
-    <artifactId>ibarra-core</artifactId>
+    <artifactId>ibarra-api</artifactId>
     <version>{project-version}</version>
 </dependency>
 
@@ -34,7 +34,13 @@ intended first steps so the target experience is explicit.
 </plugin>
 ----
 
-At run time, add `ibarra-foy` (binding to the Foy servlet container) and `peano-core` (Expression Language).
+The application module requires `io.vidocq.ibarra.api`; generated packages need
+no exports or opens. Put pages in `src/main/webapp` and run `mvn package`.
+See xref:modules/maven-plugin.adoc[the plugin reference] and the repository's
+`examples/precompiled-pages` for a complete buildable example.
+
+`ibarra-foy` remains planned for container binding. Default packaging rejects EL
+until build-time EL integration is available; it never enables startup preview.
 
 == A first page (target, milestone I5)
 

@@ -123,20 +123,18 @@ reflective fallback and Vauban's runtime fallbacks.
 
 | Module (artefact) | Java module | Kind | Requires | Exports |
 |---|---|---|---|---|
-| `ibarra-api` | `io.vidocq.ibarra.api` | runtime | currently only `java.base`; `transitive jakarta.servlet.jsp` planned for page index | `io.vidocq.ibarra.spi` (`PageOptions` implemented; `PageIndex`, page descriptor planned) |
+| `ibarra-api` | `io.vidocq.ibarra.api` | runtime | `transitive jakarta.servlet.jsp` | `io.vidocq.ibarra.spi` (`PageOptions`, `PageDescriptor`, `PageIndex`) |
 | `ibarra-core` | `io.vidocq.ibarra.core` | runtime | `transitive jakarta.servlet.jsp`, `io.vidocq.ibarra.api` | nothing — installs its `JspFactory` with `JspFactory.setDefaultFactory` at deployment (the spec defines no service lookup for it), `uses PageIndex` |
-| `ibarra-compiler` | `io.vidocq.ibarra.compiler` | build (+ dev mode planned) | `java.xml`, `static java.compiler`; SPI/Peano compiler dependencies when available | `io.vidocq.ibarra.compiler` |
+| `ibarra-compiler` | `io.vidocq.ibarra.compiler` | build (+ dev mode planned) | `io.vidocq.ibarra.api`, `java.xml`, `static java.compiler`; Peano compiler integration pending | `io.vidocq.ibarra.compiler` |
 | `ibarra-maven-plugin` | (Maven plugin, class path) | build | `ibarra-compiler` | — |
 | `ibarra-foy` | `io.vidocq.ibarra.foy` | runtime | `io.vidocq.ibarra.core`, Foy's SPI module | nothing — `provides` Foy's JSP-engine SPI |
 | `ibarra-tck` | — | test, `-Ptck` | `ibarra-core` (+ Foy, Arquillian adapter later) | — |
 | `ibarra-bench` | — | JMH, not deployed | — | — |
 
-Today `ibarra-core` (I1 runtime), `ibarra-compiler` (I2 parser/model) and
-`ibarra-tck` (skeleton) exist. The
-precompiler plugin is **declared in this design only**: the sibling bricks'
-initial scaffolds (Erasmus's first commit) carried no plugin module — plugin
-placeholders appeared with the first implementation milestone — so
-`ibarra-maven-plugin` is created by milestone I4.
+Today `ibarra-api`, `ibarra-core` (I1 runtime), `ibarra-compiler` (I2 parser/model,
+initial I3/I4 generation and packaging), `ibarra-maven-plugin` and `ibarra-tck`
+(skeleton) exist. The Maven plugin runs only in Maven's build-time classpath;
+application pages and the runtime remain strict named Java modules.
 
 `ibarra-core` does **not** depend on Peano: it gets its `ExpressionFactory`
 through `ExpressionFactory.newInstance()`, so any compliant EL implementation
@@ -225,7 +223,7 @@ the runtime's packaging goal, after I8.
 | I1 | Runtime API: `JspFactory`, `PageContext`, `JspWriter` / `BodyContent` buffering, scopes, error pages — driven by hand-written `HttpJspPage` fixtures | implemented: unit tests against Foy-free servlet doubles, clean install green |
 | I2 | `ibarra-compiler` parser: standard + XML syntax, directives, scripting, template text, page model | implemented: 36 parser corpus tests, clean install green |
 | I3 | Generator: Java source for pages, standard actions, EL via `jakarta.el` (Peano in tests), `jsp-config` property groups | in progress: generated fixtures render; static EL and remaining semantics pending |
-| I4 | `ibarra-maven-plugin` precompile goal + page index; extend `ibarra-api` SPI | example webapp precompiled, no runtime translation |
+| I4 | `ibarra-maven-plugin` precompile goal + page index; extend `ibarra-api` SPI | initial implementation: independent application JAR precompiled and rendered; web fragments and broader configuration pending |
 | I5 | `ibarra-foy` + Foy's JSP-engine SPI (Foy-side PR), `*.jsp` mapping, `addJspFile`, `getJspConfigDescriptor`, TLD listeners | end-to-end test on Foy/Chappe |
 | I6 | Custom tags: TLD parsing, classic + simple handlers, scripting variables, validators | |
 | I7 | Tag files, fragments, `jsp:invoke` / `jsp:doBody`; Peano compiled expressions in pages | |
@@ -300,11 +298,12 @@ P7 `peano-compiler` does not exist yet, so planned build-time expression compila
 is unfinished. Generic EL bean access still uses the API's reflective fallback;
 generated standard bean actions themselves contain no reflection.
 
-Proof: `./mvnw -o -ntp clean install` under Temurin 25 passes 148 tests:
-45 runtime, 36 parser, 13 byte-decoding and 54 generator fixtures. Fixtures compile and run on
+Proof: `./mvnw -o -ntp clean install` under Temurin 25 passes 166 tests:
+48 runtime, 36 parser, 13 byte-decoding, 54 generator, 11 packaging and 4 plugin tests. Fixtures compile and run on
 the module path, construct pages directly and patch the core only to install
-its internal factory. They do not prove independent application packaging,
-page-index discovery or Foy deployment (I4/I5). Module, dependency, codegen and
+its internal factory. I4 additionally compiles a separate application module,
+packages it as a JAR and discovers its unexported constructor-based page index
+with compiler modules excluded. Foy deployment remains I5. Module, dependency, codegen and
 concurrency reviews have run; fixed regressions are recorded in `BUG.md`.
 
 Strict policies are implemented: generated immutable `PageOptions` carry
@@ -334,6 +333,19 @@ shared-scope bean creation, broader output/attribute/translation validation,
 broader namespace/XML-view validation. Unsupported constructs
 fail explicitly. New session/application beans are rejected; existing typed
 shared beans can be accessed. The official TCK has not been run.
+
+## Initial I4 implementation
+
+Initial I4 proof (2026-10-10): `examples/precompiled-pages` builds with the real
+Maven goal after reactor installation. Its unexported application module contains
+compiled pages and a constructor-based `PageIndex` service. The packaging fixture
+discovers/renders a separate application JAR with compiler modules excluded.
+The goal handles `.jsp`/`.jspx`, root web.xml property groups, stable generated
+names and content-verified incremental cleanup. Default packages derive from the
+application module name. Web-fragment merging, TLD/taglib configuration, custom
+extension mappings and Foy deployment remain pending. Packaging never enables
+startup EL interpretation. Maven's provided/build dependencies are named in the
+Antora Maven plugin reference; none enter application/runtime artifacts.
 
 ## Open questions
 

@@ -16,11 +16,13 @@ through [Peano](https://codefloe.com/Vidocq/peano), servlet container through
 
 ## Status
 
-🚧 **I3 in progress.** The runtime and parser are implemented. The initial
+🚧 **I3 in progress; initial I4 packaging implemented.** The runtime and parser are implemented. The initial
 generator emits Java servlet source, compiles it at build time and renders
 fixtures for scripting, standard actions, configuration and direct bean access.
 Static includes can mix JSP/JSPX syntax; source encodings are validated per file.
 Byte sources support BOM/prolog detection and strict decoding before translation.
+The Maven `precompile` goal emits pages and an index into an application module;
+a packaged application JAR is discovered and rendered without compiler modules.
 EL startup interpretation is an explicit preview option; build-time EL awaits
 Peano's compiler. Container integration and official TCK certification remain planned.
 The design of record is [PLAN.md](PLAN.md) (spec scope, build-time page
@@ -36,7 +38,7 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 - **Strict Java Modules** — proper `module-info.java`, minimal `exports`,
   no unjustified `opens`, no classpath.
 - **Static code generation first** — pages and tag files are translated and
-  compiled during the application build (`ibarra-maven-plugin`, planned);
+  compiled during the application build (`ibarra-maven-plugin`);
   runtime translation through `javax.tools` is a documented, degraded
   development mode.
 - **TDD** — test (or TCK scenario) first, then code.
@@ -47,13 +49,13 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 
 | Module | Role | State |
 |---|---|---|
-| `ibarra-api` | Immutable generated-page options SPI; page index planned | I3 policy SPI implemented |
+| `ibarra-api` | Immutable page options, descriptors and constructor-based index SPI | I3/I4 SPI implemented |
 | `ibarra-core` | Page runtime: factory, context, scopes, output, dispatch and application EL context; tags planned | I1 runtime implemented |
 | `ibarra-compiler` | JSP/JSPX parser, page model, initial Java generator and build-time compiler | I2 implemented; I3 in progress |
+| `ibarra-maven-plugin` | `precompile` goal at process-classes; module service registration | Initial I4 implemented |
 | `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | skeleton |
 
-Planned modules (`ibarra-maven-plugin`,
-`ibarra-foy`, `ibarra-bench`) are described in [PLAN.md](PLAN.md) and created by
+Planned modules (`ibarra-foy`, `ibarra-bench`) are described in [PLAN.md](PLAN.md) and created by
 the milestone that needs them. JSTL is out of scope.
 
 ## Build
@@ -61,6 +63,7 @@ the milestone that needs them. JSTL is out of scope.
 ```bash
 sdk env          # Java 25 (Temurin) + Maven 3.9.16, pinned by .sdkmanrc
 ./mvnw -ntp install
+./mvnw -ntp -f examples/precompiled-pages/pom.xml clean package
 ./mvnw -Ptck -pl ibarra-tck test                 # TCK runner skeleton
 ./mvnw -Ptck,tck-official -pl ibarra-tck test    # official TCK (coordinates to confirm)
 ```

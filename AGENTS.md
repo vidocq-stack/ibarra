@@ -8,7 +8,7 @@ coding agent). `CLAUDE.md` only imports this file (`@AGENTS.md`): edit the rules
 > MicroProfile JWT brick. The Ibarra project implements **Jakarta Pages 4.0**: pages are
 > composed (translated and compiled) during the build, then rendered on each request.
 
-**Status: I1/I2 implemented; initial I3 generation available, full I3 and container binding pending.** Read [PLAN.md](PLAN.md) before any change — it is the design of
+**Status: I1/I2 implemented; initial I3 generation and I4 packaging available, full I3 and container binding pending.** Read [PLAN.md](PLAN.md) before any change — it is the design of
 record (spec scope, build-time page compilation, Java Modules layout, Foy JSP-engine SPI,
 Peano integration, TCK plan, milestones I0–I9, open questions). Structural decisions
 marked "to validate" there need the maintainer's sign-off first.
@@ -73,14 +73,14 @@ sdk env
 ## Architecture
 
 ```
-ibarra-api    ← I3 immutable generated-page options SPI; page index planned (I4)
+ibarra-api    ← Immutable page options, constructor-based descriptors and index SPI
 ibarra-core   ← I1 runtime: JspFactory, PageContext, JspWriter, BodyContent,
                 JspApplicationContext (tags and full Pages EL resolver chain planned)
-ibarra-compiler ← I2 parser/model; initial I3 Java generation and build-time javac;
-                  java.xml + static java.compiler, startup EL preview opt-in only
+ibarra-compiler ← I2 parser/model; I3 generation and I4 application packaging;
+                  internal API + java.xml + static java.compiler
+ibarra-maven-plugin ← Build-only precompile goal, Maven classpath exception
 ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
-(planned)     ibarra-maven-plugin (build-time precompilation),
-              ibarra-foy (Foy JSP-engine SPI binding), ibarra-bench (JMH)
+(planned)     ibarra-foy (Foy JSP-engine SPI binding), ibarra-bench (JMH)
 ```
 
 ## Architecture Constraints Not to Violate
@@ -107,6 +107,12 @@ ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
    Peano's build-time compiler is available. Tests/previews explicitly use
    `withStartupEl(true)`; do not silently enable startup interpretation in
    packaging or mark I3 complete while that dependency remains missing.
+
+10. **I4 boundary** — application modules must require `io.vidocq.ibarra.api`;
+    their generated packages need no exports/opens. Register page indexes with
+    Java module `provides`, never classpath service files or runtime class-name
+    lookup. The Maven plugin alone uses Maven's build-time classpath as designed
+    in PLAN.md; Maven libraries must never enter application/runtime artifacts.
 
 ## Conventions
 

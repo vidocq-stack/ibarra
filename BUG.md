@@ -100,6 +100,55 @@ Entry format: `short id · date · symptom · minimal repro · cause hypothesis 
 - Status: fixed by using IBM037 only to read the declaration and honoring the
   named variant for final strict decoding.
 
+## IBARRA-036 · 2026-10-10 · Fixture module path omits Peano's API module
+
+- Symptom: generated-page fixture JVMs fail boot resolution after Peano core
+  requires its internal API module.
+- Minimal repro: `PageGeneratorTest.rendersCachedPeanoExpressionsAgainstEachRequestContext`.
+- Cause: fixture module-path filtering includes only Peano core.
+- Status: fixed by including the required Peano API module in test JVM paths.
+
+## IBARRA-037 · 2026-10-10 · Invalid resource paths fail only during discovery
+
+- Symptom: a page filename containing a fragment/query marker compiles, but
+  runtime page-index initialization fails when constructing its descriptor.
+- Minimal repro: `PagePrecompilerTest.invalidPagePathsFailBeforePublishingTheIndex`.
+- Cause: build packaging does not apply the descriptor's path validation.
+- Status: fixed by sharing path validation through the internal API before publishing.
+
+## IBARRA-038 · 2026-10-10 · Incremental ownership can delete replacement classes
+
+- Symptom: a generated file replaced by application compilation can subsequently
+  be overwritten/deleted by the precompiler's filename-only ownership manifest.
+- Minimal repro: `PagePrecompilerTest.replacedOwnedClassesAreNeitherOverwrittenNorDeleted`.
+- Cause: ownership does not verify the content of an existing file.
+- Status: fixed by recording/checking SHA-256 class digests before replacement or cleanup.
+
+## IBARRA-039 · 2026-10-10 · Removed pages leave stale module package metadata
+
+- Symptom: an existing ModulePackages attribute retains the generated package
+  after its last page is removed or the generation package changes.
+- Minimal repro: `PagePrecompilerTest.existingModulePackageMetadataDropsRemovedGeneratedPackages`.
+- Cause: module rewriting only appends package names.
+- Status: fixed by rebuilding package metadata from surviving application/new classes.
+
+## IBARRA-040 · 2026-10-10 · Partial output refresh prevents page cleanup
+
+- Symptom: removing a page after its generated directory disappeared fails
+  while resolving the stale provider or deleting an absent package directory.
+- Minimal repro: `PagePrecompilerTest.missingOwnedDirectoriesDoNotPreventRemovingPages`.
+- Cause: build validation resolves the application's stale generated provider
+  and cleanup assumes every owned directory still exists.
+- Status: fixed with invocation-local descriptor repair and tolerant directory cleanup.
+
+## IBARRA-041 · 2026-10-10 · Foreign XML elements become JSP configuration
+
+- Symptom: foreign-namespace elements named jsp-config/property-group are
+  interpreted as official deployment settings.
+- Minimal repro: `PrecompileMojoTest.foreignNamespacesCannotPretendToBeJspConfiguration`.
+- Cause: descriptor extraction compares only element local names.
+- Status: fixed by checking supported descriptor namespaces and namespace consistency.
+
 ## IBARRA-001 · 2026-10-10 · Included output bypasses the page writer
 
 - Symptom: `include(path, false)` renders included output before pending page

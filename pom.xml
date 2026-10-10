@@ -86,6 +86,7 @@
         <module>ibarra-api</module>
         <module>ibarra-core</module>
         <module>ibarra-compiler</module>
+        <module>ibarra-maven-plugin</module>
     </modules>
 
     <dependencyManagement>
@@ -120,6 +121,11 @@
             </dependency>
 
             <!-- Internal Ibarra modules -->
+            <dependency>
+                <groupId>io.vidocq.ibarra</groupId>
+                <artifactId>ibarra-compiler</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>io.vidocq.ibarra</groupId>
                 <artifactId>ibarra-api</artifactId>

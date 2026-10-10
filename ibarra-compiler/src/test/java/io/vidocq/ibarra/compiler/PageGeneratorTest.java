@@ -619,7 +619,7 @@ class PageGeneratorTest {
     }
 
     private String modulePath() {
-        var names = Set.of("io.vidocq.ibarra.api", "io.vidocq.ibarra.core", "jakarta.servlet", "jakarta.servlet.jsp", "jakarta.el", "io.vidocq.peano.core");
+        var names = Set.of("io.vidocq.ibarra.api", "io.vidocq.ibarra.core", "jakarta.servlet", "jakarta.servlet.jsp", "jakarta.el", "io.vidocq.peano.core", "io.vidocq.peano.api");
         String available = System.getProperty("jdk.module.path", "") + File.pathSeparator
                 + System.getProperty("surefire.test.class.path", "");
         var paths = Arrays.stream(available.split(java.util.regex.Pattern.quote(File.pathSeparator)))

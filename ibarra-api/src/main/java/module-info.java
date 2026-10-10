@@ -17,8 +17,9 @@
  *
  * SPDX-License-Identifier: EPL-2.0 OR EUPL-1.2 OR GPL-2.0-or-later
  */
-/** Minimal generated-page metadata contract; no compiler or container dependency. */
+/** Generated-page metadata and factories; no compiler or container dependency. */
 module io.vidocq.ibarra.api {
+    requires transitive jakarta.servlet.jsp;
     exports io.vidocq.ibarra.spi;
 }
 

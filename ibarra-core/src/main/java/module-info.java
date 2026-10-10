@@ -31,4 +31,5 @@
 module io.vidocq.ibarra.core {
     requires io.vidocq.ibarra.api;
     requires transitive jakarta.servlet.jsp;
+    uses io.vidocq.ibarra.spi.PageIndex;
 }
