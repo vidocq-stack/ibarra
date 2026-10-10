@@ -10,7 +10,7 @@ Reference data for Ibarra `{project-version}`. Entries marked _planned_ do not e
 |===
 | Maven coordinates | Java module | Notes
 
-| `io.vidocq.ibarra:ibarra-core` | `io.vidocq.ibarra.core` | Page runtime (I1 in progress: internal page/body writers)
+| `io.vidocq.ibarra:ibarra-core` | `io.vidocq.ibarra.core` | I1 runtime implemented; compiler and container binding planned
 | `io.vidocq.ibarra:ibarra-api` | `io.vidocq.ibarra.api` | _planned_ — generated-code SPI
 | `io.vidocq.ibarra:ibarra-compiler` | `io.vidocq.ibarra.compiler` | _planned_ — translator
 | `io.vidocq.ibarra:ibarra-maven-plugin` | — | _planned_ — `precompile` goal, build time only

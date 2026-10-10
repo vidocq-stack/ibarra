@@ -1,9 +1,9 @@
 = Getting started
-:description: How Ibarra will be used — Maven coordinates, precompilation, a first page. I1 in progress.
+:description: How Ibarra will be used — Maven coordinates, precompilation, a first page. I1 runtime implemented.
 
 [.lead]
-Ibarra cannot serve JSP pages yet: internal page/body writers are implemented,
-but the rest of the runtime and compiler remain planned. This page shows the
+Ibarra cannot serve JSP source files yet: the initial runtime is implemented,
+but the compiler and container binding remain planned. This page shows the
 intended first steps so the target experience is explicit.
 
 == Prerequisites

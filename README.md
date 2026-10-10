@@ -16,10 +16,10 @@ through [Peano](https://codefloe.com/Vidocq/peano), servlet container through
 
 ## Status
 
-🚧 **Implementation started — I1 in progress.** Internal `JspWriter` and
-`BodyContent` implementations cover buffered page output and tag body capture.
-`PageContext`, `JspFactory`, page compilation and container integration remain
-planned; Ibarra cannot serve JSP pages yet.
+🚧 **I1 runtime implemented.** Internal factory, page context, application EL
+context and output writers are exercised through hand-written `HttpJspPage`
+fixtures and servlet doubles. JSP source compilation, container integration
+and official TCK certification remain planned.
 The design of record is [PLAN.md](PLAN.md) (spec scope, build-time page
 compilation, Java Modules layout, Foy JSP-engine SPI, TCK plan, milestones I0–I9).
 
@@ -44,7 +44,7 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 
 | Module | Role | State |
 |---|---|---|
-| `ibarra-core` | Page runtime: `JspFactory`, `PageContext`, `JspWriter`, tag lifecycle | I1 in progress: page and body writers implemented |
+| `ibarra-core` | Page runtime: factory, context, scopes, output, dispatch and application EL context; tags planned | I1 runtime implemented |
 | `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | skeleton |
 
 Planned modules (`ibarra-api`, `ibarra-compiler`, `ibarra-maven-plugin`,

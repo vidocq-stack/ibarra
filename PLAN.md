@@ -1,9 +1,9 @@
 # Ibarra — Design plan
 
-> Status: **I1 in progress**. This document is the design of record for Ibarra, the
+> Status: **I1 runtime implemented**. This document is the design of record for Ibarra, the
 > Jakarta Pages 4.0 (formerly JavaServer Pages) implementation of the Vidocq
-> ecosystem. The scaffold (I0) and internal page/body writers are implemented.
-> The remaining runtime, compiler and integration are still planned.
+> ecosystem. The scaffold (I0) and initial runtime (I1) are implemented.
+> The compiler, full Pages EL integration, tags and container binding remain planned.
 > Decisions marked **(to validate)** need the maintainer's sign-off before
 > the milestone that depends on them starts.
 
@@ -129,7 +129,7 @@ reflective fallback and Vauban's runtime fallbacks.
 | `ibarra-tck` | — | test, `-Ptck` | `ibarra-core` (+ Foy, Arquillian adapter later) | — |
 | `ibarra-bench` | — | JMH, not deployed | — | — |
 
-Today only `ibarra-core` (page/body writers, I1 in progress) and `ibarra-tck` (skeleton) exist. The
+Today only `ibarra-core` (I1 page runtime) and `ibarra-tck` (skeleton) exist. The
 precompiler plugin is **declared in this design only**: the sibling bricks'
 initial scaffolds (Erasmus's first commit) carried no plugin module — plugin
 placeholders appeared with the first implementation milestone — so
@@ -219,7 +219,7 @@ the runtime's packaging goal, after I8.
 | # | Content | Done when |
 |---|---|---|
 | I0 | Scaffold: reactor, `ibarra-core` module, `ibarra-tck` skeleton, docs, this plan | `./mvnw -ntp install` green (this commit) |
-| I1 | Runtime API: `JspFactory`, `PageContext`, `JspWriter` / `BodyContent` buffering, scopes, error pages — driven by hand-written `HttpJspPage` fixtures | unit tests against Foy-free servlet doubles |
+| I1 | Runtime API: `JspFactory`, `PageContext`, `JspWriter` / `BodyContent` buffering, scopes, error pages — driven by hand-written `HttpJspPage` fixtures | implemented: unit tests against Foy-free servlet doubles, clean install green |
 | I2 | `ibarra-compiler` parser: standard + XML syntax, directives, scripting, template text, page model | parser corpus tests |
 | I3 | Generator: Java source for pages, standard actions, EL via `jakarta.el` (Peano in tests), `jsp-config` property groups | compiled fixture pages render expected output |
 | I4 | `ibarra-maven-plugin` precompile goal + page index; `ibarra-api` SPI | example webapp precompiled, no runtime translation |
@@ -231,12 +231,22 @@ the runtime's packaging goal, after I8.
 
 ## Implementation progress
 
-I1 progress (2026-10-10): internal `BufferedJspWriter` and
-`BufferedBodyContent` are implemented, with contract tests for lazy output,
-buffer overflow, clearing, closing, I/O failure propagation, print conversions,
-Unicode and nested body capture. The default page buffer is 8192 characters.
-`PageContext`, `JspFactory`, scopes and error-page handling remain outstanding.
-This does not complete I1.
+I1 implementation (2026-10-10): page/body writers, `IbarraPageContext`,
+`IbarraJspFactory` and `IbarraApplicationContext` are implemented. Tests cover
+buffering, scope lookup/storage, session opt-in, implicit objects, body writers,
+includes/forwards, error-page dispatch, release/reinitialization and rendering
+through an installed factory with a hand-written `HttpJspPage`.
+
+Application resolvers freeze atomically on first use. The EL provider is created
+once, lazily, through `ExpressionFactory.newInstance()`. Context listeners can
+retrieve the page's context during their callback. Tests use an EL factory
+double; real Peano evaluation, the full Pages implicit-object/import chain and
+generated-page EL behaviour remain I3 work.
+
+Proof: `./mvnw -o -ntp clean install` on Temurin Java 25/Maven 3.9.16 passes
+38 tests. The default page buffer is 8192 characters. No official TCK has been
+run, no JSP sources are translated, and no Foy deployment exists yet. The future
+container binding must drain requests before releasing an application context.
 
 ## Open questions
 
