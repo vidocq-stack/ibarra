@@ -20,6 +20,7 @@ through [Peano](https://codefloe.com/Vidocq/peano), servlet container through
 generator emits Java servlet source, compiles it at build time and renders
 fixtures for scripting, standard actions, configuration and direct bean access.
 Static includes can mix JSP/JSPX syntax; source encodings are validated per file.
+Byte sources support BOM/prolog detection and strict decoding before translation.
 EL startup interpretation is an explicit preview option; build-time EL awaits
 Peano's compiler. Container integration and official TCK certification remain planned.
 The design of record is [PLAN.md](PLAN.md) (spec scope, build-time page

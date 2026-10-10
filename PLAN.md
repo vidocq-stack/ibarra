@@ -300,8 +300,8 @@ P7 `peano-compiler` does not exist yet, so planned build-time expression compila
 is unfinished. Generic EL bean access still uses the API's reflective fallback;
 generated standard bean actions themselves contain no reflection.
 
-Proof: `./mvnw -o -ntp clean install` under Temurin 25 passes 131 tests:
-45 runtime, 36 parser and 50 generator fixtures. Fixtures compile and run on
+Proof: `./mvnw -o -ntp clean install` under Temurin 25 passes 148 tests:
+45 runtime, 36 parser, 13 byte-decoding and 54 generator fixtures. Fixtures compile and run on
 the module path, construct pages directly and patch the core only to install
 its internal factory. They do not prove independent application packaging,
 page-index discovery or Foy deployment (I4/I5). Module, dependency, codegen and
@@ -320,10 +320,18 @@ validated per file (one `pageEncoding` directive per file); included encodings
 do not change response defaults. XML response defaults are `text/xml` and UTF-8.
 Unknown property-group keys and invalid buffers have translation diagnostics.
 
+`PageGenerator` also accepts byte arrays, with included resources supplied through
+`GenerationOptions.withByteSources`. Standard-page decoding uses BOM, configured
+encoding, page directive, content-type charset or ISO-8859-1. XML decoding uses
+byte signatures and the named prolog encoding (UTF-8 by default); the derived
+encoding is distinct from configuration declarations. UTF-8/16/32 BOMs are
+removed, malformed bytes fail without replacement, and named encoding conflicts
+retain resource coordinates. Source snapshots and options equality are by value.
+
 Remaining I3 work: static EL and generated accessors after Peano P6/P7, EL imports
 and function bindings, atomic
 shared-scope bean creation, broader output/attribute/translation validation,
-byte-source encoding detection and broader namespace/XML-view validation. Unsupported constructs
+broader namespace/XML-view validation. Unsupported constructs
 fail explicitly. New session/application beans are rejected; existing typed
 shared beans can be accessed. The official TCK has not been run.
 

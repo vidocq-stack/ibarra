@@ -94,8 +94,12 @@ provides the location separately from its build-readable message.
 
 Parsing requires `java.xml`; generation/compilation additionally needs the
 optional `java.compiler` module. The module exports only its public API.
-Initial attribute handling and static include expansion exist; byte-source
-encoding detection and full semantic validation remain open. DOCTYPE declarations and external
+Initial attribute handling and static include expansion exist. `PageGenerator`
+accepts decoded text or strictly decoded byte sources, including independently
+encoded static resources. BOMs and XML byte signatures/prologs are detected
+before parsing; encoding directives are scanned with the standard lexer rather
+than matched inside comments or EL strings. Full semantic validation remains open.
+DOCTYPE declarations and external
 entities are unsupported in this initial parser; no external documents are read.
 
 == Initial Java generator (I3 in progress)

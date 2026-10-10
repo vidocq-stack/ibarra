@@ -26,17 +26,27 @@ import java.util.*;
 
 /** Build-side inclusion and property-group selection without reading web resources. */
 public final class TranslationUnit {
-    public record Result(Page page, Map<String, String> properties, Map<String, Page.Syntax> sourceSyntaxes) { }
+    public record Result(Page page, Map<String, String> properties, Map<String, Page.Syntax> sourceSyntaxes, String responseEncoding) { }
     private final GenerationOptions options;
     private final Map<PageNode.Text, List<SourceLocation>> origins = new IdentityHashMap<>();
     private final Set<String> stack = new LinkedHashSet<>();
     private Page.Syntax syntax;
     private final Map<String, Page.Syntax> sourceSyntaxes = new HashMap<>();
+    private final Map<String, SourceDecoder.Decoded> decodedSources = new HashMap<>();
     private final Map<String, String> unitBindings = new LinkedHashMap<>();
     private ParserOptions unitOptions;
     private boolean strictNamespaces;
 
     public TranslationUnit(GenerationOptions options) { this.options = options; }
+
+    public Result read(String path, byte[] bytes) {
+        var decoded = decode(path, bytes);
+        return read(path, decoded.text());
+    }
+
+    private SourceDecoder.Decoded decode(String path, byte[] bytes) {
+        return decodedSources.computeIfAbsent(path, key -> SourceDecoder.decode(key, bytes, properties(key)));
+    }
 
     public Result read(String path, String source) {
         var properties = properties(path);
@@ -52,7 +62,8 @@ public final class TranslationUnit {
         raw = readRoot(path, source, properties);
         validateTaglibOrder(raw, new HashSet<>(Set.of("jsp")));
         var nodes = new PageNormalizer(syntax, defaults, origins, sourceSyntaxes).normalizeStructured(raw);
-        return new Result(new Page(path, syntax, nodes), Map.copyOf(properties), Map.copyOf(sourceSyntaxes));
+        return new Result(new Page(path, syntax, nodes), Map.copyOf(properties), Map.copyOf(sourceSyntaxes),
+                decodedSources.containsKey(path) ? decodedSources.get(path).responseEncoding() : null);
     }
 
     private List<PageNode> readRoot(String path, String source, Map<String, String> properties) {
@@ -143,7 +154,9 @@ public final class TranslationUnit {
                 if (!encodedFiles.add(node.location().source()))
                     throw new PageParseException(node.location(), "pageEncoding may occur only once per file");
                 var charset = charset(attributes.get("pageEncoding"), node.location());
-                if (properties.containsKey("page-encoding") && !charset.equals(charset(properties.get("page-encoding"), node.location())))
+                if (properties.containsKey("page-encoding") && !(decodedSources.containsKey(node.location().source())
+                        ? SourceDecoder.compatible(charset, charset(properties.get("page-encoding"), node.location()))
+                        : charset.equals(charset(properties.get("page-encoding"), node.location()))))
                     throw new PageParseException(node.location(), "pageEncoding conflicts with configuration");
             }
             if (node instanceof PageNode.Element element) validateEncoding(element.children(), properties, encodedFiles);
@@ -183,6 +196,10 @@ public final class TranslationUnit {
     private List<PageNode> included(String path, SourceLocation at, Map<String, String> properties) {
         if (stack.contains(path)) throw new PageParseException(at, "Recursive translation-time include: " + path);
         var source = options.sources().get(path);
+        if (source == null) {
+            byte[] bytes = options.byteSource(path);
+            if (bytes != null) source = decode(path, bytes).text();
+        }
         if (source == null) throw new PageParseException(at, "Missing translation-time include: " + path);
         return readFile(path, source, properties);
     }

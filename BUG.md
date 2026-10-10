@@ -59,6 +59,47 @@ Entry format: `short id · date · symptom · minimal repro · cause hypothesis 
   template text, which strips document indentation.
 - Status: fixed by applying only expression/escape normalization to attributes.
 
+## IBARRA-031 · 2026-10-10 · XML byte decoding inherits deployment encoding
+
+- Symptom: XML without a named prolog encoding decodes as the configured
+  charset instead of its derived UTF-8 default.
+- Minimal repro: `SourceDecodingTest.xmlDefaultEncodingDoesNotComeFromThePropertyGroup`.
+- Cause: configuration overwrites the provisional XML encoding before syntax detection.
+- Status: fixed by keeping byte-derived XML encoding separate from named settings.
+
+## IBARRA-032 · 2026-10-10 · Encoding conflicts lose directive-free source names
+
+- Symptom: a configuration/prolog conflict reports an empty resource name
+  if no page directive exists.
+- Minimal repro: `SourceDecodingTest.configurationConflictsRetainTheRequestedResourceName`.
+- Cause: error locations are inferred from the first directive instead of the resource.
+- Status: fixed by supplying the resource location to consistency checks.
+
+## IBARRA-033 · 2026-10-10 · Encoding scanner ignores EL literal policies
+
+- Symptom: real pageEncoding directives inside literal EL delimiters are missed,
+  producing corrupt output from valid UTF-8 source bytes.
+- Minimal repro: `SourceDecodingTest.encodingDirectiveScanningRespectsLiteralElPolicies`.
+- Cause: the detection scanner always uses default EL options and does not
+  update deferred-literal policy from directives.
+- Status: fixed by using configured options and tracking directive policy changes.
+
+## IBARRA-034 · 2026-10-10 · Byte source snapshots break option value equality
+
+- Symptom: reconstructing unchanged options or copying the same startup flag
+  creates unequal records when byte sources are present.
+- Minimal repro: `PageGeneratorTest.byteSourceSnapshotsCannotBeChangedByCallers`.
+- Cause: record equality compares defensive byte-array copies by identity.
+- Status: fixed with content-based equality and hash codes while retaining snapshots.
+
+## IBARRA-035 · 2026-10-10 · EBCDIC probe rejects valid declared variants
+
+- Symptom: valid IBM500 XML fails with an encoding/signature conflict.
+- Minimal repro: `SourceDecodingTest.ebcdicSignatureIsAProbeAndDoesNotOverrideTheNamedVariant`.
+- Cause: provisional IBM037 detection is treated as the definitive EBCDIC charset.
+- Status: fixed by using IBM037 only to read the declaration and honoring the
+  named variant for final strict decoding.
+
 ## IBARRA-001 · 2026-10-10 · Included output bypasses the page writer
 
 - Symptom: `include(path, false)` renders included output before pending page

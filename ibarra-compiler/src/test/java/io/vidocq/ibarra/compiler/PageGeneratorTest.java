@@ -492,6 +492,44 @@ class PageGeneratorTest {
     }
 
     @Test
+    void byteSourcesDecodeEachIncludedResourceIndependently() throws Exception {
+        var options = GenerationOptions.DEFAULT.withByteSources(Map.of("/part.jspf",
+                "<%@ page pageEncoding='ISO-8859-1' %>é".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1)));
+        byte[] root = "<%@ page pageEncoding='UTF-8' %>你好<%@ include file='part.jspf' %>".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        assertEquals("你好é", run(generator().generate("/main.jsp", root, PAGE_CLASS, options), "", ""));
+    }
+
+    @Test
+    void standardBomIsRemovedAndSelectsTheResponseEncoding() throws Exception {
+        byte[] text = "é".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] bytes = new byte[] {(byte) 0xef, (byte) 0xbb, (byte) 0xbf, text[0], text[1]};
+        assertEquals("é", run(generator().generate("/main.jsp", bytes, PAGE_CLASS, GenerationOptions.DEFAULT), "",
+                "if (!response.contentType.equals(\"text/html;charset=UTF-8\")) throw new AssertionError(response.contentType);"));
+    }
+
+    @Test
+    void xmlPrologDecodesBytesWithoutChangingXmlResponseDefaults() throws Exception {
+        byte[] bytes = "<?xml version='1.0' encoding='ISO-8859-1'?><p>é</p>".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        assertEquals("<p>é</p>", run(generator().generate("/main.jspx", bytes, PAGE_CLASS, GenerationOptions.DEFAULT), "",
+                "if (!response.contentType.equals(\"text/xml;charset=UTF-8\")) throw new AssertionError(response.contentType);"));
+    }
+
+    @Test
+    void byteSourceSnapshotsCannotBeChangedByCallers() {
+        byte[] bytes = "text".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        var options = GenerationOptions.DEFAULT.withByteSources(Map.of("/part.jspf", bytes));
+        bytes[0] = 0;
+        options.byteSources().get("/part.jspf")[0] = 0;
+        assertEquals('t', options.byteSources().get("/part.jspf")[0]);
+        var reconstructed = new GenerationOptions(options.propertyGroups(), options.sources(), options.allowStartupEl(), options.byteSources());
+        assertEquals(options, reconstructed);
+        assertEquals(options.hashCode(), reconstructed.hashCode());
+        assertEquals(options, options.withStartupEl(false));
+        assertThrows(IllegalArgumentException.class, () -> new GenerationOptions(List.of(), Map.of("/part.jspf", "text"))
+                .withByteSources(Map.of("/part.jspf", bytes)));
+    }
+
+    @Test
     void xmlNamedAttributeWhitespaceIsPreservedWhenTrimIsDisabled() throws Exception {
         String source = "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='4.0'>"
                 + "<jsp:directive.page session='false'/><jsp:element name='p'>"

@@ -34,7 +34,15 @@ public final class PageGenerator {
         if (!SourceVersion.isName(className) || !className.contains("."))
             throw new IllegalArgumentException("Generated class needs a qualified Java name: " + className);
         var unit = new TranslationUnit(options).read(path, source);
-        return new Generator(unit.page(), className, unit.properties(), unit.sourceSyntaxes(), options.allowStartupEl()).generate();
+        return new Generator(unit.page(), className, unit.properties(), unit.sourceSyntaxes(), unit.responseEncoding(), options.allowStartupEl()).generate();
+    }
+
+    /** Detects and strictly decodes the requested file's byte encoding before translation. */
+    public GeneratedPage generate(String path, byte[] source, String className, GenerationOptions options) {
+        if (!SourceVersion.isName(className) || !className.contains("."))
+            throw new IllegalArgumentException("Generated class needs a qualified Java name: " + className);
+        var unit = new TranslationUnit(options).read(path, source);
+        return new Generator(unit.page(), className, unit.properties(), unit.sourceSyntaxes(), unit.responseEncoding(), options.allowStartupEl()).generate();
     }
 
     private final class Generator {
@@ -46,6 +54,7 @@ public final class PageGenerator {
         private final Map<String, String> settings = new LinkedHashMap<>();
         private final Map<String, SourceLocation> settingLocations = new HashMap<>();
         private final Map<String, Page.Syntax> sourceSyntaxes;
+        private final String responseEncoding;
         private final List<String> imports = new ArrayList<>();
         private final JavaSource declarations = new JavaSource();
         private final JavaSource body = new JavaSource();
@@ -55,9 +64,10 @@ public final class PageGenerator {
         private int serial;
         private final boolean startupElAllowed;
 
-        Generator(Page page, String className, Map<String, String> properties, Map<String, Page.Syntax> sourceSyntaxes, boolean startupElAllowed) {
+        Generator(Page page, String className, Map<String, String> properties, Map<String, Page.Syntax> sourceSyntaxes, String responseEncoding, boolean startupElAllowed) {
             this.page = page; this.className = className;
             this.sourceSyntaxes = sourceSyntaxes;
+            this.responseEncoding = responseEncoding;
             this.startupElAllowed = startupElAllowed;
             copy(properties, "default-content-type", "contentType");
             copy(properties, "buffer", "buffer");
@@ -163,9 +173,6 @@ public final class PageGenerator {
                             settingLocations.putIfAbsent(entry.getKey(), directive.location());
                             if (previous != null && !previous.equals(entry.getValue()))
                                 throw error(directive.location(), "Conflicting page attribute: " + entry.getKey());
-                            if (entry.getKey().equals("pageEncoding") && settings.containsKey("pageEncoding")
-                                    && !Charset.forName(settings.get("pageEncoding")).equals(Charset.forName(entry.getValue())))
-                                throw error(directive.location(), "pageEncoding conflicts with configuration");
                         }
                     }
                 } else if (node instanceof PageNode.Element element) collectDirectives(element.children(), explicit);
@@ -412,8 +419,9 @@ public final class PageGenerator {
         }
         private String contentType() {
             String contentType = settings.getOrDefault("contentType", page.syntax() == Page.Syntax.XML ? "text/xml" : "text/html");
-            if (!contentType.toLowerCase(Locale.ROOT).contains("charset=")) {
-                String encoding = page.syntax() == Page.Syntax.XML ? "UTF-8" : settings.get("pageEncoding");
+            if (SourceDecoder.contentCharset(contentType) == null) {
+                String encoding = page.syntax() == Page.Syntax.XML ? "UTF-8"
+                        : responseEncoding != null ? responseEncoding : settings.get("pageEncoding");
                 if (encoding != null) contentType += ";charset=" + Charset.forName(encoding).name();
             }
             return contentType;

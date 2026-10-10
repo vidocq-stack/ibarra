@@ -56,6 +56,25 @@ public final class StandardParser {
         return nodes(null, 0);
     }
 
+    /** Reads real directives for byte-encoding detection, without binding custom tags. */
+    public List<PageNode.Directive> encodingDirectives() {
+        var result = new ArrayList<PageNode.Directive>();
+        while (cursor < source.text.length()) {
+            if (skipExpression()) continue;
+            if (starts("<%--")) comment();
+            else if (starts("<%@")) {
+                var directive = directive();
+                result.add(directive);
+                if (directive.attributes().containsKey("isELIgnored"))
+                    elIgnored = Boolean.parseBoolean(directive.attributes().get("isELIgnored"));
+                if (directive.attributes().containsKey("deferredSyntaxAllowedAsLiteral"))
+                    deferredLiteral = Boolean.parseBoolean(directive.attributes().get("deferredSyntaxAllowedAsLiteral"));
+            } else if (starts("<%")) script();
+            else cursor++;
+        }
+        return List.copyOf(result);
+    }
+
     private void directivesOnly() {
         while (cursor < source.text.length()) {
             if (skipExpression()) continue;

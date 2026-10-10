@@ -74,8 +74,26 @@ pages use `text/xml`. XML response encoding defaults to UTF-8 regardless of sour
 encoding; standard pages use the requested page's configured/directive encoding,
 or leave the Servlet response default unchanged.
 
-The APIs still consume decoded `String` sources. Byte decoding, BOM/XML prolog
-detection and the complete XML view are pending. Unknown property-group keys
+`PageParser` accepts decoded `String` sources. `PageGenerator.generate` also
+accepts a `byte[]` requested source; `GenerationOptions.withByteSources` supplies
+independently encoded includes, preludes and codas. Text and bytes cannot name
+the same included resource. Byte arrays are defensively copied and options
+equality/hash codes compare byte content.
+
+Standard pages decode using their BOM, configured encoding, `pageEncoding`,
+content-type charset, or ISO-8859-1, in that order. XML pages use byte signatures
+and their named prolog encoding, defaulting to UTF-8. UTF-8, UTF-16BE/LE and
+UTF-32BE/LE BOMs are removed. The EBCDIC signature uses IBM037 to read the prolog,
+then honors its named variant. Generic UTF-16/32 declarations accept the detected
+byte order. Unsupported charset names, contradictory named encodings and malformed
+byte sequences produce translation errors with source diagnostics.
+
+For XML, a derived default/BOM encoding controls decoding; consistency checks
+between configuration and page directives compare named prolog encodings as
+specified in Pages 4.0 Appendix B.1. A standard-page BOM also chooses response
+encoding; BOMs of included files do not affect the requested page's response.
+
+The complete XML view remains pending. Unknown property-group keys
 are rejected; broader URL-pattern validation remains pending.
 
 == Configuration keys (planned)
