@@ -1,0 +1,53 @@
+= Getting started
+:description: How Ibarra will be used — Maven coordinates, precompilation, a first page. In design.
+
+[.lead]
+Ibarra is not usable yet: the scaffold builds, but there is no page engine. This page shows the intended first steps so the target experience is explicit.
+
+== Prerequisites
+
+* **Java 25** — Temurin recommended. Module path enabled.
+* **Maven 3.9.16** — pinned via `.sdkmanrc` at the repo root.
+* Strict Java Modules: one `module-info.java` per Maven module.
+
+== Maven setup (planned)
+
+[source,xml,subs=attributes+]
+----
+<dependency>
+    <groupId>io.vidocq.ibarra</groupId>
+    <artifactId>ibarra-core</artifactId>
+    <version>{project-version}</version>
+</dependency>
+
+<plugin>
+    <groupId>io.vidocq.ibarra</groupId>
+    <artifactId>ibarra-maven-plugin</artifactId>
+    <version>{project-version}</version>
+    <executions>
+        <execution>
+            <goals><goal>precompile</goal></goals>
+        </execution>
+    </executions>
+</plugin>
+----
+
+At run time, add `ibarra-foy` (binding to the Foy servlet container) and `peano-core` (Expression Language).
+
+== A first page (target, milestone I5)
+
+[source,jsp]
+----
+<%@ page contentType="text/html;charset=UTF-8" %>
+<p>Hello, ${param.name}!</p>
+----
+
+Placed in `src/main/webapp/hello.jsp`, it is compiled during the build and served by Foy at `/hello.jsp`.
+
+== Building Ibarra from source
+
+[source,bash]
+----
+sdk env
+./mvnw -ntp install
+----

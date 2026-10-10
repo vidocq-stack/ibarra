@@ -1,0 +1,13 @@
+= Performance
+:description: Ibarra performance — no measurements yet; the JMH harness is milestone I9.
+
+[.lead]
+No numbers yet. Precompilation removes first-request translation latency entirely; what remains to measure is rendering.
+
+== What will be measured
+
+* Render time of representative pages (template text, expressions, custom tags, tag files) vs Jasper on the same servlet container.
+* Startup time and memory with precompiled pages vs development-mode translation.
+* The effect of not pooling tag handlers.
+
+The `ibarra-bench` JMH module arrives with milestone I9. Every figure is recorded in link:{repo-ibarra}/src/branch/main/BENCH.md[BENCH.md] with hardware, JVM and exact command before it appears anywhere else.

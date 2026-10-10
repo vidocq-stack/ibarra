@@ -1,0 +1,33 @@
+= Reference
+:description: Ibarra coordinates, Java modules, dependencies and planned configuration keys.
+
+[.lead]
+Reference data for Ibarra `{project-version}`. Entries marked _planned_ do not exist yet.
+
+== Artefacts
+
+[cols="2,2,3",options="header"]
+|===
+| Maven coordinates | Java module | Notes
+
+| `io.vidocq.ibarra:ibarra-core` | `io.vidocq.ibarra.core` | Page runtime (scaffold)
+| `io.vidocq.ibarra:ibarra-api` | `io.vidocq.ibarra.api` | _planned_ — generated-code SPI
+| `io.vidocq.ibarra:ibarra-compiler` | `io.vidocq.ibarra.compiler` | _planned_ — translator
+| `io.vidocq.ibarra:ibarra-maven-plugin` | — | _planned_ — `precompile` goal, build time only
+| `io.vidocq.ibarra:ibarra-foy` | `io.vidocq.ibarra.foy` | _planned_ — Foy binding
+|===
+
+== Runtime dependencies
+
+`jakarta.servlet.jsp:jakarta.servlet.jsp-api:4.0.0`, with `jakarta.servlet-api:6.1.0` and `jakarta.el-api:6.0.1` — nothing else. At run time an Expression Language implementation (Peano) and a servlet container (Foy) complete the picture.
+
+Build-time tooling may take a dependency when it saves rewriting something done elsewhere; each one will be named on this page. None so far.
+
+== Configuration keys (planned)
+
+[cols="1,3",options="header"]
+|===
+| Key | Meaning
+
+| `ibarra.runtime-translation` | `allow` or `deny` (production default) — whether pages without a precompiled class may be translated on first request. Name to validate.
+|===

@@ -1,0 +1,25 @@
+= Concepts
+:description: Jakarta Pages concepts as Ibarra implements them — translation, page runtime, tags, Expression Language.
+
+[.lead]
+The Jakarta Pages concepts Ibarra is built around. The spec defines them; Ibarra's design choices are noted where they matter.
+
+== Translation phase and request phase
+
+A page is first _translated_ into a servlet class (`HttpJspPage`), then that servlet serves requests. Ibarra moves the translation phase into the application build; the request phase is all that remains in the server.
+
+== PageContext and scopes
+
+`PageContext` gives a page access to the page, request, session and application scopes, the `JspWriter`, includes, forwards and error handling. Ibarra keeps all page state there — no `ThreadLocal` — which suits virtual threads.
+
+== Custom tags
+
+Classic handlers (`Tag`, `IterationTag`, `BodyTag`) and simple handlers (`SimpleTag` with `JspFragment`) are described by TLDs. Because Ibarra reads TLDs during translation, the wiring of each tag is plain generated Java.
+
+== Tag files
+
+`.tag` / `.tagx` files are pages that act as tags. They are compiled like pages and receive their attributes and fragments the same way.
+
+== Expression Language
+
+`${}` and `#{}` are evaluated by the Expression Language implementation found through `jakarta.el` — Peano in the Vidocq runtime — with the Pages resolver chain: implicit objects, imports, scoped attributes, application resolvers and the standard ones.

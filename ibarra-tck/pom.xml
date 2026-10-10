@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ibarra-tck — runner for the official Jakarta Pages 4.0 TCK.
+
+    In-reactor module gated by the `tck` Maven profile of ibarra-parent (TCK
+    harmonisation — same pattern as every other Vidocq sub-project): a plain
+    `mvn install` neither downloads nor runs anything TCK-related.
+
+    Two levels:
+      -Ptck                 builds this (empty) runner against ibarra-core;
+      -Ptck,tck-official    additionally resolves the official TCK artifact.
+
+    The Pages 4.0 TCK moved from the Platform TCK into the jakartaee/pages
+    repository (tck/ module) and was refactored to Arquillian + JUnit 5; it
+    deploys WARs, so the real runner needs a container: Foy + Ibarra behind an
+    Arquillian adapter, modelled on foy-tck (PLAN.md, milestone I8).
+    Distribution (checked 2026-10-10): the standalone TCK is NOT on Maven Central.
+    It ships as https://download.eclipse.org/jakartaee/pages/4.0/
+    jakarta-pages-tck-4.0.0.zip, whose artefacts must be installed into the
+    local Maven repository, like the Servlet TCK for foy-tck. Central only
+    carries the Platform-mode variant jakarta.tck:pages-platform-tck (11.0.x).
+    The coordinates below are a placeholder TO CONFIRM against the zip content,
+    including a possible split into runtime/util artefacts (foy-tck depends on
+    servlet-tck-runtime + servlet-tck-util).
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.vidocq.ibarra</groupId>
+        <artifactId>ibarra-parent</artifactId>
+        <version>0.4.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>ibarra-tck</artifactId>
+    <name>Ibarra :: TCK</name>
+    <description>Official Jakarta Pages 4.0 TCK runner — skeleton, see PLAN.md milestone I8</description>
+
+    <properties>
+        <!-- TO CONFIRM (PLAN.md, "TCK plan"). -->
+        <tck.pages.groupId>jakarta.tck</tck.pages.groupId>
+        <tck.pages.artifactId>jakarta-pages-tck</tck.pages.artifactId>
+        <tck.pages.version>4.0.0</tck.pages.version>
+
+        <maven.deploy.skip>true</maven.deploy.skip>
+        <maven.install.skip>true</maven.install.skip>
+        <maven.javadoc.skip>true</maven.javadoc.skip>
+        <maven.source.skip>true</maven.source.skip>
+        <gpg.skip>true</gpg.skip>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.vidocq.ibarra</groupId>
+            <artifactId>ibarra-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <profile>
+            <id>tck-official</id>
+            <dependencies>
+                <dependency>
+                    <groupId>${tck.pages.groupId}</groupId>
+                    <artifactId>${tck.pages.artifactId}</artifactId>
+                    <version>${tck.pages.version}</version>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <!-- The TCK jar is not a Java module: class path, like foy-tck. -->
+                            <useModulePath>false</useModulePath>
+                            <dependenciesToScan>
+                                <dependency>${tck.pages.groupId}:${tck.pages.artifactId}</dependency>
+                            </dependenciesToScan>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>

@@ -1,0 +1,35 @@
+= Internals
+:description: Ibarra's planned architecture — modules, translation pipeline, Foy SPI, Peano integration.
+
+[.lead]
+How Ibarra is designed to work inside. Only `ibarra-core` exists today, as a scaffold; the full design is `PLAN.md` in {repo-ibarra}[the repository].
+
+== Modules
+
+[cols="1,1,3",options="header"]
+|===
+| Artefact | Java module | Role
+
+| `ibarra-core` | `io.vidocq.ibarra.core` | Page runtime: `JspFactory`, `PageContext`, `JspWriter`, tag lifecycle (scaffold today)
+| `ibarra-api` | `io.vidocq.ibarra.api` | Generated-code SPI (page index) — planned, I4
+| `ibarra-compiler` | `io.vidocq.ibarra.compiler` | Parser, page model, Java source generator — planned, I2–I3
+| `ibarra-maven-plugin` | — | `precompile` goal — planned, I4
+| `ibarra-foy` | `io.vidocq.ibarra.foy` | Binding to Foy's JSP-engine SPI — planned, I5
+| `ibarra-tck` | — | Official TCK runner, `-Ptck` profile only
+|===
+
+== Translation pipeline
+
+. Parse the page (standard or XML syntax) into a page model, applying `jsp-config` property groups and TLDs.
+. Generate the Java source of an `HttpJspPage`; page expressions are compiled by Peano's build-time compiler.
+. Compile with `javax.tools` in the build JVM; emit a page index registered through `ServiceLoader`.
+
+A Class-File API back end for scriptless pages (no `javac` at all) is a later option.
+
+== Foy integration
+
+Foy will expose a JSP-engine SPI: deploy-time callback with the `JspConfigDescriptor`, the servlet mapped to `*.jsp`, the servlet backing `addJspFile`, and the TLD-declared listeners. Without Ibarra, Foy keeps working with JSP unmapped.
+
+== AOT compatibility
+
+Target: no compiler and no class loading by name at run time in production, no reflection in generated code, no `opens`.

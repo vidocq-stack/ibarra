@@ -1,0 +1,17 @@
+= Migration
+:description: Coming to Ibarra from Jasper (Tomcat, GlassFish) — what will map, what will differ.
+
+[.lead]
+Ibarra is in design: there is nothing to migrate to yet. This page records the intended contract so the expectation is clear.
+
+== The good news (target)
+
+Standard pages, standard actions, custom tags with TLDs, tag files and `jsp-config` work unchanged — they are the specification.
+
+== What to check (target)
+
+* **JSTL** — not provided by Ibarra. Applications using `c:`, `fmt:`, `fn:` tags need a JSTL implementation on their side.
+* **Precompilation** — the default path. Pages added to a running server after deployment need the development mode.
+* **Jasper-specific settings** — `development`, `checkInterval`, `compilerSourceVM` and other `JspServlet` init parameters have no Ibarra equivalent.
+* **`jsp:useBean beanName`** (serialized beans) — support is an open question.
+* **Tag handler pooling** — Ibarra does not pool handlers; a handler that relied on reuse between invocations must not.

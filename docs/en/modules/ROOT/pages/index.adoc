@@ -1,0 +1,58 @@
+= Ibarra
+:description: Jakarta Pages 4.0 implementation — pages compiled at build time, Expression Language through Peano, servlet container through Foy. In design.
+
+// TODO: add modules/ROOT/images/ibarra-logo.png and the module-logo image block
+// ([.text-center] image::ibarra-logo.png[Ibarra,300,role=module-logo]) once the logo exists.
+
+[.lead]
+Ibarra is the Jakarta Pages 4.0 (formerly JavaServer Pages) implementation of the Vidocq ecosystem, in pure Java 25: zero third-party dependency, strict Java Modules, and pages translated and compiled during the application build instead of inside the running server.
+
+[IMPORTANT]
+====
+Ibarra is **in design**: the repository holds a buildable scaffold and the design plan (`PLAN.md`), no page engine yet. This documentation describes the intended `{project-version}` development line; every page states what exists today.
+====
+
+== Origin of the name
+
+Joaquín Ibarra y Marín (1725–1785), royal printer in Madrid, celebrated for the 1780 edition of _Don Quixote_ published for the Real Academia Española — one of the finest books of Spanish printing. See https://en.wikipedia.org/wiki/Joaqu%C3%ADn_Ibarra[the Wikipedia article].
+
+The name is a nod to Cervantes, the MicroProfile JWT brick of the ecosystem. And it describes the engine: a printer composes the pages once, carefully, then prints them on demand. Ibarra composes each page — translation, compilation, tag wiring — during the build, so that a request only has to print it.
+
+== At a glance
+
+[cols="1,3"]
+|===
+| Implemented spec | {spec-pages-4-0}[Jakarta Pages 4.0]
+| Repo | {repo-ibarra}
+| Java | 25 (LTS)
+| Java modules | `io.vidocq.ibarra.core` (more as milestones land — see xref:internals.adoc[Internals])
+| Runtime dependencies | None beyond `jakarta.servlet.jsp` (which brings `jakarta.servlet` and `jakarta.el`)
+| Status | in design — scaffold only, not released
+| Official TCK | planned (milestone I8) — see xref:tck.adoc[TCK status]
+|===
+
+== Three identifying traits
+
+. **Zero third-party dependency** — the Jakarta Pages spec jar only. No Jasper, no Eclipse JDT compiler.
+. **Build-time pages** — a Maven plugin translates and compiles pages and tag files with the application; at run time pages are found through a generated index and instantiated with `new`. Translating in the server is a documented development mode, off in production.
+. **Composed, not coupled** — Expression Language comes from Peano through the standard `jakarta.el` lookup, and the servlet container is Foy, reached through a JSP-engine SPI. The page runtime itself only knows the Servlet API.
+
+== Position in the ecosystem
+
+Ibarra sits on top of two bricks: Foy (Jakarta Servlet 6.1) maps `*.jsp`, implements `ServletContext.addJspFile` and hands over `jsp-config`; Peano (Jakarta Expression Language 6.0) evaluates `${}` and `#{}` and compiles page expressions at build time. CDI `@Named` beans become visible in pages through Vauban's future EL module. JSTL is out of scope.
+
+== Quick links
+
+* xref:getting-started.adoc[Getting started]
+* xref:usage.adoc[Usage patterns]
+* xref:concepts.adoc[Concepts]
+* xref:internals.adoc[Internals]
+* xref:tck.adoc[TCK status]
+* xref:performance.adoc[Performance]
+* xref:reference.adoc[Reference]
+* xref:migration.adoc[Migration]
+
+[NOTE]
+====
+Performance numbers live in link:{repo-ibarra}/src/branch/main/BENCH.md[BENCH.md] (no numbers recorded yet). None appear inline in this page.
+====

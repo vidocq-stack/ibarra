@@ -1,0 +1,59 @@
+# Ibarra
+
+**Jakarta Pages 4.0** (formerly JavaServer Pages) implementation for the
+[Vidocq](https://codeberg.org/Vidocq/vidocq) runtime — Expression Language
+through [Peano](https://codefloe.com/Vidocq/peano), servlet container through
+[Foy](https://codefloe.com/Vidocq/foy).
+
+> Named after **Joaquín Ibarra** (1725–1785), royal printer in Madrid, famous for
+> the 1780 Real Academia edition of *Don Quixote* — a nod to `cervantes`, the
+> MicroProfile JWT brick. Composing pages from a model once, then printing them
+> on demand.
+
+## Status
+
+🚧 **In design** — repository scaffold only, implementation not started.
+The design of record is [PLAN.md](PLAN.md) (spec scope, build-time page
+compilation, Java Modules layout, Foy JSP-engine SPI, TCK plan, milestones I0–I9).
+
+## Ecosystem rules
+
+Ibarra follows the transverse Vidocq philosophy (see the workspace
+[CLAUDE.md](https://codeberg.org/Vidocq/vidocq) conventions):
+
+- **Zero third-party dependency** — only the Jakarta Pages 4.0 API (which brings
+  the Servlet 6.1 and Expression Language 6.0 APIs). No Jasper, no Eclipse JDT.
+- **Strict Java Modules** — proper `module-info.java`, minimal `exports`,
+  no unjustified `opens`, no classpath.
+- **Static code generation first** — pages and tag files are translated and
+  compiled during the application build (`ibarra-maven-plugin`, planned);
+  runtime translation through `javax.tools` is a documented, degraded
+  development mode.
+- **TDD** — test (or TCK scenario) first, then code.
+- **Virtual threads** for any I/O.
+- Bugs tracked in [BUG.md](BUG.md), benchmarks in [BENCH.md](BENCH.md).
+
+## Modules
+
+| Module | Role | State |
+|---|---|---|
+| `ibarra-core` | Page runtime: `JspFactory`, `PageContext`, `JspWriter`, tag lifecycle | scaffold |
+| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | skeleton |
+
+Planned modules (`ibarra-api`, `ibarra-compiler`, `ibarra-maven-plugin`,
+`ibarra-foy`, `ibarra-bench`) are described in [PLAN.md](PLAN.md) and created by
+the milestone that needs them. JSTL is out of scope.
+
+## Build
+
+```bash
+sdk env          # Java 25 (Temurin) + Maven 3.9.16, pinned by .sdkmanrc
+./mvnw -ntp install
+./mvnw -Ptck -pl ibarra-tck test                 # TCK runner skeleton
+./mvnw -Ptck,tck-official -pl ibarra-tck test    # official TCK (coordinates to confirm)
+```
+
+## License
+
+Triple-licensed, at your option: **EPL-2.0 OR EUPL-1.2 OR GPL-2.0-or-later**.
+See [LICENSE](LICENSE) and [NOTICE](NOTICE).

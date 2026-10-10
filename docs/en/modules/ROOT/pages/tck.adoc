@@ -1,0 +1,25 @@
+= TCK status
+:description: Jakarta Pages 4.0 TCK — not run yet; the runner is milestone I8.
+
+[.lead]
+Honest status: the official Jakarta Pages 4.0 TCK has **not been run** against Ibarra — there is no page engine yet. The runner is milestone I8.
+
+== Plan of record
+
+[cols="1,3",options="header"]
+|===
+| Item | Plan
+
+| Runner | `ibarra-tck` module, in the reactor only under the `-Ptck` Maven profile (same pattern as the other Vidocq bricks); the official artefact is resolved only under `-Ptck,tck-official`.
+| Artefact | The Pages 4.0 TCK lives in the `jakartaee/pages` repository (Arquillian + JUnit 5). Not on Maven Central: `jakarta-pages-tck-4.0.0.zip` from download.eclipse.org, installed into the local Maven repository. Maven coordinates to confirm against the zip.
+| Container | Foy + Ibarra behind an Arquillian adapter, modelled on `foy-tck`. The TCK deploys WARs with JSP sources: the adapter either precompiles them or relies on the development-mode translation (open question).
+| Script | `run-official-tck-pages-4.0.sh` with `smoke` / `all` / `-Dtest=` modes, added with the first run.
+| Merge gate | Once wired, 100 % PASS becomes a hard merge gate on `main`.
+|===
+
+== Tracking
+
+* Reproducible issues: link:{repo-ibarra}/src/branch/main/BUG.md[BUG.md]
+* Plan and open questions: `PLAN.md` in {repo-ibarra}[the repo]
+
+This page will carry the run date, suite version, exact command and pass counts as soon as the first official run happens.
