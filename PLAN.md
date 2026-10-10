@@ -300,8 +300,8 @@ P7 `peano-compiler` does not exist yet, so planned build-time expression compila
 is unfinished. Generic EL bean access still uses the API's reflective fallback;
 generated standard bean actions themselves contain no reflection.
 
-Proof: `./mvnw -o -ntp clean install` under Temurin 25 passes 118 tests:
-45 runtime, 36 parser and 37 generator fixtures. Fixtures compile and run on
+Proof: `./mvnw -o -ntp clean install` under Temurin 25 passes 131 tests:
+45 runtime, 36 parser and 50 generator fixtures. Fixtures compile and run on
 the module path, construct pages directly and patch the core only to install
 its internal factory. They do not prove independent application packaging,
 page-index discovery or Foy deployment (I4/I5). Module, dependency, codegen and
@@ -313,10 +313,17 @@ resolved null values retain normal EL behavior. Standard pages enforce configure
 undeclared-prefix errors and taglib declaration order across includes/preludes.
 Boolean settings fail with source diagnostics even on otherwise literal pages.
 
+Mixed standard/XML includes, preludes and codas parse each decoded resource in
+its own syntax, then apply the unit-wide EL policy. Whitespace, escaping and
+ordinary/custom element classification retain source syntax. Encodings are
+validated per file (one `pageEncoding` directive per file); included encodings
+do not change response defaults. XML response defaults are `text/xml` and UTF-8.
+Unknown property-group keys and invalid buffers have translation diagnostics.
+
 Remaining I3 work: static EL and generated accessors after Peano P6/P7, EL imports
 and function bindings, atomic
 shared-scope bean creation, broader output/attribute/translation validation,
-byte-source encoding handling and mixed-syntax includes. Unsupported constructs
+byte-source encoding detection and broader namespace/XML-view validation. Unsupported constructs
 fail explicitly. New session/application beans are rejected; existing typed
 shared beans can be accessed. The official TCK has not been run.
 

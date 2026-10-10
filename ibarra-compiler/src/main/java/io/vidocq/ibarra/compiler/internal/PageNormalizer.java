@@ -30,16 +30,30 @@ public final class PageNormalizer {
     private static final Set<String> DIRECTIVES = Set.of("page", "include", "taglib", "tag", "attribute", "variable");
     private final Page.Syntax syntax;
     private final Map<PageNode.Text, List<SourceLocation>> origins;
+    private final Map<String, Page.Syntax> sourceSyntaxes;
     private ParserOptions options;
 
     public PageNormalizer(Page.Syntax syntax, ParserOptions options, Map<PageNode.Text, List<SourceLocation>> origins) {
+        this(syntax, options, origins, Map.of());
+    }
+
+    public PageNormalizer(Page.Syntax syntax, ParserOptions options, Map<PageNode.Text, List<SourceLocation>> origins,
+            Map<String, Page.Syntax> sourceSyntaxes) {
         this.syntax = syntax;
         this.options = options;
         this.origins = origins;
+        this.sourceSyntaxes = sourceSyntaxes;
     }
 
     public List<PageNode> normalize(List<PageNode> raw) {
-        var structured = structure(raw, false);
+        return normalizeStructured(structure(raw));
+    }
+
+    /** Maps syntax before include expansion, keeping each file's whitespace rules. */
+    public List<PageNode> structure(List<PageNode> raw) { return structure(raw, false); }
+
+    /** Applies unit-wide EL policy after files have been individually structured. */
+    public List<PageNode> normalizeStructured(List<PageNode> structured) {
         Boolean ignored = setting(structured, "isELIgnored", null);
         Boolean deferred = setting(structured, "deferredSyntaxAllowedAsLiteral", null);
         options = new ParserOptions(ignored == null ? options.elIgnored() : ignored,
@@ -57,7 +71,9 @@ public final class PageNormalizer {
                     String name = local.substring("directive.".length());
                     if (!DIRECTIVES.contains(name)) throw new PageParseException(element.location(), "Unknown directive: " + name);
                     if (!element.children().isEmpty()) throw new PageParseException(element.location(), "Directive must be empty");
-                    result.add(new PageNode.Directive(name, element.attributes(), element.location()));
+                    var attributes = new java.util.LinkedHashMap<>(element.attributes());
+                    attributes.keySet().removeIf(key -> key.equals("xmlns") || key.startsWith("xmlns:"));
+                    result.add(new PageNode.Directive(name, attributes, element.location()));
                 } else if (jsp && Set.of("declaration", "scriptlet", "expression").contains(local)) {
                     var code = new StringBuilder();
                     for (var child : element.children()) {
@@ -137,7 +153,8 @@ public final class PageNormalizer {
         var literal = new StringBuilder();
         int literalStart = 0;
         for (int i = 0; i < raw.length();) {
-            if (syntax == Page.Syntax.STANDARD && raw.startsWith("<\\%", i)) { literal.append("<%"); i += 3; continue; }
+            if (sourceSyntaxes.getOrDefault(text.location().source(), syntax) == Page.Syntax.STANDARD
+                    && raw.startsWith("<\\%", i)) { literal.append("<%"); i += 3; continue; }
             if (!options.elIgnored() && raw.charAt(i) == '\\' && i + 1 < raw.length()
                     && (raw.charAt(i + 1) == '$' || raw.charAt(i + 1) == '#')) {
                 literal.append(raw.charAt(i + 1)); i += 2; continue;

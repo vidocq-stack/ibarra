@@ -356,6 +356,142 @@ class PageGeneratorTest {
     }
 
     @Test
+    void pageEncodingIsFileLocalAndOnlyTheRequestedPageSetsResponseEncoding() throws Exception {
+        var options = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jspf"),
+                Map.of("page-encoding", "ISO-8859-1"), List.of(), List.of())),
+                Map.of("/part.jspf", "<%@ page pageEncoding='latin1' %>é"));
+        var generated = generator().generate("/main.jsp",
+                "<%@ page pageEncoding='UTF-8' %>A<%@ include file='part.jspf' %>", PAGE_CLASS, options);
+        assertEquals("Aé", run(generated, "", "if (!response.contentType.equals(\"text/html;charset=UTF-8\")) throw new AssertionError(response.contentType);"));
+        var withoutRootEncoding = generator().generate("/main.jsp", "<%@ include file='part.jspf' %>", PAGE_CLASS, options);
+        assertEquals("é", run(withoutRootEncoding, "", "if (response.contentType.contains(\"charset\")) throw new AssertionError(response.contentType);"));
+    }
+
+    @Test
+    void duplicateAndUnknownEncodingsFailAtTheOwningDirective() {
+        var duplicate = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
+                "<%@ page pageEncoding='UTF-8' %>\n<%@ page pageEncoding='UTF-8' %>", PAGE_CLASS, GenerationOptions.DEFAULT));
+        assertEquals(new SourceLocation("/main.jsp", 2, 1), duplicate.location());
+        assertTrue(duplicate.getMessage().contains("once per file"));
+        var options = new GenerationOptions(List.of(), Map.of("/part.jspf", "first\n<%@ page pageEncoding='not-an-encoding' %>"));
+        var unknown = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
+                "<%@ include file='part.jspf' %>", PAGE_CLASS, options));
+        assertEquals(new SourceLocation("/part.jspf", 2, 1), unknown.location());
+    }
+
+    @Test
+    void xmlResponseDefaultsIgnorePageSourceEncoding() throws Exception {
+        var generated = generator().generate("/main.jspx", "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE
+                + "' version='4.0'><jsp:directive.page pageEncoding='ISO-8859-1'/><jsp:text>é</jsp:text></jsp:root>",
+                PAGE_CLASS, GenerationOptions.DEFAULT);
+        assertEquals("é", run(generated, "", "if (!response.contentType.equals(\"text/xml;charset=UTF-8\")) throw new AssertionError(response.contentType);"));
+    }
+
+    @Test
+    void mixedSyntaxIncludesUseEachFilesWhitespaceEscapesAndExpressions() throws Exception {
+        String xml = "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='4.0'>\n"
+                + "<jsp:text> X&amp;${2} </jsp:text><jsp:directive.include file='tail.jspf'/></jsp:root>";
+        var options = new GenerationOptions(List.of(), Map.of("/part.jspx", xml,
+                "/tail.jspf", " T<\\% ${3} ")).withStartupEl(true);
+        var generated = generator().generate("/main.jsp", "A<%@ include file='part.jspx' %>B", PAGE_CLASS, options);
+        assertEquals("A X&2  T<% 3 B", run(generated, "", ""));
+        var reverse = generator().generate("/main.jspx", "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE
+                + "' version='4.0'>\n<jsp:directive.include file='tail.jspf'/></jsp:root>", PAGE_CLASS, options);
+        assertEquals(" T<% 3 ", run(reverse, "", ""));
+    }
+
+    @Test
+    void mixedSyntaxPreludesAndCodasSharePageDirectives() throws Exception {
+        var group = new JspPropertyGroup(List.of("*.jsp"), Map.of(), List.of("/prelude.jspx"), List.of("/coda.jspx"));
+        String root = "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='4.0'>";
+        var options = new GenerationOptions(List.of(group), Map.of(
+                "/prelude.jspx", root + "<jsp:directive.page isELIgnored='true'/><jsp:text>P</jsp:text></jsp:root>",
+                "/coda.jspx", root + "<jsp:text>C</jsp:text></jsp:root>"));
+        assertEquals("P${1}C", run(generator().generate("/main.jsp", "${1}", PAGE_CLASS, options), "", ""));
+    }
+
+    @Test
+    void malformedIncludedXmlKeepsTheIncludedResourcesLocation() {
+        var options = new GenerationOptions(List.of(), Map.of("/part.jspx", "<root>\n<bad></root>"));
+        var error = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
+                "<%@ include file='part.jspx' %>", PAGE_CLASS, options));
+        assertEquals("/part.jspx", error.location().source());
+        assertEquals(2, error.location().line());
+    }
+
+    @Test
+    void invalidBufferAndUnknownGroupKeysHaveTranslationDiagnostics() {
+        var options = new GenerationOptions(List.of(), Map.of("/part.jspf", "first\n<%@ page buffer='huge' %>"));
+        var buffer = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
+                "<%@ include file='part.jspf' %>", PAGE_CLASS, options));
+        assertEquals(new SourceLocation("/part.jspf", 2, 1), buffer.location());
+        var typo = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"),
+                Map.of("error-on-el-not-fond", "true"), List.of(), List.of())), Map.of());
+        var error = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp", "plain", PAGE_CLASS, typo));
+        assertTrue(error.getMessage().contains("error-on-el-not-fond"));
+    }
+
+    @Test
+    void standardTaglibCannotRedefineAnEnclosingXmlNamespace() {
+        var options = new GenerationOptions(List.of(), Map.of("/tags.jspf", "<%@ taglib prefix='c' uri='urn:other' %>"));
+        var error = assertThrows(PageParseException.class, () -> generator().generate("/main.jspx",
+                "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' xmlns:c='urn:existing' version='4.0'>"
+                + "<jsp:directive.include file='tags.jspf'/></jsp:root>", PAGE_CLASS, options));
+        assertEquals("/tags.jspf", error.location().source());
+        assertTrue(error.getMessage().contains("Conflicting taglib prefix"));
+        var same = new GenerationOptions(List.of(), Map.of("/tags.jspf", "<%@ taglib prefix='c' uri='urn:existing' %>"));
+        assertDoesNotThrow(() -> generator().generate("/main.jspx", "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE
+                + "' xmlns:c='urn:existing' version='4.0'><jsp:directive.include file='tags.jspf'/></jsp:root>", PAGE_CLASS, same));
+    }
+
+    @Test
+    void mixedIncludesDistinguishXmlMarkupFromStandardCustomTags() throws Exception {
+        var options = new GenerationOptions(List.of(), Map.of("/part.jspx", "<p>text</p>",
+                "/tags.jspf", "<%@ taglib prefix='c' uri='urn:custom' %><c:item/>"));
+        assertEquals("<p>text</p>", run(generator().generate("/main.jsp", "<%@ include file='part.jspx' %>", PAGE_CLASS, options), "", ""));
+        var error = assertThrows(PageParseException.class, () -> generator().generate("/main.jspx",
+                "<j:root xmlns:j='" + PageParser.JSP_NAMESPACE + "' version='4.0'><j:directive.include file='tags.jspf'/></j:root>", PAGE_CLASS, options));
+        assertTrue(error.getMessage().contains("Custom tags require"));
+    }
+
+    @Test
+    void xmlIncludeMayDeclareItsJspNamespaceLocally() throws Exception {
+        var options = new GenerationOptions(List.of(), Map.of("/part.jspf", "included"));
+        assertEquals("<p>included</p>", run(generator().generate("/main.jspx", "<p><j:directive.include xmlns:j='"
+                + PageParser.JSP_NAMESPACE + "' file='part.jspf'/></p>", PAGE_CLASS, options), "", ""));
+    }
+
+    @Test
+    void defaultJspNamespacesStillValidateFileLocalEncodings() {
+        var error = assertThrows(PageParseException.class, () -> generator().generate("/main.jspx",
+                "<root xmlns='" + PageParser.JSP_NAMESPACE + "' version='4.0'>\n"
+                + "<directive.page pageEncoding='not-an-encoding'/></root>", PAGE_CLASS, GenerationOptions.DEFAULT));
+        assertEquals(new SourceLocation("/main.jspx", 2, 1), error.location());
+        String prefix = "<root xmlns='" + PageParser.JSP_NAMESPACE + "' version='4.0'>\n";
+        for (String directives : List.of("<directive.page pageEncoding='not-an-encoding'/>",
+                "<directive.page pageEncoding='UTF-8'/><directive.page pageEncoding='UTF-8'/>")) {
+            var options = new GenerationOptions(List.of(), Map.of("/part.jspx", prefix + directives + "</root>"));
+            var included = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
+                    "<%@ include file='part.jspx' %>", PAGE_CLASS, options));
+            assertEquals("/part.jspx", included.location().source());
+            assertEquals(2, included.location().line());
+        }
+    }
+
+    @Test
+    void xmlAttributeEscapesAreNotInterpretedAsStandardSyntaxEscapes() throws Exception {
+        var options = new GenerationOptions(List.of(), Map.of("/part.jspx", "<p title='&lt;\\%'/>") );
+        assertEquals("<p title=\"&lt;\\%\"/>", run(generator().generate("/main.jsp",
+                "<%@ include file='part.jspx' %>", PAGE_CLASS, options), "", ""));
+    }
+
+    @Test
+    void ordinaryXmlAttributeValuesKeepWhitespace() throws Exception {
+        var generated = generator().generate("/main.jspx", "<p title='  '/>", PAGE_CLASS, GenerationOptions.DEFAULT);
+        assertEquals("<p title=\"  \"/>", run(generated, "", ""));
+    }
+
+    @Test
     void xmlNamedAttributeWhitespaceIsPreservedWhenTrimIsDisabled() throws Exception {
         String source = "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='4.0'>"
                 + "<jsp:directive.page session='false'/><jsp:element name='p'>"

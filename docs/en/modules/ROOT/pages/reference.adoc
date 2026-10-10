@@ -57,6 +57,27 @@ custom tags still require the pending tag-handler generator.
 Boolean group properties and page attributes accept only `true` or `false`;
 invalid values fail translation with `PageParseException` source diagnostics.
 
+== Translation and encodings
+
+Static includes, preludes and codas can mix standard and XML syntax. Each XML
+resource must be well-formed independently. Global page/EL directives apply to
+the expanded translation unit; text whitespace and escapes follow each file's
+own syntax. XML namespace declarations are separate from directive attributes.
+Standard taglib declarations cannot redefine an enclosing XML prefix to a
+different URI.
+
+`pageEncoding` applies only to its source file and may occur once per file.
+Encoding aliases are compared using `Charset`; malformed or conflicting
+encodings produce source diagnostics. Included encodings do not set response
+defaults. Without explicit content type, standard pages use `text/html` and XML
+pages use `text/xml`. XML response encoding defaults to UTF-8 regardless of source
+encoding; standard pages use the requested page's configured/directive encoding,
+or leave the Servlet response default unchanged.
+
+The APIs still consume decoded `String` sources. Byte decoding, BOM/XML prolog
+detection and the complete XML view are pending. Unknown property-group keys
+are rejected; broader URL-pattern validation remains pending.
+
 == Configuration keys (planned)
 
 [cols="1,3",options="header"]

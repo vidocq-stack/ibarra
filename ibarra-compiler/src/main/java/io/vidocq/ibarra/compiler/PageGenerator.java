@@ -34,7 +34,7 @@ public final class PageGenerator {
         if (!SourceVersion.isName(className) || !className.contains("."))
             throw new IllegalArgumentException("Generated class needs a qualified Java name: " + className);
         var unit = new TranslationUnit(options).read(path, source);
-        return new Generator(unit.page(), className, unit.properties(), options.allowStartupEl()).generate();
+        return new Generator(unit.page(), className, unit.properties(), unit.sourceSyntaxes(), options.allowStartupEl()).generate();
     }
 
     private final class Generator {
@@ -44,6 +44,8 @@ public final class PageGenerator {
         private final Page page;
         private final String className;
         private final Map<String, String> settings = new LinkedHashMap<>();
+        private final Map<String, SourceLocation> settingLocations = new HashMap<>();
+        private final Map<String, Page.Syntax> sourceSyntaxes;
         private final List<String> imports = new ArrayList<>();
         private final JavaSource declarations = new JavaSource();
         private final JavaSource body = new JavaSource();
@@ -53,8 +55,9 @@ public final class PageGenerator {
         private int serial;
         private final boolean startupElAllowed;
 
-        Generator(Page page, String className, Map<String, String> properties, boolean startupElAllowed) {
+        Generator(Page page, String className, Map<String, String> properties, Map<String, Page.Syntax> sourceSyntaxes, boolean startupElAllowed) {
             this.page = page; this.className = className;
+            this.sourceSyntaxes = sourceSyntaxes;
             this.startupElAllowed = startupElAllowed;
             copy(properties, "default-content-type", "contentType");
             copy(properties, "buffer", "buffer");
@@ -142,6 +145,7 @@ public final class PageGenerator {
                     for (var entry : directive.attributes().entrySet()) {
                         if (entry.getKey().startsWith("xmlns")) continue;
                         if (!PAGE_ATTRIBUTES.contains(entry.getKey())) throw error(directive.location(), "Unsupported page attribute: " + entry.getKey());
+                        if (entry.getKey().equals("pageEncoding") && !directive.location().source().equals(page.source())) continue;
                         if (Set.of("session", "autoFlush", "isErrorPage", "isELIgnored",
                                 "deferredSyntaxAllowedAsLiteral", "trimDirectiveWhitespaces", "errorOnELNotFound").contains(entry.getKey())
                                 && !entry.getValue().equals("true") && !entry.getValue().equals("false"))
@@ -156,6 +160,7 @@ public final class PageGenerator {
                             }
                         } else {
                             String previous = explicit.putIfAbsent(entry.getKey(), entry.getValue());
+                            settingLocations.putIfAbsent(entry.getKey(), directive.location());
                             if (previous != null && !previous.equals(entry.getValue()))
                                 throw error(directive.location(), "Conflicting page attribute: " + entry.getKey());
                             if (entry.getKey().equals("pageEncoding") && settings.containsKey("pageEncoding")
@@ -187,7 +192,7 @@ public final class PageGenerator {
         private void element(PageNode.Element node) {
             String local = node.name().substring(node.name().lastIndexOf(':') + 1);
             if (!node.namespace().equals(PageParser.JSP_NAMESPACE)) {
-                if (page.syntax() == Page.Syntax.STANDARD || node.namespace().startsWith("urn:jsptag")
+                if (sourceSyntaxes.get(node.location().source()) == Page.Syntax.STANDARD || node.namespace().startsWith("urn:jsptag")
                         || node.namespace().startsWith("urn:jsptld") || node.namespace().startsWith("jakarta.tags."))
                     throw error(node.location(), "Custom tags require the later tag-handler milestone: " + node.name());
                 write("<" + node.name(), node.location());
@@ -373,9 +378,9 @@ public final class PageGenerator {
                 return "(" + raw.substring(3, raw.length() - 2) + ")";
             }
             var temporary = new PageNode.Text(raw, at);
-            var parser = new PageNormalizer(Page.Syntax.STANDARD, new ParserOptions(bool("isELIgnored", false),
+            var parser = new PageNormalizer(sourceSyntaxes.getOrDefault(at.source(), Page.Syntax.STANDARD), new ParserOptions(bool("isELIgnored", false),
                     bool("deferredSyntaxAllowedAsLiteral", false)), Map.of());
-            var pieces = parser.normalize(List.of(temporary));
+            var pieces = parser.normalizeStructured(List.of(temporary));
             if (pieces.size() == 1 && pieces.getFirst() instanceof PageNode.Expression el) {
                 if (el.deferred()) throw error(at, "Deferred action attributes require tag-handler support");
                 return expression("${" + el.code() + "}", at);
@@ -399,21 +404,24 @@ public final class PageGenerator {
                 start = end;
             }
         }
-        private boolean bool(String name, boolean fallback) { return boolValue(settings.getOrDefault(name, String.valueOf(fallback)), new SourceLocation(page.source(), 1, 1)); }
+        private SourceLocation settingLocation(String name) { return settingLocations.getOrDefault(name, new SourceLocation(page.source(), 1, 1)); }
+        private boolean bool(String name, boolean fallback) { return boolValue(settings.getOrDefault(name, String.valueOf(fallback)), settingLocation(name)); }
         private boolean boolValue(String value, SourceLocation at) {
             if (!value.equals("true") && !value.equals("false")) throw error(at, "Expected true or false: " + value);
             return Boolean.parseBoolean(value);
         }
         private String contentType() {
-            String contentType = settings.getOrDefault("contentType", "text/html");
-            if (!contentType.toLowerCase(Locale.ROOT).contains("charset="))
-                contentType += ";charset=" + Charset.forName(settings.getOrDefault("pageEncoding", page.syntax() == Page.Syntax.XML ? "UTF-8" : "ISO-8859-1")).name();
+            String contentType = settings.getOrDefault("contentType", page.syntax() == Page.Syntax.XML ? "text/xml" : "text/html");
+            if (!contentType.toLowerCase(Locale.ROOT).contains("charset=")) {
+                String encoding = page.syntax() == Page.Syntax.XML ? "UTF-8" : settings.get("pageEncoding");
+                if (encoding != null) contentType += ";charset=" + Charset.forName(encoding).name();
+            }
             return contentType;
         }
         private int buffer() {
             String value = settings.getOrDefault("buffer", "8kb");
             if (value.equals("none")) {
-                if (!bool("autoFlush", true)) throw error(new SourceLocation(page.source(), 1, 1), "Unbuffered pages require autoFlush");
+                if (!bool("autoFlush", true)) throw error(settingLocation("buffer"), "Unbuffered pages require autoFlush");
                 return 0;
             }
             try {
@@ -422,7 +430,7 @@ public final class PageGenerator {
                 if (capacity <= 0) throw new NumberFormatException();
                 return capacity;
             } catch (NumberFormatException | ArithmeticException failure) {
-                throw error(new SourceLocation(page.source(), 1, 1), "Invalid page buffer: " + value);
+                throw error(settingLocation("buffer"), "Invalid page buffer: " + value);
             }
         }
         private int scope(String scope, SourceLocation at) {

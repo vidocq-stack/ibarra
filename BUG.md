@@ -3,6 +3,62 @@
 Reproducible bugs (internal issue, regression, incorrect behavior not yet fixed).
 Entry format: `short id · date · symptom · minimal repro · cause hypothesis · status`.
 
+## IBARRA-025 · 2026-10-10 · Source encodings are treated as unit-wide settings
+
+- Symptom: included encodings conflict with the root or change its response
+  encoding; repeated identical declarations and unknown encodings evade validation.
+- Minimal repro: `pageEncodingIsFileLocalAndOnlyTheRequestedPageSetsResponseEncoding`,
+  `duplicateAndUnknownEncodingsFailAtTheOwningDirective` and
+  `defaultJspNamespacesStillValidateFileLocalEncodings` in `PageGeneratorTest`.
+- Cause: generation merges file-local `pageEncoding` with global page settings.
+- Status: fixed by validating encodings before expansion, including unprefixed
+  XML directives, and using only the requested page's encoding for the response.
+
+## IBARRA-026 · 2026-10-10 · XML response defaults use standard-page settings
+
+- Symptom: XML pages default to `text/html` and use their source encoding instead
+  of `text/xml` and UTF-8 as required by Pages 4.0 section 4.2.
+- Minimal repro: `PageGeneratorTest.xmlResponseDefaultsIgnorePageSourceEncoding`.
+- Cause: a single default content-type/encoding branch handles both syntaxes.
+- Status: fixed with syntax-specific response defaults.
+
+## IBARRA-027 · 2026-10-10 · Mixed includes lose source syntax during generation
+
+- Symptom: XML markup included in standard JSP is rejected as a custom tag;
+  standard custom tags included in XML can become literal output; XML attribute
+  escapes and locally declared include namespaces are processed incorrectly.
+- Minimal repro: `mixedIncludesDistinguishXmlMarkupFromStandardCustomTags`,
+  `xmlIncludeMayDeclareItsJspNamespaceLocally` and
+  `xmlAttributeEscapesAreNotInterpretedAsStandardSyntaxEscapes` in `PageGeneratorTest`.
+- Cause: expanded nodes inherit root syntax instead of retaining file syntax;
+  XML namespace declarations are mistaken for directive attributes.
+- Status: fixed by preserving source syntax and separating XML namespaces from
+  directive attributes when structuring each resource.
+
+## IBARRA-028 · 2026-10-10 · Included taglibs can overwrite an enclosing XML prefix
+
+- Symptom: a standard taglib in an XML include can bind an enclosing prefix
+  to a different URI without a translation error.
+- Minimal repro: `PageGeneratorTest.standardTaglibCannotRedefineAnEnclosingXmlNamespace`.
+- Cause: translation-unit binding collection ignores enclosing XML namespaces.
+- Status: fixed by checking declarations against the enclosing XML scope.
+
+## IBARRA-029 · 2026-10-10 · Configuration errors lose source or are ignored
+
+- Symptom: invalid included buffer directives report the main page's first
+  line; misspelled property-group keys are silently ignored.
+- Minimal repro: `PageGeneratorTest.invalidBufferAndUnknownGroupKeysHaveTranslationDiagnostics`.
+- Cause: setting origins are discarded and group property names are unchecked.
+- Status: fixed by preserving setting locations and rejecting unknown group keys.
+
+## IBARRA-030 · 2026-10-10 · Source-aware XML attributes lose literal whitespace
+
+- Symptom: an ordinary XML attribute `title='  '` becomes `title=''`.
+- Minimal repro: `PageGeneratorTest.ordinaryXmlAttributeValuesKeepWhitespace`.
+- Cause: already-decoded attribute values are structurally normalized as XML
+  template text, which strips document indentation.
+- Status: fixed by applying only expression/escape normalization to attributes.
+
 ## IBARRA-001 · 2026-10-10 · Included output bypasses the page writer
 
 - Symptom: `include(path, false)` renders included output before pending page
