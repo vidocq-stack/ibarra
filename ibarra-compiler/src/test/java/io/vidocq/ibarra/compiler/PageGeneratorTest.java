@@ -187,9 +187,9 @@ class PageGeneratorTest {
     }
 
     @Test
-    void rejectsUnsupportedMissingElPolicyAndSessionlessSessionBeans() {
-        assertThrows(PageParseException.class, () -> generator().generate("/missing.jsp",
-                "<%@ page errorOnELNotFound='true' %>${missing}", PAGE_CLASS, GenerationOptions.DEFAULT));
+    void strictMissingElPolicyIsSupportedAndSessionlessSessionBeansAreRejected() {
+        assertDoesNotThrow(() -> generator().generate("/missing.jsp",
+                "<%@ page errorOnELNotFound='true' %>literal", PAGE_CLASS, GenerationOptions.DEFAULT));
         assertThrows(PageParseException.class, () -> generator().generate("/session.jsp",
                 "<%@ page session='false' %><jsp:useBean id='bean' type='fixture.Bean' scope='session'/>",
                 PAGE_CLASS, GenerationOptions.DEFAULT));
@@ -276,10 +276,83 @@ class PageGeneratorTest {
     }
 
     @Test
-    void unsupportedGroupPoliciesAreNotSilentlyIgnored() {
+    void strictGroupPolicyRejectsMissingIdentifiersAtEvaluation() throws Exception {
         var options = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"),
-                Map.of("error-on-el-not-found", "true"), List.of(), List.of())), Map.of());
-        assertThrows(PageParseException.class, () -> generator().generate("/strict.jsp", "${missing}", PAGE_CLASS, options));
+                Map.of("error-on-el-not-found", "true"), List.of(), List.of())), Map.of()).withStartupEl(true);
+        var generated = generator().generate("/strict.jsp", "<%@ page session='false' errorPage='/part.jsp' %>${missing}", PAGE_CLASS, options);
+        assertEquals("FORWARDED", run(generated, dispatchSetup(),
+                "if (!(request.getAttribute(RequestDispatcher.ERROR_EXCEPTION) instanceof jakarta.el.PropertyNotFoundException)) throw new AssertionError();"));
+    }
+
+    @Test
+    void pageDirectiveOverridesTheConfiguredMissingIdentifierDefault() throws Exception {
+        var options = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"),
+                Map.of("error-on-el-not-found", "true"), List.of(), List.of())), Map.of()).withStartupEl(true);
+        var generated = generator().generate("/override.jsp", "<%@ page session='false' errorOnELNotFound='false' %>A${missing}B", PAGE_CLASS, options);
+        assertEquals("AB", run(generated, "", ""));
+        assertEquals("FORWARDED", render("<%@ page session='false' errorOnELNotFound='true' errorPage='/part.jsp' %>${missing}",
+                dispatchSetup(), "if (!(request.getAttribute(RequestDispatcher.ERROR_EXCEPTION) instanceof jakarta.el.PropertyNotFoundException)) throw new AssertionError();"));
+    }
+
+    @Test
+    void undeclaredNamespacesFailOnlyWhenConfiguredAndKeepTheirSourceLocation() {
+        var strict = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"),
+                Map.of("error-on-undeclared-namespace", "true"), List.of(), List.of())), Map.of());
+        var error = assertThrows(PageParseException.class, () -> generator().generate("/names.jsp", "first\n<x:item/>", PAGE_CLASS, strict));
+        assertTrue(error.getMessage().contains("Undeclared namespace prefix: x"));
+        assertEquals(2, error.location().line());
+        assertEquals(1, error.location().column());
+        assertDoesNotThrow(() -> generator().generate("/names.jsp", "<x:item/>", PAGE_CLASS, GenerationOptions.DEFAULT));
+        assertDoesNotThrow(() -> generator().generate("/names.jsp", "<%-- <x:item/> --%><p>plain</p>", PAGE_CLASS, strict));
+        assertDoesNotThrow(() -> generator().generate("/names.jsp", "${'<x:item/>'}", PAGE_CLASS, strict.withStartupEl(true)));
+    }
+
+    @Test
+    void taglibDeclarationsInIncludesBindLaterTagsAcrossTheTranslationUnit() {
+        var strict = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"),
+                Map.of("error-on-undeclared-namespace", "true"), List.of(), List.of())),
+                Map.of("/tags.jspf", "<%@ taglib prefix='c' uri='urn:custom' %>"));
+        var error = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
+                "<%@ include file='tags.jspf' %><c:item/>", PAGE_CLASS, strict));
+        assertTrue(error.getMessage().contains("Custom tags require"));
+        assertEquals("/main.jsp", error.location().source());
+        var later = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
+                "<c:item/><%@ include file='tags.jspf' %>", PAGE_CLASS, strict));
+        assertTrue(later.getMessage().contains("Taglib directive must precede"));
+    }
+
+    @Test
+    void invalidBooleanConfigurationFailsWithPageDiagnosticsEvenWithoutAffectedNodes() {
+        for (String name : List.of("el-ignored", "is-xml", "scripting-invalid",
+                "deferred-syntax-allowed-as-literal", "trim-directive-whitespaces",
+                "error-on-el-not-found", "error-on-undeclared-namespace")) {
+            var options = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"),
+                    Map.of(name, "yes"), List.of(), List.of())), Map.of());
+            var error = assertThrows(PageParseException.class,
+                    () -> generator().generate("/policy.jsp", "plain", PAGE_CLASS, options), name);
+            assertEquals(new SourceLocation("/policy.jsp", 1, 1), error.location());
+            assertTrue(error.getMessage().contains(name));
+        }
+        for (String name : List.of("session", "autoFlush", "isErrorPage", "isELIgnored",
+                "deferredSyntaxAllowedAsLiteral", "trimDirectiveWhitespaces", "errorOnELNotFound")) {
+            var error = assertThrows(PageParseException.class, () -> generator().generate("/policy.jsp",
+                    "first\n<%@ page " + name + "='yes' %>", PAGE_CLASS, GenerationOptions.DEFAULT), name);
+            assertEquals(new SourceLocation("/policy.jsp", 2, 1), error.location());
+            assertTrue(error.getMessage().contains(name));
+        }
+    }
+
+    @Test
+    void strictNamespaceErrorsRetainIncludeOriginsAndProcessHtmlComments() {
+        var strict = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"),
+                Map.of("error-on-undeclared-namespace", "true"), List.of(), List.of())),
+                Map.of("/fragment.jspf", "first\n<x:item/>"));
+        var error = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
+                "<%@ include file='fragment.jspf' %>", PAGE_CLASS, strict));
+        assertEquals(new SourceLocation("/fragment.jspf", 2, 1), error.location());
+        assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
+                "<!-- <x:item/> -->", PAGE_CLASS, strict));
+        assertDoesNotThrow(() -> generator().generate("/main.jsp", "<http://example>", PAGE_CLASS, strict));
     }
 
     @Test
@@ -372,7 +445,7 @@ class PageGeneratorTest {
     }
 
     private String modulePath() {
-        var names = Set.of("io.vidocq.ibarra.core", "jakarta.servlet", "jakarta.servlet.jsp", "jakarta.el", "io.vidocq.peano.core");
+        var names = Set.of("io.vidocq.ibarra.api", "io.vidocq.ibarra.core", "jakarta.servlet", "jakarta.servlet.jsp", "jakarta.el", "io.vidocq.peano.core");
         String available = System.getProperty("jdk.module.path", "") + File.pathSeparator
                 + System.getProperty("surefire.test.class.path", "");
         var paths = Arrays.stream(available.split(java.util.regex.Pattern.quote(File.pathSeparator)))

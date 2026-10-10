@@ -29,5 +29,6 @@
  * into a servlet container through Foy's JSP-engine SPI (see PLAN.md).
  */
 module io.vidocq.ibarra.core {
+    requires io.vidocq.ibarra.api;
     requires transitive jakarta.servlet.jsp;
 }

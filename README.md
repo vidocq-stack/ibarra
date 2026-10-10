@@ -45,11 +45,12 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 
 | Module | Role | State |
 |---|---|---|
+| `ibarra-api` | Immutable generated-page options SPI; page index planned | I3 policy SPI implemented |
 | `ibarra-core` | Page runtime: factory, context, scopes, output, dispatch and application EL context; tags planned | I1 runtime implemented |
 | `ibarra-compiler` | JSP/JSPX parser, page model, initial Java generator and build-time compiler | I2 implemented; I3 in progress |
 | `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | skeleton |
 
-Planned modules (`ibarra-api`, `ibarra-maven-plugin`,
+Planned modules (`ibarra-maven-plugin`,
 `ibarra-foy`, `ibarra-bench`) are described in [PLAN.md](PLAN.md) and created by
 the milestone that needs them. JSTL is out of scope.
 

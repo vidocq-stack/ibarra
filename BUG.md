@@ -176,8 +176,27 @@ Entry format: `short id · date · symptom · minimal repro · cause hypothesis 
   though the equivalent page directive is rejected as unsupported.
 - Minimal repro: `PageGeneratorTest.unsupportedGroupPoliciesAreNotSilentlyIgnored`.
 - Cause: strict configuration flags are not propagated into generation settings.
-- Status: fixed by applying the same explicit unsupported-policy checks to
-  page directives and property-group settings.
+- Status: initially fixed by rejecting unsupported flags. Strict EL and namespace
+  policies are now implemented and covered by `strictGroupPolicyRejectsMissingIdentifiersAtEvaluation`
+  and `undeclaredNamespacesFailOnlyWhenConfiguredAndKeepTheirSourceLocation`.
+
+## IBARRA-023 · 2026-10-10 · Included taglib declarations do not bind the main page
+
+- Symptom: a taglib declared in a static include is not recognized in the main
+  page; custom actions silently become literal markup. Late declarations are
+  accepted despite Pages 4.0 section 1.10.2 requiring declaration before use.
+- Minimal repro: `PageGeneratorTest.taglibDeclarationsInIncludesBindLaterTagsAcrossTheTranslationUnit`.
+- Cause: per-file parsing binds prefixes without validating the expanded unit.
+- Status: fixed by collecting translation-unit bindings before the final parse
+  and checking taglib declaration order over expanded includes/preludes/codas.
+
+## IBARRA-024 · 2026-10-10 · Invalid boolean policies evade translation validation
+
+- Symptom: malformed group booleans leak generic `IllegalArgumentException`,
+  and some malformed page booleans are silently accepted on literal pages.
+- Minimal repro: `PageGeneratorTest.invalidBooleanConfigurationFailsWithPageDiagnosticsEvenWithoutAffectedNodes`.
+- Cause: boolean validation occurs only when an affected node uses the setting.
+- Status: fixed by validating group/page booleans eagerly with source diagnostics.
 
 ## IBARRA-021 · 2026-10-10 · Named attribute bodies lose meaningful whitespace
 

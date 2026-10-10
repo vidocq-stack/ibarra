@@ -30,22 +30,75 @@ public final class TranslationUnit {
     private final Map<PageNode.Text, List<SourceLocation>> origins = new IdentityHashMap<>();
     private final Set<String> stack = new LinkedHashSet<>();
     private Page.Syntax syntax;
+    private final Map<String, String> unitBindings = new LinkedHashMap<>();
+    private ParserOptions unitOptions;
+    private boolean strictNamespaces;
 
     public TranslationUnit(GenerationOptions options) { this.options = options; }
 
     public Result read(String path, String source) {
         var properties = properties(path);
         syntax = fileSyntax(path, source, properties);
+        var raw = readRoot(path, source, properties);
+        var defaults = new ParserOptions(bool(properties.get("el-ignored"), false),
+                bool(properties.get("deferred-syntax-allowed-as-literal"), false));
+        if (syntax == Page.Syntax.STANDARD) {
+            var settings = new LinkedHashMap<String, String>();
+            collectUnitSettings(raw, settings);
+            unitOptions = new ParserOptions(bool(settings.get("isELIgnored"), defaults.elIgnored()),
+                    bool(settings.get("deferredSyntaxAllowedAsLiteral"), defaults.deferredSyntaxAllowedAsLiteral()));
+            strictNamespaces = bool(properties.get("error-on-undeclared-namespace"), false);
+            raw = readRoot(path, source, properties);
+            validateTaglibOrder(raw, new HashSet<>(Set.of("jsp")));
+        }
+        var nodes = new PageNormalizer(syntax, defaults, origins).normalize(raw);
+        return new Result(new Page(path, syntax, nodes), Map.copyOf(properties));
+    }
+
+    private List<PageNode> readRoot(String path, String source, Map<String, String> properties) {
         var raw = new ArrayList<PageNode>();
         for (var group : options.propertyGroups()) if (matches(group, path))
             for (String prelude : group.preludes()) raw.addAll(included(prelude, new SourceLocation(path, 1, 1), properties));
         raw.addAll(readFile(path, source, properties));
         for (var group : options.propertyGroups()) if (matches(group, path))
             for (String coda : group.codas()) raw.addAll(included(coda, new SourceLocation(path, 1, 1), properties));
-        var defaults = new ParserOptions(bool(properties.get("el-ignored"), false),
-                bool(properties.get("deferred-syntax-allowed-as-literal"), false));
-        var nodes = new PageNormalizer(syntax, defaults, origins).normalize(raw);
-        return new Result(new Page(path, syntax, nodes), Map.copyOf(properties));
+        return raw;
+    }
+
+    private void collectUnitSettings(List<PageNode> nodes, Map<String, String> settings) {
+        for (var node : nodes) {
+            if (node instanceof PageNode.Directive directive) {
+                if (directive.name().equals("taglib")) {
+                    String prefix = directive.attributes().get("prefix");
+                    String namespace = directive.attributes().getOrDefault("uri", "urn:jsptagdir:" + directive.attributes().get("tagdir"));
+                    String previous = unitBindings.putIfAbsent(prefix, namespace);
+                    if (previous != null && !previous.equals(namespace))
+                        throw new PageParseException(directive.location(), "Conflicting taglib prefix: " + prefix);
+                } else if (directive.name().equals("page") || directive.name().equals("tag")) {
+                    for (String name : List.of("isELIgnored", "deferredSyntaxAllowedAsLiteral")) {
+                        String value = directive.attributes().get(name);
+                        if (value != null) {
+                            if (!value.equals("true") && !value.equals("false"))
+                                throw new PageParseException(directive.location(), name + " must be true or false");
+                            String previous = settings.putIfAbsent(name, value);
+                            if (previous != null && !previous.equals(value)) throw new PageParseException(directive.location(), "Conflicting " + name);
+                        }
+                    }
+                }
+            } else if (node instanceof PageNode.Element element) collectUnitSettings(element.children(), settings);
+        }
+    }
+
+    private void validateTaglibOrder(List<PageNode> nodes, Set<String> declared) {
+        for (var node : nodes) {
+            if (node instanceof PageNode.Directive directive && directive.name().equals("taglib"))
+                declared.add(directive.attributes().get("prefix"));
+            else if (node instanceof PageNode.Element element) {
+                String prefix = element.name().substring(0, element.name().indexOf(':'));
+                if (!declared.contains(prefix)) throw new PageParseException(element.location(), "Taglib directive must precede use of prefix: " + prefix);
+                validateTaglibOrder(element.children(), declared);
+            }
+        }
     }
 
     private List<PageNode> readFile(String path, String source, Map<String, String> properties) {
@@ -57,8 +110,9 @@ public final class TranslationUnit {
             List<PageNode> raw;
             if (syntax == Page.Syntax.XML) {
                 var parser = new XmlParser(document); raw = parser.parse(); origins.putAll(parser.origins());
-            } else raw = new StandardParser(document, new ParserOptions(bool(properties.get("el-ignored"), false),
-                    bool(properties.get("deferred-syntax-allowed-as-literal"), false))).parse();
+            } else raw = new StandardParser(document, unitOptions == null
+                    ? new ParserOptions(bool(properties.get("el-ignored"), false), bool(properties.get("deferred-syntax-allowed-as-literal"), false))
+                    : unitOptions, unitBindings, strictNamespaces).parse();
             return expand(raw, properties);
         } finally { stack.remove(path); }
     }
@@ -105,6 +159,13 @@ public final class TranslationUnit {
         var result = new LinkedHashMap<String, String>();
         var specificity = new HashMap<String, Match>();
         for (var group : options.propertyGroups()) {
+            for (String name : List.of("el-ignored", "is-xml", "scripting-invalid",
+                    "deferred-syntax-allowed-as-literal", "trim-directive-whitespaces",
+                    "error-on-el-not-found", "error-on-undeclared-namespace")) {
+                String value = group.properties().get(name);
+                if (value != null && !value.equals("true") && !value.equals("false"))
+                    throw new PageParseException(new SourceLocation(path, 1, 1), name + " must be true or false");
+            }
             Match best = null;
             for (String pattern : group.patterns()) {
                 var match = match(pattern, path);

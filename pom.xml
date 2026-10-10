@@ -83,6 +83,7 @@
         Activation: ./mvnw -Ptck -pl ibarra-tck test
     -->
     <modules>
+        <module>ibarra-api</module>
         <module>ibarra-core</module>
         <module>ibarra-compiler</module>
     </modules>
@@ -119,6 +120,11 @@
             </dependency>
 
             <!-- Internal Ibarra modules -->
+            <dependency>
+                <groupId>io.vidocq.ibarra</groupId>
+                <artifactId>ibarra-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>io.vidocq.ibarra</groupId>
                 <artifactId>ibarra-core</artifactId>

@@ -16,6 +16,10 @@
 
     <dependencies>
         <dependency>
+            <groupId>io.vidocq.ibarra</groupId>
+            <artifactId>ibarra-api</artifactId>
+        </dependency>
+        <dependency>
             <groupId>jakarta.servlet.jsp</groupId>
             <artifactId>jakarta.servlet.jsp-api</artifactId>
         </dependency>

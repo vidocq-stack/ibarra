@@ -72,10 +72,6 @@ public final class PageGenerator {
 
         GeneratedPage generate() {
             directives(page.nodes());
-            if (bool("errorOnELNotFound", false))
-                throw error(new SourceLocation(page.source(), 1, 1), "errorOnELNotFound=true is not supported by this initial generator");
-            if (bool("errorOnUndeclaredNamespace", false))
-                throw error(new SourceLocation(page.source(), 1, 1), "Strict undeclared-namespace policy is not supported by this initial generator");
             if (settings.containsKey("language") && !settings.get("language").equals("java"))
                 throw error(page.nodes().isEmpty() ? new SourceLocation(page.source(), 1, 1) : page.nodes().getFirst().location(), "Only Java scripting is supported");
             emit(page.nodes());
@@ -118,7 +114,8 @@ public final class PageGenerator {
             result.add("private static String _jspxAttribute(String value) { return value.replace(\"&\", \"&amp;\").replace(\"\\\"\", \"&quot;\").replace(\"<\", \"&lt;\"); }\n");
             result.add("private static String _jspxXmlName(String value) { if (!value.matches(\"[\\\\p{L}_][\\\\p{L}\\\\p{N}\\\\p{M}_.:-]*\")) throw new IllegalArgumentException(\"Invalid XML name: \" + value); return value; }\n");
             result.add("private static String _jspxParameter(String path, String name, Object value) { return path + (path.contains(\"?\") ? \"&\" : \"?\") + java.net.URLEncoder.encode(name, java.nio.charset.StandardCharsets.UTF_8) + \"=\" + java.net.URLEncoder.encode(_jspxText(value), java.nio.charset.StandardCharsets.UTF_8); }\n");
-            result.add("}\nabstract class " + simple + "$Lifecycle extends " + settings.getOrDefault("extends", "jakarta.servlet.http.HttpServlet") + " implements jakarta.servlet.jsp.HttpJspPage {\n");
+            result.add("}\nabstract class " + simple + "$Lifecycle extends " + settings.getOrDefault("extends", "jakarta.servlet.http.HttpServlet") + " implements jakarta.servlet.jsp.HttpJspPage, io.vidocq.ibarra.spi.PageOptions {\n");
+            result.add("@Override public final boolean errorOnELNotFound() { return " + bool("errorOnELNotFound", false) + "; }\n");
             result.add("protected abstract void _jspxInitialize();\npublic void jspInit() {}\npublic void jspDestroy() {}\n");
             result.add("@Override public final void init() throws jakarta.servlet.ServletException { super.init(); _jspxInitialize(); jspInit(); }\n");
             result.add("@Override public final void init(jakarta.servlet.ServletConfig config) throws jakarta.servlet.ServletException { super.init(config); }\n");
@@ -145,6 +142,10 @@ public final class PageGenerator {
                     for (var entry : directive.attributes().entrySet()) {
                         if (entry.getKey().startsWith("xmlns")) continue;
                         if (!PAGE_ATTRIBUTES.contains(entry.getKey())) throw error(directive.location(), "Unsupported page attribute: " + entry.getKey());
+                        if (Set.of("session", "autoFlush", "isErrorPage", "isELIgnored",
+                                "deferredSyntaxAllowedAsLiteral", "trimDirectiveWhitespaces", "errorOnELNotFound").contains(entry.getKey())
+                                && !entry.getValue().equals("true") && !entry.getValue().equals("false"))
+                            throw error(directive.location(), entry.getKey() + " must be true or false");
                         if (entry.getKey().equals("import")) {
                             for (String name : entry.getValue().split(",")) {
                                 name = name.trim();

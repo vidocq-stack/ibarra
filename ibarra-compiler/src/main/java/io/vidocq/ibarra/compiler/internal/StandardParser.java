@@ -34,11 +34,18 @@ public final class StandardParser {
     private int cursor;
     private boolean elIgnored;
     private boolean deferredLiteral;
+    private final boolean strictNamespaces;
 
     public StandardParser(SourceDocument source, ParserOptions options) {
+        this(source, options, Map.of(), false);
+    }
+
+    public StandardParser(SourceDocument source, ParserOptions options, Map<String, String> unitBindings, boolean strictNamespaces) {
         this.source = source;
+        this.strictNamespaces = strictNamespaces;
         elIgnored = options.elIgnored();
         deferredLiteral = options.deferredSyntaxAllowedAsLiteral();
+        bindings.putAll(unitBindings);
         bindings.put("jsp", PageParser.JSP_NAMESPACE);
     }
 
@@ -122,7 +129,11 @@ public final class StandardParser {
         while (end < source.text.length() && nameChar(source.text.charAt(end))) end++;
         String name = source.text.substring(start, end);
         int colon = name.indexOf(':');
-        return colon > 0 && bindings.containsKey(name.substring(0, colon));
+        if (colon <= 0 || colon == name.length() - 1) return false;
+        String prefix = name.substring(0, colon);
+        if (!bindings.containsKey(prefix) && strictNamespaces)
+            throw error(cursor, "Undeclared namespace prefix: " + prefix);
+        return bindings.containsKey(prefix);
     }
 
     private boolean skipExpression() {

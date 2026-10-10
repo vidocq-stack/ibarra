@@ -123,7 +123,7 @@ reflective fallback and Vauban's runtime fallbacks.
 
 | Module (artefact) | Java module | Kind | Requires | Exports |
 |---|---|---|---|---|
-| `ibarra-api` | `io.vidocq.ibarra.api` | runtime | `transitive jakarta.servlet.jsp` | `io.vidocq.ibarra.spi` (generated-code SPI: `PageIndex`, page descriptor) |
+| `ibarra-api` | `io.vidocq.ibarra.api` | runtime | currently only `java.base`; `transitive jakarta.servlet.jsp` planned for page index | `io.vidocq.ibarra.spi` (`PageOptions` implemented; `PageIndex`, page descriptor planned) |
 | `ibarra-core` | `io.vidocq.ibarra.core` | runtime | `transitive jakarta.servlet.jsp`, `io.vidocq.ibarra.api` | nothing — installs its `JspFactory` with `JspFactory.setDefaultFactory` at deployment (the spec defines no service lookup for it), `uses PageIndex` |
 | `ibarra-compiler` | `io.vidocq.ibarra.compiler` | build (+ dev mode planned) | `java.xml`, `static java.compiler`; SPI/Peano compiler dependencies when available | `io.vidocq.ibarra.compiler` |
 | `ibarra-maven-plugin` | (Maven plugin, class path) | build | `ibarra-compiler` | — |
@@ -225,7 +225,7 @@ the runtime's packaging goal, after I8.
 | I1 | Runtime API: `JspFactory`, `PageContext`, `JspWriter` / `BodyContent` buffering, scopes, error pages — driven by hand-written `HttpJspPage` fixtures | implemented: unit tests against Foy-free servlet doubles, clean install green |
 | I2 | `ibarra-compiler` parser: standard + XML syntax, directives, scripting, template text, page model | implemented: 36 parser corpus tests, clean install green |
 | I3 | Generator: Java source for pages, standard actions, EL via `jakarta.el` (Peano in tests), `jsp-config` property groups | in progress: generated fixtures render; static EL and remaining semantics pending |
-| I4 | `ibarra-maven-plugin` precompile goal + page index; `ibarra-api` SPI | example webapp precompiled, no runtime translation |
+| I4 | `ibarra-maven-plugin` precompile goal + page index; extend `ibarra-api` SPI | example webapp precompiled, no runtime translation |
 | I5 | `ibarra-foy` + Foy's JSP-engine SPI (Foy-side PR), `*.jsp` mapping, `addJspFile`, `getJspConfigDescriptor`, TLD listeners | end-to-end test on Foy/Chappe |
 | I6 | Custom tags: TLD parsing, classic + simple handlers, scripting variables, validators | |
 | I7 | Tag files, fragments, `jsp:invoke` / `jsp:doBody`; Peano compiled expressions in pages | |
@@ -300,15 +300,21 @@ P7 `peano-compiler` does not exist yet, so planned build-time expression compila
 is unfinished. Generic EL bean access still uses the API's reflective fallback;
 generated standard bean actions themselves contain no reflection.
 
-Proof: `./mvnw -o -ntp clean install` under Temurin 25 passes 109 tests:
-41 runtime, 36 parser and 32 generator fixtures. Fixtures compile and run on
+Proof: `./mvnw -o -ntp clean install` under Temurin 25 passes 118 tests:
+45 runtime, 36 parser and 37 generator fixtures. Fixtures compile and run on
 the module path, construct pages directly and patch the core only to install
 its internal factory. They do not prove independent application packaging,
 page-index discovery or Foy deployment (I4/I5). Module, dependency, codegen and
 concurrency reviews have run; fixed regressions are recorded in `BUG.md`.
 
+Strict policies are implemented: generated immutable `PageOptions` carry
+`errorOnELNotFound` into each request EL context before listener callbacks;
+resolved null values retain normal EL behavior. Standard pages enforce configured
+undeclared-prefix errors and taglib declaration order across includes/preludes.
+Boolean settings fail with source diagnostics even on otherwise literal pages.
+
 Remaining I3 work: static EL and generated accessors after Peano P6/P7, EL imports
-and function bindings, strict missing-EL/undeclared-namespace policies, atomic
+and function bindings, atomic
 shared-scope bean creation, broader output/attribute/translation validation,
 byte-source encoding handling and mixed-syntax includes. Unsupported constructs
 fail explicitly. New session/application beans are rejected; existing typed

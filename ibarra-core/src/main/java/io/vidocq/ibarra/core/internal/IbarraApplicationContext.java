@@ -95,6 +95,8 @@ final class IbarraApplicationContext implements JspApplicationContext {
         resolvers.add(new OptionalELResolver());
         resolvers.add(new BeanELResolver());
         resolvers.add(new ScopedAttributeResolver(page));
+        boolean strict = page.getPage() instanceof io.vidocq.ibarra.spi.PageOptions options && options.errorOnELNotFound();
+        resolvers.add(new NotFoundELResolver(strict));
         var context = new StandardELContext(getExpressionFactory()) {
             @Override public ELResolver getELResolver() { return resolvers; }
         };
@@ -116,7 +118,7 @@ final class IbarraApplicationContext implements JspApplicationContext {
         public Object getValue(ELContext context, Object base, Object property) {
             if (base != null || property == null) return null;
             var value = page.findAttribute(property.toString());
-            context.setPropertyResolved(true);
+            if (value != null) context.setPropertyResolved(true);
             return value;
         }
 

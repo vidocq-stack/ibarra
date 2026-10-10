@@ -73,19 +73,19 @@ sdk env
 ## Architecture
 
 ```
+ibarra-api    ← I3 immutable generated-page options SPI; page index planned (I4)
 ibarra-core   ← I1 runtime: JspFactory, PageContext, JspWriter, BodyContent,
                 JspApplicationContext (tags and full Pages EL resolver chain planned)
 ibarra-compiler ← I2 parser/model; initial I3 Java generation and build-time javac;
                   java.xml + static java.compiler, startup EL preview opt-in only
 ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
-(planned)     ibarra-api (generated-code SPI: page index),
-              ibarra-maven-plugin (build-time precompilation),
+(planned)     ibarra-maven-plugin (build-time precompilation),
               ibarra-foy (Foy JSP-engine SPI binding), ibarra-bench (JMH)
 ```
 
 ## Architecture Constraints Not to Violate
 
-1. **`ibarra-core` depends on the Jakarta Pages API only** (plus what it brings:
+1. **`ibarra-core` depends on the internal `ibarra-api` SPI and the Jakarta Pages API** (plus what it brings:
    Servlet, EL). It obtains its `ExpressionFactory` through `ExpressionFactory.newInstance()`
    — Peano is the default provider, not a hard dependency (PLAN.md open question 4).
 2. **Only `ibarra-foy` depends on Foy.** The core stays container-neutral.

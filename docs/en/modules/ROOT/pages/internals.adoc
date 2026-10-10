@@ -11,7 +11,7 @@ How Ibarra is designed to work inside. The runtime in `ibarra-core` implements m
 | Artefact | Java module | Role
 
 | `ibarra-core` | `io.vidocq.ibarra.core` | I1 runtime: factory, context, scopes, writers, dispatch and application EL context; tags planned
-| `ibarra-api` | `io.vidocq.ibarra.api` | Generated-code SPI (page index) — planned, I4
+| `ibarra-api` | `io.vidocq.ibarra.api` | Immutable generated-page policy SPI; page index planned, I4
 | `ibarra-compiler` | `io.vidocq.ibarra.compiler` | Parser/model, initial Java generator and build-time compiler; I3 in progress
 | `ibarra-maven-plugin` | — | `precompile` goal — planned, I4
 | `ibarra-foy` | `io.vidocq.ibarra.foy` | Binding to Foy's JSP-engine SPI — planned, I5
@@ -56,6 +56,10 @@ Provider lookup is lazy and happens once per application. Each page caches its
 EL context before notifying listeners so callbacks can retrieve it safely. A
 failed callback clears the cache for a later retry. Application and standard
 collection/bean resolvers precede the scoped-attribute resolver.
+
+The final not-found resolver reads the immutable page policy before listeners
+run. Strict pages reject unresolved EL lookups; explicitly resolved nulls remain
+valid. Two pages in the same application can use different policies.
 
 Scope, parameter, header, cookie and initialization-parameter implicit objects
 are implemented and exercised with Peano. Headers use case-insensitive lookup.
@@ -117,7 +121,7 @@ The initial EL path requires `withStartupEl(true)` explicitly. It caches standar
 ValueExpressions at servlet initialization using a request-free context and
 evaluates against each request. The default rejects EL because `peano-compiler`
 is not implemented. Static expressions, generated EL accessors, imports/functions,
-strict missing-EL/namespace policies, atomic shared-scope bean creation and mixed
+atomic shared-scope bean creation and mixed
 syntax inclusion remain open. New shared-scope beans are rejected; existing
 typed shared beans are supported. This is not TCK certification.
 
