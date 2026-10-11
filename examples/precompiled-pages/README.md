@@ -14,8 +14,6 @@ static method is validated from class files and invoked directly by generated
 code; it requires no accessor provider, exports or runtime TLD parsing.
 `${example:welcome(param.name)}` uses the current request parameter.
 
-Install the [pinned Peano prerequisite](../../docs/peano-prerequisite.md) first.
-
 Run from the Ibarra checkout root with Java 25:
 
 ```sh

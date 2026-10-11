@@ -27,20 +27,6 @@ jobs:
 
       - uses: ./.ci-action/setup-maven
 
-      - name: Checkout the immutable Peano prerequisite
-        uses: actions/checkout@v4
-        with:
-          repository: Vidocq/peano
-          ref: 2268c8c50581fd390b8adca3c21f247a6c1db0d3
-          path: .ci/peano-prerequisite
-
-      - name: Install the Peano prerequisite locally
-        working-directory: .ci/peano-prerequisite
-        run: |
-          mvn -B -ntp versions:set -DnewVersion=0.4.0-PR47.2268c8c5 \
-            -DprocessAllModules=true -DgenerateBackupPoms=false
-          mvn -B -ntp install -DskipTests
-
       - name: Build & test
         run: mvn -B -ntp -U verify
 

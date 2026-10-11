@@ -68,9 +68,6 @@ the milestone that needs them. JSTL is out of scope.
 
 ## Build
 
-This branch requires the [temporary immutable Peano prerequisite](docs/peano-prerequisite.md)
-before the normal build.
-
 ```bash
 sdk env          # Java 25 (Temurin) + Maven 3.9.16, pinned by .sdkmanrc
 ./mvnw -ntp install

@@ -345,7 +345,7 @@ coercion. Standard directives, relative included declarations and lexically scop
 JSPX namespaces share the same binding path. Named-module HTTP tests render
 functions in template and fragment/tag attributes with reflection denied and both
 compilers excluded. Local reactor proof: 234 tests; the independent Maven example
-also exercises a TLD function. Peano's prerequisite passes 291 tests and all
+also exercises a TLD function. Peano's prerequisite passes 303 tests and all
 361 official EL TCK tests; those results do not certify Jakarta Pages.
 
 Remaining I3 work: runtime ImportHandler mutations, deferred attributes, atomic
