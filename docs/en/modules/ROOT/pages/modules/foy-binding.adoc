@@ -86,9 +86,6 @@ Test compilation and the Arquillian control process use a classpath because
 those tooling JARs have incompatible automatic module descriptors. The deployed
 application and server use explicit named modules only.
 
-The base JSP-engine SPI is published. The TLD listener extension depends on
-Foy PR #29. Until it is published, PR validation builds the immutable Foy revision
-in `.forgejo/foy-spi.ref` at a release-style local version and persists that
-override in installed POMs. This prerequisite publishes no artifacts. Runtime
-builds retain the managed `foy.version`; merge/publish Foy before Ibarra and
-retire the temporary bootstrap afterwards.
+Foy's published development snapshot contains the JSP-engine SPI and its TLD
+listener extension. PR validation resolves the managed `foy.version` directly;
+no Foy source bootstrap or temporary version override is required.

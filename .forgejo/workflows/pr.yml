@@ -165,11 +165,6 @@ jobs:
           print(f"plugin.xml synced: {n}")
           PY
 
-      - name: Build the pending Foy TLD listener SPI prerequisite
-        if: steps.changes.outputs.docs-only != 'true'
-        # Foy PR #29: local-only immutable prerequisite until its SPI is published.
-        run: python3 .forgejo/build-foy-prerequisite.py
-
       - name: Build, test & install the producer locally
         if: steps.changes.outputs.docs-only != 'true'
         # install (not deploy): the PR artifact lands in ~/.m2 only — nothing is published.

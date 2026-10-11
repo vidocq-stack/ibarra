@@ -1,5 +1,16 @@
 # BUG.md — Ibarra
 
+## IBARRA-047 · 2026-10-11 · Consumer merge can precede prerequisite snapshot publication
+
+- Symptom: the post-merge build cannot compile `IbarraJspEngine` because the
+  downloaded Foy API has no `JspEngine.Listener`.
+- Minimal repro: merge Ibarra #11 before Foy #29 finishes publishing; Ibarra
+  CI run 36359 fails with the old 0.4.0-SNAPSHOT API despite green PR validation.
+- Cause: PR validation used an immutable local prerequisite; the main build
+  resolves published snapshots and ran before the upstream publication completed.
+- Status: recovery in progress; Foy run 36350 published successfully. Rerun the
+  Ibarra main build against the updated snapshot, then remove the temporary pin.
+
 ## IBARRA-045 · 2026-10-11 · Checked listener constructors cannot use plain suppliers
 
 - Symptom: a valid public no-argument listener constructor declaring a checked
