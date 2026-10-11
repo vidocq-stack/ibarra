@@ -35,7 +35,7 @@ import jakarta.servlet.jsp.*;
 import jakarta.servlet.jsp.tagext.BodyContent;
 
 /** Per-request page state. No thread-local storage or context pooling. */
-final class IbarraPageContext extends PageContext {
+final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.spi.BeanScopeContext {
     private final IbarraApplicationContext application;
     private final Map<String, Object> attributes = new HashMap<>();
     private final ArrayDeque<JspWriter> bodies = new ArrayDeque<>();
@@ -102,6 +102,14 @@ final class IbarraPageContext extends PageContext {
     private HttpSession requiredSession() {
         if (session == null) throw new IllegalStateException("Page does not participate in a session");
         return session;
+    }
+
+    @Override
+    public java.util.concurrent.locks.Lock beanScopeLock(int scope) {
+        if (servlet == null) throw new IllegalStateException("Page context is inactive");
+        if (scope == SESSION_SCOPE) requiredSession();
+        else if (scope != APPLICATION_SCOPE) throw new IllegalArgumentException("Not a shared scope: " + scope);
+        return application.beanScopeLock;
     }
 
     @Override public Object getAttribute(String name) { return attributes.get(name(name)); }

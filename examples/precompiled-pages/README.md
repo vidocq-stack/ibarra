@@ -14,6 +14,11 @@ static method is validated from class files and invoked directly by generated
 code; it requires no accessor provider, exports or runtime TLD parsing.
 `${example:welcome(param.name)}` uses the current request parameter.
 
+The greeting bean uses application scope. Its direct construction and publication
+are coordinated across requests; the `Application greeting created.` paragraph
+appears only for its creator. The body runs after unlocking and is not an atomic
+initialization transaction.
+
 Run from the Ibarra checkout root with Java 25:
 
 ```sh

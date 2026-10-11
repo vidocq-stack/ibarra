@@ -248,12 +248,127 @@ class PageGeneratorTest {
     }
 
     @Test
-    void sharedScopeCreationIsRejectedUntilAtomicLifecycleSupportExists() throws Exception {
+    void sharedScopeBeansCreateOnceAndSkipBodiesWhenReused() throws Exception {
         prepareBean();
         for (String scope : List.of("session", "application")) {
-            var error = assertThrows(PageParseException.class, () -> generator().generate("/shared.jsp",
-                    "<jsp:useBean id='bean' class='fixture.Bean' scope='" + scope + "'/>", PAGE_CLASS, GenerationOptions.DEFAULT));
-            assertTrue(error.getMessage().contains("Shared-scope"));
+            String jsp = "<jsp:useBean id='bean' class='fixture.Bean' scope='" + scope + "'>"
+                    + "<jsp:setProperty name='bean' property='count' value='7'/>created:"
+                    + "</jsp:useBean><jsp:getProperty name='bean' property='count'/>";
+            var generated = generator().generate("/shared.jsp", jsp, PAGE_CLASS, GenerationOptions.DEFAULT);
+            assertTrue(generated.source().contains("new fixture.Bean()"));
+            assertEquals("created:7", run(generated, "", """
+                    var repeated = new ServletDoubles.Response();
+                    page.service(request, repeated);
+                    if (!repeated.output.toString().equals("7")) throw new AssertionError(repeated.output);
+                    """));
+        }
+    }
+
+    @Test
+    void concurrentSharedScopeServicesConstructAndRunOneBody() throws Exception {
+        prepareSharedBean();
+        for (String scope : List.of("session", "application")) {
+            int scopeNumber = scope.equals("session") ? 3 : 4;
+            String jsp = "<jsp:useBean id='bean' class='fixture.SharedBean' scope='" + scope + "'>"
+                    + "<% if (((java.util.concurrent.locks.ReentrantLock) ((io.vidocq.ibarra.spi.BeanScopeContext) pageContext).beanScopeLock(" + scopeNumber + ")).isHeldByCurrentThread()) throw new AssertionError(\"Body holds scope lock\");"
+                    + "fixture.SharedBean.bodies.incrementAndGet(); %>created</jsp:useBean>";
+            assertEquals("created", render(jsp, "", """
+                    var sharedSession = request.session;
+                    if (%d == 3) sharedSession.removeAttribute("bean"); else context.removeAttribute("bean");
+                    fixture.SharedBean.constructions.set(0); fixture.SharedBean.bodies.set(0);
+                    var ready = new java.util.concurrent.CountDownLatch(16);
+                    var start = new java.util.concurrent.CountDownLatch(1);
+                    try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+                        var results = new java.util.ArrayList<java.util.concurrent.Future<String>>();
+                        for (int i = 0; i < 16; i++) results.add(executor.submit(() -> {
+                            var concurrentRequest = new ServletDoubles.Request(); concurrentRequest.session = sharedSession;
+                            var concurrentResponse = new ServletDoubles.Response();
+                            ready.countDown(); start.await();
+                            page.service(concurrentRequest, concurrentResponse);
+                            return concurrentResponse.output.toString();
+                        }));
+                        if (!ready.await(5, java.util.concurrent.TimeUnit.SECONDS)) throw new AssertionError("Workers not ready");
+                        start.countDown();
+                        int bodies = 0;
+                        for (var result : results) if (result.get(10, java.util.concurrent.TimeUnit.SECONDS).equals("created")) bodies++;
+                        if (bodies != 1 || fixture.SharedBean.constructions.get() != 1 || fixture.SharedBean.bodies.get() != 1)
+                            throw new AssertionError("Duplicate shared creation/body");
+                    }
+                    """.formatted(scopeNumber)));
+        }
+    }
+
+    @Test
+    void sharedScopeFailuresReleaseLocksAndPreserveCreationSemantics() throws Exception {
+        prepareSharedBean();
+        for (String scope : List.of("session", "application")) {
+            int scopeNumber = scope.equals("session") ? 3 : 4;
+            String jsp = "<jsp:useBean id='bean' class='fixture.SharedBean' scope='" + scope + "'>"
+                    + "<% fixture.SharedBean.bodies.incrementAndGet(); if (request.getAttribute(\"failBody\") != null) throw new IllegalArgumentException(\"body\"); %>created</jsp:useBean>";
+            assertEquals("created", render(jsp, "", """
+                    java.util.function.Consumer<Object> replace = value -> {
+                        if (%d == 3) { if (value == null) request.session.removeAttribute("bean"); else request.session.setAttribute("bean", value); }
+                        else { if (value == null) context.removeAttribute("bean"); else context.setAttribute("bean", value); }
+                    };
+                    replace.accept(null); fixture.SharedBean.fail = true; fixture.SharedBean.bodies.set(0);
+                    try { page.service(request, new ServletDoubles.Response()); throw new AssertionError("Constructor succeeded"); }
+                    catch (java.io.IOException expected) { if (!expected.getMessage().equals("constructor")) throw expected; }
+                    if (fixture.SharedBean.bodies.get() != 0) throw new AssertionError("Failed constructor ran body");
+                    if (%d == 3 ? request.session.getAttribute("bean") != null : context.getAttribute("bean") != null)
+                        throw new AssertionError("Failed constructor published bean");
+                    fixture.SharedBean.fail = false;
+                    replace.accept("wrong type");
+                    try { page.service(request, new ServletDoubles.Response()); throw new AssertionError("Wrong type accepted"); }
+                    catch (ClassCastException expected) { }
+                    replace.accept(null);
+                    try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+                        executor.submit(() -> { page.service(request, new ServletDoubles.Response()); return null; })
+                            .get(5, java.util.concurrent.TimeUnit.SECONDS);
+                    }
+                    if (fixture.SharedBean.bodies.get() != 1) throw new AssertionError("Retry did not run body");
+                    replace.accept(null); request.setAttribute("failBody", true); fixture.SharedBean.bodies.set(0);
+                    try { page.service(request, new ServletDoubles.Response()); throw new AssertionError("Body succeeded"); }
+                    catch (IllegalArgumentException expected) { if (!expected.getMessage().equals("body")) throw expected; }
+                    request.removeAttribute("failBody");
+                    page.service(request, new ServletDoubles.Response());
+                    if (fixture.SharedBean.bodies.get() != 1) throw new AssertionError("Published bean body was retried");
+                    """.formatted(scopeNumber, scopeNumber)));
+        }
+    }
+
+    private void prepareSharedBean() throws Exception {
+        compile(List.of(new GeneratedPage("fixture.SharedBean", """
+                package fixture;
+                public class SharedBean {
+                    public static final java.util.concurrent.atomic.AtomicInteger constructions = new java.util.concurrent.atomic.AtomicInteger();
+                    public static final java.util.concurrent.atomic.AtomicInteger bodies = new java.util.concurrent.atomic.AtomicInteger();
+                    public static volatile boolean fail;
+                    public SharedBean() throws java.io.IOException {
+                        constructions.incrementAndGet();
+                        if (fail) throw new java.io.IOException("constructor");
+                    }
+                }
+                """, Map.of())));
+    }
+
+    @Test
+    void missingTypeOnlyBeansPreserveInstantiationExceptionInEveryScope() throws Exception {
+        prepareBean();
+        for (String scope : List.of("page", "request", "session", "application")) {
+            int number = List.of("page", "request", "session", "application").indexOf(scope) + 1;
+            String jsp = "<% if (request.getAttribute(\"skipSeed\") == null) pageContext.setAttribute(\"bean\", new fixture.Bean(), " + number + "); %>"
+                    + "<jsp:useBean id='bean' type='fixture.Bean' scope='" + scope + "'/><jsp:getProperty name='bean' property='count'/>";
+            assertEquals("0", render(jsp, "", """
+                    request.setAttribute("skipSeed", true);
+                    request.removeAttribute("bean"); request.session.removeAttribute("bean"); context.removeAttribute("bean");
+                    try { page.service(request, new ServletDoubles.Response()); throw new AssertionError("Missing bean accepted"); }
+                    catch (ServletException expected) { if (!(expected.getCause() instanceof InstantiationException)) throw expected; }
+                    request.removeAttribute("skipSeed");
+                    try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+                        executor.submit(() -> { page.service(request, new ServletDoubles.Response()); return null; })
+                            .get(5, java.util.concurrent.TimeUnit.SECONDS);
+                    }
+                    """));
         }
     }
 

@@ -1,5 +1,23 @@
 # BUG.md — Ibarra
 
+## IBARRA-069 · 2026-10-11 · Shared-scope useBean creation is rejected
+
+- Symptom: valid session/application useBean declarations with a class fail translation.
+- Minimal repro: `<jsp:useBean id='bean' class='example.Bean' scope='application'/>`.
+- Cause: generation rejects creation until atomic shared-scope coordination exists;
+  type-only lookup also lacks the required shared-namespace coordination.
+- Status: FIXED by application-owned reentrant coordination of lookup, direct
+  construction and publication. Creator-only bodies execute after unlocking.
+
+## IBARRA-070 · 2026-10-11 · Missing type-only useBean raises the wrong cause
+
+- Symptom: a missing type-only bean raises ServletException directly instead of
+  preserving the InstantiationException required by Pages 4.0 section 5.1.
+- Minimal repro: `<jsp:useBean id='bean' type='example.Bean'/>` with no scoped bean.
+- Cause: the generated missing-bean branch throws the servlet wrapper itself.
+- Status: FIXED by raising InstantiationException, which the page error boundary
+  preserves as the ServletException cause.
+
 ## IBARRA-068 · 2026-10-11 · Direct TLD paths outside discovery need an explicit catalogue alias
 
 - Symptom: a page-relative TLD under /one/lib.tld cannot resolve from its taglib

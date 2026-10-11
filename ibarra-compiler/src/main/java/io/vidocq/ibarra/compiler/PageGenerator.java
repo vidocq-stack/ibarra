@@ -646,12 +646,27 @@ public final class PageGenerator {
                 throw error(node.location(), "Bean requires a Java type");
             if (beans.putIfAbsent(id, type) != null) throw error(node.location(), "Duplicate bean id: " + id);
             int scope = scope(node.attributes().getOrDefault("scope", "page"), node.location());
-            if (implementation != null && (scope == 3 || scope == 4))
-                throw error(node.location(), "Shared-scope bean creation needs atomic lifecycle support; supply an existing typed bean instead");
+            if (implementation != null) classes.constructor(implementation, node.location());
+            if (scope == 3 || scope == 4) {
+                String suffix = Integer.toString(serial++);
+                String lock = "_jspxBeanLock" + suffix;
+                String created = "_jspxBeanCreated" + suffix;
+                body.add(type + " " + id + ";\n"
+                        + (implementation == null ? "" : "boolean " + created + " = false;\n")
+                        + "java.util.concurrent.locks.Lock " + lock + " = ((io.vidocq.ibarra.spi.BeanScopeContext) pageContext).beanScopeLock(" + scope + ");\n"
+                        + lock + ".lock();\ntry {\n"
+                        + id + " = (" + type + ") pageContext.getAttribute(" + JavaSource.quote(id) + ", " + scope + ");\n"
+                        + "if (" + id + " == null) {\n", node.location());
+                if (implementation == null) body.add("throw new java.lang.InstantiationException(\"Required bean is absent: " + id + "\");\n", node.location());
+                else body.add(id + " = new " + implementation + "();\npageContext.setAttribute(" + JavaSource.quote(id) + ", " + id + ", " + scope + ");\n"
+                        + created + " = true;\n", node.location());
+                body.add("}\n} finally { " + lock + ".unlock(); }\n");
+                if (implementation != null) { body.add("if (" + created + ") {\n"); emit(node.children()); body.add("}\n"); }
+                return;
+            }
             body.add(type + " " + id + " = (" + type + ") pageContext.getAttribute(" + JavaSource.quote(id) + ", " + scope + ");\nif (" + id + " == null) {\n", node.location());
-            if (implementation == null) body.add("throw new jakarta.servlet.ServletException(\"Required bean is absent: " + id + "\");\n", node.location());
+            if (implementation == null) body.add("throw new java.lang.InstantiationException(\"Required bean is absent: " + id + "\");\n", node.location());
             else {
-                classes.constructor(implementation, node.location());
                 body.add(id + " = new " + implementation + "();\npageContext.setAttribute(" + JavaSource.quote(id) + ", " + id + ", " + scope + ");\n", node.location());
                 emit(node.children());
             }

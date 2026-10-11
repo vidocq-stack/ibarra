@@ -74,6 +74,33 @@ their TLD metadata is available during the build.
 Boolean group properties and page attributes accept only `true` or `false`;
 invalid values fail translation with `PageParseException` source diagnostics.
 
+[[scoped-beans]]
+== Scoped beans
+
+Generated session/application `jsp:useBean` actions obtain a lock through the
+exported `io.vidocq.ibarra.spi.BeanScopeContext` contract implemented by Ibarra's
+PageContext. Lookup, direct construction and publication run inside try/finally;
+the body runs after unlocking, only for the request that published the new bean.
+Type-only shared lookups use the same coordination. Missing typed values raise
+InstantiationException; incompatible existing values retain ClassCastException.
+The normal page error boundary preserves those failures.
+
+One reentrant lock belongs to each runtime application context. This deliberately
+serializes shared-bean lookup/construction/publication across all sessions and
+application names in that application. It supports virtual-thread waiting and
+avoids session facade identity assumptions, session-ID rotation, hidden attributes
+or an unbounded registry. Applications have independent locks; undeployment
+releases the application context after requests drain. Released/uninitialized
+page contexts and unsupported scopes are rejected by the SPI.
+
+The coordination follows
+https://jakarta.ee/specifications/pages/4.0/jakarta-server-pages-spec-4.0.pdf[Pages 4.0 section 5.1].
+It does not make arbitrary servlet attribute writes or bean methods thread-safe.
+Other requests may observe the published bean while its creator's body is still
+initializing it. A failed constructor publishes nothing and permits a later
+retry. A failed body leaves the published bean in its scope and is not retried
+automatically. `beanName` serialized-bean loading remains unsupported.
+
 == Translation and encodings
 
 Static includes, preludes and codas can mix standard and XML syntax. Each XML

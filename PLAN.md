@@ -344,15 +344,21 @@ from class files and emits direct invokers using the request EL context for
 coercion. Standard directives, relative included declarations and lexically scoped
 JSPX namespaces share the same binding path. Named-module HTTP tests render
 functions in template and fragment/tag attributes with reflection denied and both
-compilers excluded. Local reactor proof: 234 tests; the independent Maven example
+compilers excluded. Local reactor proof: 240 tests; the independent Maven example
 also exercises a TLD function. Peano's prerequisite passes 303 tests and all
 361 official EL TCK tests; those results do not certify Jakarta Pages.
 
-Remaining I3 work: runtime ImportHandler mutations, deferred attributes, atomic
-shared-scope bean creation, broader output/attribute/translation validation,
+Shared-scope bean creation now coordinates lookup, direct construction and
+publication through the BeanScopeContext SPI and one bounded application-owned
+reentrant lock. The creator-only body executes after unlocking. Virtual-thread
+and named-module HTTP tests cover one application bean across JSP/JSPX pages,
+session cookie reuse/isolation, constructor/type/body failures and scope reuse.
+No lock registry, hidden session attributes or new module dependency is introduced.
+
+Remaining I3 work: runtime ImportHandler mutations, deferred attributes,
+broader output/attribute/translation validation,
 broader namespace/XML-view validation. Unsupported constructs
-fail explicitly. New session/application beans are rejected; existing typed
-shared beans can be accessed. The official TCK has not been run.
+fail explicitly. The official TCK has not been run.
 
 ## Initial I4 implementation
 

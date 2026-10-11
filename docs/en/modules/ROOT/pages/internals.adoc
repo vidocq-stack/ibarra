@@ -147,13 +147,15 @@ hooks retain generated accessor dispatch in closed application modules. The old
 interpreter path requires `withStartupEl(true)` explicitly and is unavailable in
 production packaging. Page imports resolve lazily through generated class literals.
 TLD functions use immutable Peano descriptors and generated direct static invokers.
-Runtime import changes, deferred attributes, atomic shared-scope
+Shared-scope bean lookup/construction/publication use an application-owned
+reentrant lock; creator-only bodies run after unlocking.
+Runtime import changes, deferred attributes,
 bean creation and full semantic validation remain open.
 Mixed-syntax includes/preludes/codas structure each file before expanding the
 translation unit, then apply the global EL policy. Source syntax remains available
 for text escapes and XML markup generation. Each file's `pageEncoding` is validated
 independently; only the requested page influences response encoding defaults.
-New shared-scope beans are rejected; existing
+New shared-scope beans use direct construction; existing
 typed shared beans are supported. This is not TCK certification.
 
 == Foy integration

@@ -31,6 +31,8 @@ import jakarta.servlet.jsp.*;
 
 /** Application-owned EL registrations, frozen atomically when first used. */
 final class IbarraApplicationContext implements JspApplicationContext {
+    // One bounded, application-owned lock also coordinates distinct session facades.
+    final java.util.concurrent.locks.ReentrantLock beanScopeLock = new java.util.concurrent.locks.ReentrantLock();
     private record Registration(List<ELResolver> resolvers, List<ELContextListener> listeners, boolean used) { }
     private final AtomicReference<Registration> registration =
             new AtomicReference<>(new Registration(List.of(), List.of(), false));

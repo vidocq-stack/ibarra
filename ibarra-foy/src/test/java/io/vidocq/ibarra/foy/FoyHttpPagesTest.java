@@ -73,6 +73,25 @@ class FoyHttpPagesTest {
                 assertEquals("hello-A:method", get(client, base + "/functions.jsp?who=A").body());
                 assertEquals("hello-A:1:methodmethod!", get(client, base + "/functions.jspx?who=A").body());
                 assertEquals("hello-B:1:methodmethod!", get(client, base + "/functions.jspx?who=B").body());
+                var sharedCalls = new java.util.ArrayList<java.util.concurrent.CompletableFuture<HttpResponse<String>>>();
+                for (int i = 0; i < 16; i++) sharedCalls.add(client.sendAsync(
+                        HttpRequest.newBuilder(URI.create(base + (i % 2 == 0 ? "/shared.jsp" : "/shared.jspx"))).build(), HttpResponse.BodyHandlers.ofString()));
+                int created = 0;
+                for (var call : sharedCalls) {
+                    var result = call.get(10, java.util.concurrent.TimeUnit.SECONDS);
+                    assertEquals(200, result.statusCode(), result.body());
+                    if (result.body().equals("created:1")) created++;
+                    else assertEquals("1", result.body());
+                }
+                assertEquals(1, created);
+                try (var sessionClient = HttpClient.newBuilder().cookieHandler(new java.net.CookieManager(null, java.net.CookiePolicy.ACCEPT_ALL)).build()) {
+                    assertEquals("created:2", get(sessionClient, base + "/session.jsp").body());
+                    assertEquals("2", get(sessionClient, base + "/session.jsp").body());
+                }
+                try (var otherSession = HttpClient.newBuilder().cookieHandler(new java.net.CookieManager(null, java.net.CookiePolicy.ACCEPT_ALL)).build()) {
+                    assertEquals("created:3", get(otherSession, base + "/session.jsp").body());
+                }
+                assertEquals("1", get(client, base + "/shared.jspx").body());
                 assertEquals("<fragment>fragmentBODYBODY", get(client, base + "/named-tags.jspx").body());
                 assertEquals("<b title=\"&quot;&amp;\">label</b>:1:BB!", get(client, base + "/static-named-tags.jspx").body());
                 assertEquals(404, get(client, base + "/missing.jsp").statusCode());
@@ -94,6 +113,8 @@ class FoyHttpPagesTest {
         Path profile = source.resolve("app/Profile.java"), accessors = source.resolve("app/Accessors.java"), constants = source.resolve("app/Constants.java");
         Files.createDirectories(profile.getParent());
         Files.writeString(profile, "package app; public class Profile { public String getName() { return \"Direct\"; } }");
+        Path scopeBean = source.resolve("app/ScopeBean.java");
+        Files.writeString(scopeBean, "package app; public class ScopeBean { private static final java.util.concurrent.atomic.AtomicInteger sequence=new java.util.concurrent.atomic.AtomicInteger(); private final int id=sequence.incrementAndGet(); public int getId(){return id;} }");
         Files.writeString(constants, "package app; public class Constants { private Constants(){} public static final String TEXT=text(); private static String text(){System.setProperty(\"ibarra.import.initialized\",\"yes\");return \"imported\";} public static String caption(){return \"method\";} public static String greet(String value){return \"hello-\"+value;} }");
         Files.writeString(accessors, """
                 package app;
@@ -178,7 +199,10 @@ class FoyHttpPagesTest {
                 }
                 """);
         assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, "--release", "25", "--module-path",
-                modulePath(true), "-d", output.toString(), info.toString(), listener.toString(), wrap.toString(), upper.toString(), fragment.toString(), profile.toString(), accessors.toString(), constants.toString()));
+                modulePath(true), "-d", output.toString(), info.toString(), listener.toString(), wrap.toString(), upper.toString(), fragment.toString(), profile.toString(), accessors.toString(), constants.toString(), scopeBean.toString()));
+        Files.writeString(web.resolve("shared.jsp"), "<%@ page session='false' %><jsp:useBean id='shared' class='app.ScopeBean' scope='application'>created:</jsp:useBean><jsp:getProperty name='shared' property='id'/>");
+        Files.writeString(web.resolve("shared.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page session='false'/><jsp:useBean id='shared' class='app.ScopeBean' scope='application'><jsp:text>created:</jsp:text></jsp:useBean><jsp:getProperty name='shared' property='id'/></jsp:root>");
+        Files.writeString(web.resolve("session.jsp"), "<jsp:useBean id='shared' class='app.ScopeBean' scope='session'>created:</jsp:useBean><jsp:getProperty name='shared' property='id'/>");
         Files.writeString(web.resolve("WEB-INF/handlers.tld"), """
                 <taglib><uri>urn:tags</uri>
                 <tag><name>wrap</name><tag-class>app.Wrap</tag-class><body-content>scriptless</body-content>

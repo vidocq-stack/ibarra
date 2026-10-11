@@ -32,6 +32,8 @@ attributes and explicit bodies are supported. Full tag metadata and tag files re
 Page type/package imports now resolve through build-generated class references.
 TLD functions use generated direct static calls. Deferred attributes, dynamic import changes and official TCK
 certification remain pending.
+Session/application beans now use coordinated lookup, direct construction and
+publication; their initialization body runs only for the creator, after unlocking.
 The design of record is [PLAN.md](PLAN.md) (spec scope, build-time page
 compilation, Java Modules layout, Foy JSP-engine SPI, TCK plan, milestones I0–I9).
 
