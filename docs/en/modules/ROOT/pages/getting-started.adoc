@@ -4,7 +4,7 @@
 [.lead]
 Ibarra compiles JSP/JSPX into application modules during the build. The initial
 Foy binding serves those pages over HTTP without a runtime compiler. Build-time
-EL remains pending; TLD listeners and initial tag-handler invocations are generated at build time.
+EL, TLD functions, listeners and initial tag-handler invocations are generated at build time.
 
 == Prerequisites
 
@@ -92,6 +92,11 @@ The Maven goal, page-index discovery and runtime factory installation are
 implemented in initial I4/I5. See xref:internals.adoc[Internals] for the current action boundaries.
 
 == Building Ibarra from source
+
+This development slice requires Peano's compiled-function extension. Follow
+https://codefloe.com/Vidocq/ibarra/src/branch/feat/i3-tld-functions/docs/peano-prerequisite.md[the temporary source prerequisite]
+before building. The document records the exact source commit, local installation
+and prerequisite retirement procedure.
 
 [source,bash]
 ----

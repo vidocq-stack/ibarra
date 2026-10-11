@@ -70,7 +70,8 @@
         <!-- Vidocq upstreams (referenced via properties to allow cross-repo PR
              overrides). Peano is the default EL provider in generation tests;
              the Foy API hosts the optional JSP-engine binding. -->
-        <peano.version>0.4.0-SNAPSHOT</peano.version>
+        <!-- Temporary immutable source prerequisite; see docs/peano-prerequisite.md. -->
+        <peano.version>0.4.0-PR47.2268c8c5</peano.version>
         <foy.version>0.4.0-SNAPSHOT</foy.version>
         <chappe.version>0.4.0-SNAPSHOT</chappe.version>
     </properties>

@@ -95,6 +95,22 @@ jobs:
       - uses: https://codefloe.com/Vidocq/ci/setup-maven@main
         if: steps.changes.outputs.docs-only != 'true'
 
+      - name: Checkout the immutable Peano prerequisite
+        if: steps.changes.outputs.docs-only != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: Vidocq/peano
+          ref: 2268c8c50581fd390b8adca3c21f247a6c1db0d3
+          path: .ci/peano-prerequisite
+
+      - name: Install the Peano prerequisite locally
+        if: steps.changes.outputs.docs-only != 'true'
+        working-directory: .ci/peano-prerequisite
+        run: |
+          mvn -B -ntp versions:set -DnewVersion=0.4.0-PR47.2268c8c5 \
+            -DprocessAllModules=true -DgenerateBackupPoms=false
+          mvn -B -ntp install -DskipTests
+
       - name: Compute PR version (release-style, no -SNAPSHOT)
         if: steps.changes.outputs.docs-only != 'true'
         id: version
@@ -144,7 +160,7 @@ jobs:
           version = v.text.strip()
           n = 0
           for pom in Path(".").rglob("pom.xml"):
-              if "target" in pom.parts:
+              if "target" in pom.parts or ".ci" in pom.parts:
                   continue
               try:
                   r = ET.parse(pom).getroot()

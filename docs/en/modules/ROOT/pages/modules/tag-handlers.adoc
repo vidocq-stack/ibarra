@@ -3,7 +3,7 @@
 
 == Build-time contracts
 
-`TldParser` retains immutable `TagDescriptor` and `TagAttribute` metadata.
+`TldParser` retains immutable `TagDescriptor`, `TagAttribute` and `TldFunction` metadata.
 The precompiler resolves root descriptor aliases, implicit library URIs and
 context-relative TLD paths. Explicit aliases take precedence; library resources
 precede loose WEB-INF resources. Relative taglib declarations retain their
@@ -21,7 +21,7 @@ contracts ignore the TLD type and use the actual setter type. Request-time attri
 without a declared type default to Object and select that declared setter even
 for literal invocation values. Literal coercion supports String,
 Object and primitive/boxed numeric, boolean and character setters. Java scripting
-expressions require rtexprvalue; EL stays under the explicit preview boundary.
+expressions require rtexprvalue; immediate EL is compiled by Peano at build time.
 
 == Invocation and cleanup
 
@@ -76,7 +76,8 @@ translation; no reflective fallback or handler pooling is enabled.
 
 Java-expression request values must match the declared runtime attribute type.
 Production packaging compiles immediate EL with Peano; runtime parsing is not
-enabled. EL function bindings and deferred attributes remain unsupported.
+enabled. Fixed-arity TLD functions use direct static invokers as described in
+xref:modules/compiled-el.adoc[Compiled EL]. Deferred attributes remain unsupported.
 The official Pages TCK has not been run.
 
 == Verification

@@ -28,9 +28,9 @@ interpretation remains an explicit preview option. Precompiled pages run over HT
 mappings, named JSP registrations, includes and build-generated TLD listeners.
 Initial classic/simple tag handlers now render through direct constructors,
 setters and generated scriptless body/named fragments. Custom-tag named scalar
-attributes and explicit bodies are supported. Full tag metadata, tag files,
+attributes and explicit bodies are supported. Full tag metadata and tag files remain pending.
 Page type/package imports now resolve through build-generated class references.
-TLD functions, deferred attributes, dynamic import changes and official TCK
+TLD functions use generated direct static calls. Deferred attributes, dynamic import changes and official TCK
 certification remain pending.
 The design of record is [PLAN.md](PLAN.md) (spec scope, build-time page
 compilation, Java Modules layout, Foy JSP-engine SPI, TCK plan, milestones I0–I9).
@@ -67,6 +67,9 @@ Planned modules (`ibarra-bench`) are described in [PLAN.md](PLAN.md) and created
 the milestone that needs them. JSTL is out of scope.
 
 ## Build
+
+This branch requires the [temporary immutable Peano prerequisite](docs/peano-prerequisite.md)
+before the normal build.
 
 ```bash
 sdk env          # Java 25 (Temurin) + Maven 3.9.16, pinned by .sdkmanrc

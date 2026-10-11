@@ -29,10 +29,46 @@ import java.util.jar.JarFile;
 /** Build-time property lookup using class files, never loaded classes or reflection. */
 public final class BeanClasses {
     public record Accessor(String name, String type) { }
+    public record Function(String owner, String method, String returnType, List<String> parameters) {
+        public Function { parameters = List.copyOf(parameters); }
+    }
     public record Handler(String sourceName, boolean simple, boolean iteration, boolean buffered,
             boolean catchFinally, boolean dynamic) { }
     private final List<Path> paths;
     public BeanClasses(List<Path> paths) { this.paths = List.copyOf(paths); }
+
+    public Function function(TldFunction definition, SourceLocation at) {
+        var signature = java.util.regex.Pattern.compile("\\s*(.+?)\\s+([\\p{L}_$][\\p{L}\\p{N}_$]*)\\s*\\((.*?)\\)\\s*").matcher(definition.signature());
+        if (!signature.matches()) throw new PageParseException(at, "Invalid function signature: " + definition.signature());
+        String result = signature.group(1).replaceAll("\\s+", ""), name = signature.group(2);
+        List<String> parameters = signature.group(3).isBlank() ? List.of() : Arrays.stream(signature.group(3).split(",", -1)).map(value -> value.replaceAll("\\s+", "")).toList();
+        String type = definition.functionClass();
+        var owner = read(type, at);
+        if ((owner.flags().flagsMask() & ClassFile.ACC_PUBLIC) == 0) throw new PageParseException(at, "Function owner must be public: " + type);
+        var visited = new HashSet<String>(); String current = type;
+        while (visited.add(current)) {
+            var model = read(current, at);
+            for (var method : model.methods()) {
+                if (!method.methodName().stringValue().equals(name)) continue;
+                var descriptor = method.methodTypeSymbol();
+                var actual = descriptor.parameterList().stream().map(parameter -> functionType(parameter.descriptorString(), at)).toList();
+                if (!actual.equals(parameters)) continue;
+                if ((method.flags().flagsMask() & (ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC)) != (ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC)
+                        || !functionType(descriptor.returnType().descriptorString(), at).equals(result))
+                    throw new PageParseException(at, "Function signature must match a public static method: " + definition.signature());
+                if ((method.flags().flagsMask() & ClassFile.ACC_VARARGS) != 0) throw new PageParseException(at, "Variable-arity TLD functions are not supported yet");
+                return new Function(sourceName(type, at), name, result, parameters);
+            }
+            if (model.superclass().isEmpty()) break;
+            current = model.superclass().orElseThrow().asInternalName().replace('/', '.');
+        }
+        throw new PageParseException(at, "No public static function with signature " + definition.signature());
+    }
+    private String functionType(String descriptor, SourceLocation at) {
+        if (descriptor.startsWith("[")) return functionType(descriptor.substring(1), at) + "[]";
+        if (descriptor.startsWith("L")) return sourceName(descriptor.substring(1, descriptor.length()-1).replace('/', '.'), at);
+        return javaType(descriptor);
+    }
 
     public void constructor(String type, SourceLocation at) {
         constructor(type, at, "Bean");
@@ -185,8 +221,8 @@ public final class BeanClasses {
                 }
             }
             var jrt = FileSystems.getFileSystem(java.net.URI.create("jrt:/"));
-            if (type.startsWith("java.")) {
-                var filePath = jrt.getPath("/modules/java.base/" + file);
+            for (var module : java.lang.module.ModuleFinder.ofSystem().findAll()) {
+                var filePath = jrt.getPath("/modules/" + module.descriptor().name() + "/" + file);
                 if (Files.isRegularFile(filePath)) return ClassFile.of().parse(filePath);
             }
         } catch (IOException | IllegalArgumentException failure) {
@@ -201,7 +237,7 @@ public final class BeanClasses {
     private static String javaType(String descriptor) {
         if (descriptor.startsWith("[")) return javaType(descriptor.substring(1)) + "[]";
         return switch (descriptor) {
-            case "Z" -> "boolean"; case "B" -> "byte"; case "C" -> "char"; case "D" -> "double";
+            case "V" -> "void"; case "Z" -> "boolean"; case "B" -> "byte"; case "C" -> "char"; case "D" -> "double";
             case "F" -> "float"; case "I" -> "int"; case "J" -> "long"; case "S" -> "short";
             default -> descriptor.substring(1, descriptor.length() - 1).replace('/', '.').replace('$', '.');
         };

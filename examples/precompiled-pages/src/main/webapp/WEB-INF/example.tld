@@ -3,6 +3,11 @@
     <tlib-version>1.0</tlib-version>
     <short-name>example</short-name>
     <uri>urn:ibarra:example</uri>
+    <function>
+        <name>welcome</name>
+        <function-class>io.vidocq.ibarra.example.Greeting</function-class>
+        <function-signature>java.lang.String welcome(java.lang.String)</function-signature>
+    </function>
     <tag>
         <name>frame</name>
         <tag-class>io.vidocq.ibarra.example.Frame</tag-class>

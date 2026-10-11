@@ -35,6 +35,79 @@ class PagePrecompilerTest {
     private Path classes;
     private Path web;
     private final List<Path> extraModules = new ArrayList<>();
+    @Test void tldFunctionsRenderThroughDirectCallsWithoutRuntimeExpressionCreation() throws Exception {
+        prepareFunctions();
+        Files.writeString(web.resolve("index.jsp"), functionPrefix()+"<%request.setAttribute(\"values\",new String[]{\"a\",\"b\"});%>${f:sum('7',2)}|${f:sum(f:sum(1,2),3)}|${f:length(values)}|${f:none()}|${f:over(3)}");
+        precompile(); assertNull(System.getProperty("ibarra.function.initialized"));
+        Path jar=directory.resolve("functions.jar"); jar(classes,jar);
+        assertEquals("9|6|2||int",render(jar,true));
+    }
+    @Test void functionTranslationRejectsUnknownPrefixesSignaturesAndArities() throws Exception {
+        prepareFunctions();
+        for(String expression:List.of("${missing:sum(1,2)}","${f:unknown()}","${f:sum(1)}","${f:instance()}","${f:hidden()}","${f:wide('a')}")) {
+            Files.writeString(web.resolve("index.jsp"),functionPrefix()+expression);
+            assertThrows(PageParseException.class,this::precompile,expression);
+        }
+    }
+    @Test void functionLibrariesCannotBypassValidatorRequirements() throws Exception {
+        prepareFunctions();
+        Path tld=web.resolve("WEB-INF/functions.tld");
+        Files.writeString(tld,Files.readString(tld).replace("</taglib>","<validator><validator-class>demo.Validator</validator-class></validator></taglib>"));
+        Files.writeString(web.resolve("index.jsp"),functionPrefix()+"${f:sum(1,2)}");
+        assertThrows(PageParseException.class,this::precompile);
+    }
+    @Test void relativeFunctionBindingsCaptureEachIncludeDeclaration() throws Exception {
+        prepareFunctions();
+        Files.createDirectories(web.resolve("WEB-INF/one")); Files.createDirectories(web.resolve("WEB-INF/two"));
+        String first=Files.readString(web.resolve("WEB-INF/functions.tld"));
+        Files.writeString(web.resolve("WEB-INF/one/lib.tld"),first); Files.writeString(web.resolve("WEB-INF/two/lib.tld"),first.replace("int sum(int,int)","int difference(int,int)"));
+        Files.writeString(web.resolve("WEB-INF/one/bind.jspf"),"<%@ taglib prefix='f' uri='lib.tld' %>${f:sum(4,2)}");
+        Files.writeString(web.resolve("WEB-INF/two/bind.jspf"),"<%@ taglib prefix='f' uri='lib.tld' %>${f:sum(4,2)}");
+        Files.writeString(web.resolve("index.jsp"),"<%@ page session='false' %><%@ include file='WEB-INF/one/bind.jspf' %>|<%@ include file='WEB-INF/two/bind.jspf' %>");
+        precompile(); Path jar=directory.resolve("relative-functions.jar"); jar(classes,jar); assertEquals("6|2",render(jar,true));
+    }
+    @Test void xmlFunctionNamespacesRestoreTheirLexicalScope() throws Exception {
+        prepareFunctions();
+        String second=Files.readString(web.resolve("WEB-INF/functions.tld")).replace("urn:functions","urn:other").replace("int sum(int,int)","int difference(int,int)");
+        Files.writeString(web.resolve("WEB-INF/other.tld"),second);
+        Files.writeString(web.resolve("index.jsp"),"<%@ page session='false' %><%@ include file='functions.jspx' %>");
+        Files.writeString(web.resolve("functions.jspx"),"<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:f='urn:jsptld:urn:functions' version='4.0'><jsp:text>${f:sum(4,2)}|</jsp:text><jsp:text xmlns:f='urn:jsptld:urn:other'>${f:sum(4,2)}|</jsp:text><jsp:text>${f:sum(4,2)}</jsp:text></jsp:root>");
+        precompile(); Path jar=directory.resolve("xml-functions.jar"); jar(classes,jar); assertEquals("6|2|6",render(jar,true));
+    }
+    @Test void directFunctionCallsEnforceSignatureTypeVisibility() throws Exception {
+        prepareFunctions();
+        Path tld=web.resolve("WEB-INF/functions.tld");
+        Files.writeString(tld,Files.readString(tld).replace("</taglib>","<function><name>secret</name><function-class>demo.Functions</function-class><function-signature>int secret(demo.Functions.Secret)</function-signature></function></taglib>"));
+        Files.writeString(web.resolve("index.jsp"),functionPrefix()+"${f:secret(null)}");
+        assertThrows(PageCompilationException.class,this::precompile);
+    }
+    private String functionPrefix(){return "<%@ page session='false' %><%@ taglib prefix='f' uri='urn:functions' %>";}
+    private void prepareFunctions() throws Exception {
+        prepare(false,true);
+        Path source=directory.resolve("Functions.java");
+        Files.writeString(source,"""
+                package demo; public class Functions {
+                    private Functions(){} static {System.setProperty("ibarra.function.initialized","yes");}
+                    public static int sum(int a,int b){return a+b;}
+                    public static int difference(int a,int b){return a-b;}
+                    public static int length(String[] values){return values.length;}
+                    public static void none(){}
+                    public static String over(int value){return "int";}
+                    public static String over(String value){return "string";}
+                    public int instance(){return 1;} private static int hidden(){return 1;}
+                    public static int wide(String... values){return values.length;}
+                    private static class Secret{} public static int secret(Secret value){return 1;}
+                }
+                """);
+        assertEquals(0,ToolProvider.getSystemJavaCompiler().run(null,null,null,"--release","25","--module-path",
+                modulePath()+File.pathSeparator+classes,"--add-modules","demo.web","--patch-module","demo.web="+source.getParent(),"-d",classes.toString(),source.toString()));
+        Files.createDirectories(web.resolve("WEB-INF"));
+        var tld=new StringBuilder("<taglib><uri>urn:functions</uri>");
+        for(var entry:Map.of("sum","int sum(int,int)","length","int length(java.lang.String[])","none","void none()",
+                "over","java.lang.String over(int)","instance","int instance()","hidden","int hidden()","wide","int wide(java.lang.String[])").entrySet())
+            tld.append("<function><name>").append(entry.getKey()).append("</name><function-class>demo.Functions</function-class><function-signature>").append(entry.getValue()).append("</function-signature></function>");
+        Files.writeString(web.resolve("WEB-INF/functions.tld"),tld.append("</taglib>").toString());
+    }
 
     @Test void compiledElRendersFromAnApplicationJarWithoutRuntimeCompilers() throws Exception {
         prepare(false, true);

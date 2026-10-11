@@ -107,8 +107,9 @@ ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
 9. **I3 boundary** — `GenerationOptions.DEFAULT` compiles EL through Peano at
    build time. Application modules with EL require `io.vidocq.peano.api` explicitly.
    `withStartupEl(true)` remains an interpreter preview; packaging rejects it.
-   Never add an automatic runtime parsing fallback. TLD function bindings,
-   deferred attributes and other remaining Pages semantics keep I3 in progress.
+   Never add an automatic runtime parsing fallback. Fixed-arity TLD functions use
+   build-validated descriptors and generated direct static invokers. Deferred
+   attributes and other remaining Pages semantics keep I3 in progress.
    Generated page imports use lazy direct class literals from build-time metadata;
    runtime ImportHandler mutations are rejected explicitly in that mode.
 

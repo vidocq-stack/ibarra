@@ -23,4 +23,7 @@ package io.vidocq.ibarra.example;
 public final class Greeting {
     /** Returns the example greeting target. */
     public String getName() { return "Ibarra"; }
+
+    /** Formats a greeting through a build-bound TLD function. */
+    public static String welcome(String name) { return "Welcome, " + name; }
 }

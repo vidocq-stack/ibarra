@@ -69,10 +69,13 @@ public final class PageGenerator {
         private final JavaSource fragments = new JavaSource();
         private final Map<String, TagLibraryDescriptor> libraries;
         private final Map<String, PageNode.Directive> taglibBindings = new HashMap<>();
+        private record NamespaceBinding(String uri, SourceLocation location) {}
+        private final Map<String, NamespaceBinding> namespaces = new HashMap<>();
         private String parentTag = "null";
         private int fragmentDepth;
         private final List<String> expressions = new ArrayList<>();
         private final List<SourceLocation> expressionLocations = new ArrayList<>();
+        private final List<Map<String, BeanClasses.Function>> expressionFunctions = new ArrayList<>();
         private final Map<String, String> beans = new LinkedHashMap<>();
         private boolean needsFactory;
         private int serial;
@@ -121,7 +124,10 @@ public final class PageGenerator {
                     } catch (jakarta.el.ELException invalid) {
                         throw error(expressionLocations.get(i), "Cannot compile EL: " + invalid.getMessage());
                     }
-                    result.add("private static final jakarta.el.ValueExpression _jspxExpression" + i + " = new " + name + "(Object.class);\n");
+                    var functions = expressionFunctions.get(i);
+                    if (!functions.isEmpty()) functionDefinitions(result, i, functions);
+                    result.add("private static final jakarta.el.ValueExpression _jspxExpression" + i + " = new " + name + "("
+                            + (functions.isEmpty() ? "" : "_jspxFunctionContext" + i + "(), ") + "Object.class);\n");
                 }
             }
             result.add(declarations);
@@ -240,6 +246,13 @@ public final class PageGenerator {
         }
 
         private void element(PageNode.Element node) {
+            var previous = new HashMap<>(namespaces);
+            for (var attribute : node.attributes().entrySet()) if (attribute.getKey().startsWith("xmlns:"))
+                namespaces.put(attribute.getKey().substring(6), new NamespaceBinding(attribute.getValue(), node.location()));
+            try { elementContent(node); }
+            finally { namespaces.clear(); namespaces.putAll(previous); }
+        }
+        private void elementContent(PageNode.Element node) {
             String local = node.name().substring(node.name().lastIndexOf(':') + 1);
             if (!node.namespace().equals(PageParser.JSP_NAMESPACE)) {
                 String uri = node.namespace().startsWith("urn:jsptld:") ? node.namespace().substring("urn:jsptld:".length()) : node.namespace();
@@ -686,21 +699,58 @@ public final class PageGenerator {
         }
 
         private String expression(String code, SourceLocation at) {
-            var unquoted = new StringBuilder();
-            char quote = 0;
-            for (int i = 0; i < code.length(); i++) {
-                char c = code.charAt(i);
-                if (quote != 0) {
-                    unquoted.append(' ');
-                    if (c == '\\' && i + 1 < code.length()) { unquoted.append(' '); i++; }
-                    else if (c == quote) quote = 0;
-                } else if (c == '\'' || c == '"') { quote = c; unquoted.append(' '); }
-                else unquoted.append(c);
+            var functions = new TreeMap<String, BeanClasses.Function>();
+            List<io.vidocq.peano.compiler.FunctionReference> references;
+            try { references = io.vidocq.peano.compiler.ExpressionCompiler.functions(code); }
+            catch (jakarta.el.ELException invalid) { throw error(at, "Cannot compile EL: " + invalid.getMessage()); }
+            for (var reference : references) {
+                if (startupElAllowed) throw error(at, "TLD functions require build-time compilation, not interpreter preview");
+                var namespace = namespaces.get(reference.prefix()); var directive = taglibBindings.get(reference.prefix());
+                String uri = namespace != null ? namespace.uri() : directive == null ? null : directive.attributes().get("uri");
+                SourceLocation origin = namespace != null ? namespace.location() : directive == null ? at : directive.location();
+                if (uri == null) throw error(at, "Unknown function prefix: " + reference.prefix());
+                if (uri.startsWith("urn:jsptld:")) uri = uri.substring(11);
+                var library = libraries.get(uri);
+                if (library == null && !uri.contains(":")) library = libraries.get(TranslationUnit.resolve(origin.source(), uri));
+                if (library == null) throw error(at, "No build-time function library for " + uri);
+                if (library.validationRequired()) throw error(at, "Tag library validators are not supported yet");
+                var declaration = library.functions().get(reference.name());
+                if (declaration == null) throw error(at, "Unknown TLD function: " + reference.prefix() + ":" + reference.name());
+                var function = classes.function(declaration, at);
+                if (reference.argumentCount() != function.parameters().size()) throw error(at, "Function argument count does not match " + declaration.signature());
+                functions.put(reference.prefix() + ":" + reference.name(), function);
             }
-            if (unquoted.toString().matches("(?s).*\\b[\\p{L}_][\\p{L}\\p{N}_]*:[\\p{L}_][\\p{L}\\p{N}_]*\\s*\\(.*"))
-                throw error(at, "Tag-library function bindings are not supported yet");
-            int index = expressions.size(); expressions.add(code); expressionLocations.add(at);
+            int index = expressions.size(); expressions.add(code); expressionLocations.add(at); expressionFunctions.add(Map.copyOf(functions));
             return "_jspxExpression" + index + ".getValue(pageContext.getELContext())";
+        }
+        private void functionDefinitions(JavaSource source, int index, Map<String, BeanClasses.Function> functions) {
+            var names = new TreeMap<String, String>(); int ordinal = 0;
+            for (var entry : new TreeMap<>(functions).entrySet()) {
+                var function = entry.getValue(); String name = "_jspxFunction" + index + "_" + ordinal++; names.put(entry.getKey(), name);
+                var arguments = new ArrayList<String>();
+                for (int parameter = 0; parameter < function.parameters().size(); parameter++) {
+                    String type = function.parameters().get(parameter);
+                    arguments.add("(" + type + ") context.convertToType(arguments[" + parameter + "], " + type + ".class)");
+                }
+                source.add("private static final class " + name + " implements io.vidocq.peano.spi.CompiledFunctionInvoker {\n"
+                        + "private static final long serialVersionUID=1L;\npublic Object invoke(jakarta.el.ELContext context, Object[] arguments) throws Throwable {\n"
+                        + "if (arguments.length != " + function.parameters().size() + ") throw new jakarta.el.ELException(\"Invalid function argument count\");\n"
+                        + (function.returnType().equals("void") ? "" : "return ") + function.owner() + "." + function.method() + "(" + String.join(", ", arguments) + ");\n"
+                        + (function.returnType().equals("void") ? "return null;\n" : "") + "}\n}\n");
+            }
+            source.add("private static jakarta.el.ELContext _jspxFunctionContext" + index + "() { return new jakarta.el.ELContext() {\n"
+                    + "public jakarta.el.ELResolver getELResolver() { return new jakarta.el.CompositeELResolver(); }\n"
+                    + "public jakarta.el.VariableMapper getVariableMapper() { return null; }\n"
+                    + "public jakarta.el.FunctionMapper getFunctionMapper() { return new io.vidocq.peano.spi.CompiledFunctionMapper() {\n"
+                    + "public io.vidocq.peano.spi.FunctionDescriptor resolveCompiledFunction(String prefix, String name) { return switch(prefix + \":\" + name) {\n");
+            for (var entry : new TreeMap<>(functions).entrySet()) {
+                var function = entry.getValue();
+                source.add("case " + JavaSource.quote(entry.getKey()) + " -> new io.vidocq.peano.spi.FunctionDescriptor(" + function.owner() + ".class, "
+                        + "new io.vidocq.peano.spi.MethodDescriptor(" + JavaSource.quote(function.method()) + ", " + function.returnType() + ".class, new Class<?>[]{"
+                        + function.parameters().stream().map(type -> type + ".class").collect(java.util.stream.Collectors.joining(","))
+                        + "}, false, true, new java.lang.annotation.Annotation[0]), new " + names.get(entry.getKey()) + "());\n");
+            }
+            source.add("default -> null; }; }\n}; }\n}; }\n");
         }
         private String value(String raw, SourceLocation at, boolean xmlLiteral) {
             if (raw.startsWith("<%=") && raw.endsWith("%>")) {

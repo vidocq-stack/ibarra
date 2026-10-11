@@ -26,11 +26,15 @@ import java.util.Map;
 
 /** Immutable build-time TLD metadata; a missing URI still permits listener registration. */
 public record TagLibraryDescriptor(String resourcePath, String uri, List<String> listenerClasses,
-        Map<String, TagDescriptor> tags, boolean validationRequired) {
+        Map<String, TagDescriptor> tags, boolean validationRequired, Map<String, TldFunction> functions) {
+    public TagLibraryDescriptor(String resourcePath, String uri, List<String> listenerClasses, Map<String, TagDescriptor> tags, boolean validationRequired) {
+        this(resourcePath, uri, listenerClasses, tags, validationRequired, Map.of());
+    }
     public TagLibraryDescriptor(String resourcePath, String uri, List<String> listenerClasses) {
         this(resourcePath, uri, listenerClasses, Map.of(), false);
     }
     public TagLibraryDescriptor {
         Objects.requireNonNull(resourcePath); listenerClasses = List.copyOf(listenerClasses); tags = Map.copyOf(tags);
+        functions = Map.copyOf(functions);
     }
 }

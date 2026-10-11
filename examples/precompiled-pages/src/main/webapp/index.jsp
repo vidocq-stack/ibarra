@@ -9,6 +9,7 @@
 <jsp:useBean id="greeting" class="io.vidocq.ibarra.example.Greeting"/>
 <h1>Hello, <jsp:getProperty name="greeting" property="name"/></h1>
 <p>Compiled EL: ${1 + 2}; parameter: ${param.name}</p>
+<p>TLD function: ${example:welcome(param.name)}</p>
 <p>Imported nested type: ${Entry != null}</p>
 <%@ include file="footer.jspf" %>
 </jsp:body>

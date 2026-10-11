@@ -39,12 +39,26 @@ public final class TldParser {
         String uri = null;
         var listeners = new ArrayList<String>();
         var tags = new LinkedHashMap<String, TagDescriptor>();
+        var functions = new LinkedHashMap<String, TldFunction>();
         boolean validationRequired = false;
         for (var child : DeploymentXml.children(root)) {
             String name = child.getLocalName();
-            if (!Set.of("uri", "listener", "tag", "tag-file", "validator").contains(name)) continue;
+            if (!Set.of("uri", "listener", "tag", "tag-file", "validator", "function").contains(name)) continue;
             requireNamespace(child, namespace, at);
-            if (name.equals("tag") || name.equals("tag-file")) {
+            if (name.equals("function")) {
+                var values = new LinkedHashMap<String, String>();
+                for (var field : DeploymentXml.children(child)) {
+                    requireNamespace(field, namespace, at);
+                    String key = field.getLocalName();
+                    if (Set.of("description", "display-name", "icon", "example", "function-extension").contains(key)) continue;
+                    if (!Set.of("name", "function-class", "function-signature").contains(key) || values.putIfAbsent(key, field.getTextContent().trim()) != null)
+                        throw new PageParseException(at, "Invalid function field: " + key);
+                }
+                String alias=values.get("name"), type=values.get("function-class"), signature=values.get("function-signature");
+                if (alias==null || !SourceVersion.isIdentifier(alias) || type==null || !SourceVersion.isName(type) || signature==null || signature.isBlank())
+                    throw new PageParseException(at, "Missing or invalid TLD function declaration");
+                if (functions.putIfAbsent(alias, new TldFunction(alias, type, signature)) != null) throw new PageParseException(at, "Duplicate function: " + alias);
+            } else if (name.equals("tag") || name.equals("tag-file")) {
                 var tag = tag(child, namespace, at, name.equals("tag-file"));
                 if (tags.putIfAbsent(tag.name(), tag) != null) throw new PageParseException(at, "Duplicate tag: " + tag.name());
             } else if (name.equals("validator")) {
@@ -68,7 +82,7 @@ public final class TldParser {
                 listeners.add(type);
             }
         }
-        return new TagLibraryDescriptor(path, uri, listeners, tags, validationRequired);
+        return new TagLibraryDescriptor(path, uri, listeners, tags, validationRequired, functions);
     }
 
     private TagDescriptor tag(Element element, String namespace, SourceLocation at, boolean tagFile) {

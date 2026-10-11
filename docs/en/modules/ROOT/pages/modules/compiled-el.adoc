@@ -83,18 +83,64 @@ member syntax is not accepted by the page directive's type/package import gramma
 The handwritten fallback's abstract/interface restriction in Jakarta ImportHandler
 is tracked separately in BUG.md; generated direct bindings are unaffected.
 
+== TLD functions
+
+Declare functions in a discovered TLD, alongside tags or in a function-only library:
+
+[source,xml]
+----
+<function>
+  <name>welcome</name>
+  <function-class>example.Functions</function-class>
+  <function-signature>java.lang.String welcome(java.lang.String)</function-signature>
+</function>
+----
+
+A standard page binds the prefix with a taglib directive and calls
+`${example:welcome(param.name)}`. JSPX binds it through the library URI or
+`urn:jsptld:` resource namespace. XML prefix bindings follow lexical scope;
+included relative declarations retain their own resource origin.
+
+Peano's expression AST exposes every qualified call and argument count. Ibarra
+looks up the TLD and inspects class files without initializing the owner. Invoked
+methods must be public static with exactly the declared parameter and return
+types. Fixed-arity overloads, inherited public static methods, primitives, arrays,
+public nested types and void returns are supported. The owner needs no constructor
+and may be abstract. Varargs methods, generic signatures, missing bindings and
+wrong arities fail translation. Javac checks signature accessibility from the
+application module before staged output is published.
+
+Each binding supplies Peano's `CompiledFunctionMapper` with an immutable
+`FunctionDescriptor` and a serializable generated `CompiledFunctionInvoker`.
+The invoker calls the method directly, applying `ELContext.convertToType` to each
+argument using the evaluation context. Void calls return null. Expression fields
+retain signature metadata and stateless callbacks, never requests or creation
+contexts. Runtime evaluation needs neither reflective Method lookup, accessor
+registration, TLD XML nor class-name loading. Unprefixed calls keep their usual EL
+resolution; these bindings apply to qualified TLD functions.
+
+The catalogue discovers WEB-INF resources and library resources, plus explicit
+web.xml aliases or supplied generation metadata. A page-relative TLD outside
+those roots needs an explicit mapping (BUG.md IBARRA-068). Invoked libraries with
+TagLibraryValidator metadata are rejected, including function-only libraries.
+Interpreter preview does not support these descriptor-only bindings and fails
+explicitly. Deferred attributes and runtime function-map mutation remain outside
+this implementation.
+
 == Remaining work and proof
 
 Immediate template/action/tag EL uses the delivered compiler, including scopes,
-map/list navigation, operators, calls and lambdas. TLD function
-bindings and deferred attributes remain follow-up work. Prefixed functions fail
-translation before initialization; they require generated creation-time bindings.
+map/list navigation, operators, calls, lambdas and fixed-arity TLD functions.
+Deferred attributes remain follow-up work.
 Pages-specific VariableMapper capture is not added by class-only constructors.
 I3 remains in progress; the official Pages TCK has not been run.
 
 A packaged named-module fixture renders with both compilers excluded and a
 factory that rejects every runtime expression-creation call. HTTP JSP/JSPX tests
-render repeated request values and private beans with Peano reflection denied.
+render repeated request values, TLD functions and private beans with Peano reflection denied.
 Tests cover bytecode immutability, collisions, diagnostics, required module reads
 and incremental cleanup. The independent Maven example compiles EL through the
-actual precompile goal and explicitly requires Peano API.
+actual precompile goal, calls a TLD function and explicitly requires Peano API.
+The local Ibarra reactor passes 234 tests. Peano's compatible prerequisite passes
+291 tests and 361/361 official EL TCK tests. The official Pages TCK remains unrun;
+these unit and integration results are not Pages certification.

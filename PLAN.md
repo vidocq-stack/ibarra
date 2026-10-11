@@ -230,7 +230,7 @@ the runtime's packaging goal, after I8.
 | I0 | Scaffold: reactor, `ibarra-core` module, `ibarra-tck` skeleton, docs, this plan | `./mvnw -ntp install` green (this commit) |
 | I1 | Runtime API: `JspFactory`, `PageContext`, `JspWriter` / `BodyContent` buffering, scopes, error pages — driven by hand-written `HttpJspPage` fixtures | implemented: unit tests against Foy-free servlet doubles, clean install green |
 | I2 | `ibarra-compiler` parser: standard + XML syntax, directives, scripting, template text, page model | implemented: 36 parser corpus tests, clean install green |
-| I3 | Generator: Java source for pages, standard actions, compiled EL and `jsp-config` property groups | in progress: build-time Peano EL, generated accessors and static page imports render; functions/deferred attributes/runtime import changes and remaining semantics pending |
+| I3 | Generator: Java source for pages, standard actions, compiled EL and `jsp-config` property groups | in progress: build-time Peano EL, generated accessors, static page imports and fixed-arity TLD functions render; deferred attributes/runtime import changes and remaining semantics pending |
 | I4 | `ibarra-maven-plugin` precompile goal + page index; extend `ibarra-api` SPI | initial implementation: independent application JAR precompiled and rendered; web fragments and broader configuration pending |
 | I5 | `ibarra-foy` + Foy's JSP-engine SPI (Foy-side PR), `*.jsp` mapping, `addJspFile`, `getJspConfigDescriptor`, TLD listeners | initial HTTP implementation with build-generated TLD listeners; broader deployment/TCK coverage pending |
 | I6 | Custom tags: TLD parsing, classic + simple handlers, scripting variables, validators | initial rendering: Tag/IterationTag/BodyTag/TryCatchFinally, SimpleTag bodies, named scalar/fragment attributes, explicit bodies and unqualified dynamic attributes; variables/validators/full metadata pending |
@@ -338,8 +338,17 @@ encoding is distinct from configuration declarations. UTF-8/16/32 BOMs are
 removed, malformed bytes fail without replacement, and named encoding conflicts
 retain resource coordinates. Source snapshots and options equality are by value.
 
-Remaining I3 work: runtime ImportHandler mutations
-and function bindings, atomic
+TLD functions are bound at build time from immutable catalogue metadata. Peano
+AST references retain each call's arity; Ibarra validates public static signatures
+from class files and emits direct invokers using the request EL context for
+coercion. Standard directives, relative included declarations and lexically scoped
+JSPX namespaces share the same binding path. Named-module HTTP tests render
+functions in template and fragment/tag attributes with reflection denied and both
+compilers excluded. Local reactor proof: 234 tests; the independent Maven example
+also exercises a TLD function. Peano's prerequisite passes 291 tests and all
+361 official EL TCK tests; those results do not certify Jakarta Pages.
+
+Remaining I3 work: runtime ImportHandler mutations, deferred attributes, atomic
 shared-scope bean creation, broader output/attribute/translation validation,
 broader namespace/XML-view validation. Unsupported constructs
 fail explicitly. New session/application beans are rejected; existing typed

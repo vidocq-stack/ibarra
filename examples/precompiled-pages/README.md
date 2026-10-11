@@ -1,6 +1,6 @@
 # Precompiled pages example
 
-This independent application module requires only `ibarra-api`, exports no
+This independent application module requires `ibarra-api` and `peano-api`, exports no
 packages, and uses the `ibarra-maven-plugin:precompile` goal at `process-classes`.
 The generated page index is registered in the compiled Java module descriptor.
 The application JAR contains compiled pages, not the compiler or generated Java.
@@ -8,6 +8,13 @@ Its private application package also contains a SimpleTag handler described by
 WEB-INF/example.tld. The page invokes it through direct construction/setters and
 named scalar/fragment attributes and an explicit body; no package exports or opens
 are needed.
+
+The same TLD declares the fixed-arity `example:welcome` function. Its public
+static method is validated from class files and invoked directly by generated
+code; it requires no accessor provider, exports or runtime TLD parsing.
+`${example:welcome(param.name)}` uses the current request parameter.
+
+Install the [pinned Peano prerequisite](../../docs/peano-prerequisite.md) first.
 
 Run from the Ibarra checkout root with Java 25:
 

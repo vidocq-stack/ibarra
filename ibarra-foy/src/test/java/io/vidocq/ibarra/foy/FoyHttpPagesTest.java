@@ -70,6 +70,9 @@ class FoyHttpPagesTest {
                 assertEquals("B:Direct:4", get(client, base + "/compiled-el.jspx?who=B").body());
                 assertEquals("imported:1:method:200method:200!", get(client, base + "/imports.jspx").body());
                 assertEquals("imported", get(client, base + "/imports.jsp").body());
+                assertEquals("hello-A:method", get(client, base + "/functions.jsp?who=A").body());
+                assertEquals("hello-A:1:methodmethod!", get(client, base + "/functions.jspx?who=A").body());
+                assertEquals("hello-B:1:methodmethod!", get(client, base + "/functions.jspx?who=B").body());
                 assertEquals("<fragment>fragmentBODYBODY", get(client, base + "/named-tags.jspx").body());
                 assertEquals("<b title=\"&quot;&amp;\">label</b>:1:BB!", get(client, base + "/static-named-tags.jspx").body());
                 assertEquals(404, get(client, base + "/missing.jsp").statusCode());
@@ -91,7 +94,7 @@ class FoyHttpPagesTest {
         Path profile = source.resolve("app/Profile.java"), accessors = source.resolve("app/Accessors.java"), constants = source.resolve("app/Constants.java");
         Files.createDirectories(profile.getParent());
         Files.writeString(profile, "package app; public class Profile { public String getName() { return \"Direct\"; } }");
-        Files.writeString(constants, "package app; public class Constants { public static final String TEXT=text(); private static String text(){System.setProperty(\"ibarra.import.initialized\",\"yes\");return \"imported\";} public static String caption(){return \"method\";} }");
+        Files.writeString(constants, "package app; public class Constants { private Constants(){} public static final String TEXT=text(); private static String text(){System.setProperty(\"ibarra.import.initialized\",\"yes\");return \"imported\";} public static String caption(){return \"method\";} public static String greet(String value){return \"hello-\"+value;} }");
         Files.writeString(accessors, """
                 package app;
                 public class Accessors implements io.vidocq.peano.spi.AccessorProvider {
@@ -192,6 +195,9 @@ class FoyHttpPagesTest {
         Files.writeString(web.resolve("imports.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false' import='app.Constants'/><t:wrap label='${Constants.TEXT}'><jsp:body>${Constants.caption()}:${HttpServletResponse != null ? '200' : 'bad'}</jsp:body></t:wrap></jsp:root>");
         Files.writeString(web.resolve("imports.jspf"), "<%@ page import='app.Constants' %>");
         Files.writeString(web.resolve("imports.jsp"), "<%@ page session='false' %><%@ include file='imports.jspf' %>${Constants.TEXT}");
+        Files.writeString(web.resolve("WEB-INF/functions.tld"), "<taglib><uri>urn:fn</uri><function><name>greet</name><function-class>app.Constants</function-class><function-signature>java.lang.String greet(java.lang.String)</function-signature></function><function><name>caption</name><function-class>app.Constants</function-class><function-signature>java.lang.String caption()</function-signature></function></taglib>");
+        Files.writeString(web.resolve("functions.jsp"), "<%@ page session='false' %><%@ taglib prefix='f' uri='urn:fn' %>${f:greet(param.who)}:${f:caption()}");
+        Files.writeString(web.resolve("functions.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' xmlns:f='urn:jsptld:urn:fn' version='4.0'><jsp:directive.page session='false'/><t:wrap label='${f:greet(param.who)}'><jsp:body>${f:caption()}</jsp:body></t:wrap></jsp:root>");
         Files.writeString(web.resolve("tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false'/><t:wrap label='xml'><t:upper>body</t:upper></t:wrap></jsp:root>");
         Files.writeString(web.resolve("named-tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false'/><t:fragment><jsp:attribute name='piece'> fragment </jsp:attribute><jsp:body><t:upper><jsp:body>body</jsp:body></t:upper></jsp:body></t:fragment></jsp:root>");
         Files.writeString(web.resolve("static-named-tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false'/><t:staticWrap><jsp:attribute name='label'><b title='&quot;&amp;'><jsp:text>label</jsp:text></b></jsp:attribute><jsp:body>B</jsp:body></t:staticWrap></jsp:root>");

@@ -1,5 +1,26 @@
 # BUG.md — Ibarra
 
+## IBARRA-068 · 2026-10-11 · Direct TLD paths outside discovery need an explicit catalogue alias
+
+- Symptom: a page-relative TLD under /one/lib.tld cannot resolve from its taglib
+  declaration unless supplied through web.xml or the generation catalogue.
+- Minimal repro: the relative function-binding fixture with /one and /two TLDs
+  outside WEB-INF and no explicit web.xml mapping fails library lookup.
+- Cause: implicit discovery covers WEB-INF and named-module META-INF resources;
+  direct undeclared resources are not separately discovered from page declarations.
+- Status: OPEN; explicit aliases/supplied metadata work. Direct-resource discovery
+  must also retain correct TLD listener reachability before it is broadened.
+
+## IBARRA-067 · 2026-10-11 · Void function signatures escape class-file type conversion
+
+- Symptom: a TLD function returning void throws StringIndexOutOfBoundsException
+  while translating an otherwise valid expression.
+- Minimal repro: `PagePrecompilerTest.tldFunctionsRenderThroughDirectCallsWithoutRuntimeExpressionCreation`.
+- Cause: bean property conversion never needed void and assumes all unrecognized
+  descriptors are reference types; nested function types also need binary names.
+- Status: FIXED; recognize void and resolve function array/member type names from
+  their class-file descriptors before generating direct Java calls.
+
 ## IBARRA-066 · 2026-10-11 · Standard ImportHandler rejects abstract/interface page types
 
 - Symptom: a handwritten page's standard ImportHandler throws ELException when

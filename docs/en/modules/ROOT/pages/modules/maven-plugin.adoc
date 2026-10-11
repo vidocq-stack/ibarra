@@ -56,9 +56,10 @@ to share path validation; it introduces no third-party runtime implementation.
 This is initial I4 packaging. Default generation compiles EL through Peano into
 the application module. Add `peano-api` and `requires io.vidocq.peano.api` when
 pages use EL. Startup interpretation cannot be enabled by packaging.
-Tag files, TLD handlers, `jsp-config/taglib`, web-fragment merging, custom page
-extension mappings, complete deployment-descriptor validation and Foy deployment
-remain pending. DOCTYPE/entity declarations are rejected and external schemas are
+Initial classic/simple TLD handlers, fixed-arity TLD functions, root
+`jsp-config/taglib` mappings and Foy deployment are implemented. Tag files,
+web-fragment merging and complete deployment-descriptor validation remain pending.
+DOCTYPE/entity declarations are rejected and external schemas are
 not fetched. Supported descriptor namespaces are Jakarta EE, Java EE/J2EE and the
 unnamespaced form; foreign JSP configuration namespaces are rejected.
 

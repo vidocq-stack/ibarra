@@ -63,8 +63,8 @@ valid. Two pages in the same application can use different policies.
 
 Scope, parameter, header, cookie and initialization-parameter implicit objects
 are implemented and exercised with Peano. Headers use case-insensitive lookup.
-Page type/package imports are generated at build time; TLD function bindings and
-runtime import mutations remain open. Some API tests also use a concrete
+Page type/package imports and fixed-arity TLD function bindings are generated at
+build time; runtime import mutations remain open. Some API tests also use a concrete
 factory double to isolate lifecycle semantics.
 
 == Translation pipeline (planned)
@@ -146,7 +146,8 @@ ValueExpressions, evaluated against each request's EL context. Provider resolver
 hooks retain generated accessor dispatch in closed application modules. The old
 interpreter path requires `withStartupEl(true)` explicitly and is unavailable in
 production packaging. Page imports resolve lazily through generated class literals.
-TLD functions, runtime import changes, deferred attributes, atomic shared-scope
+TLD functions use immutable Peano descriptors and generated direct static invokers.
+Runtime import changes, deferred attributes, atomic shared-scope
 bean creation and full semantic validation remain open.
 Mixed-syntax includes/preludes/codas structure each file before expanding the
 translation unit, then apply the global EL policy. Source syntax remains available
