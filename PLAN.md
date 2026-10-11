@@ -344,7 +344,7 @@ from class files and emits direct invokers using the request EL context for
 coercion. Standard directives, relative included declarations and lexically scoped
 JSPX namespaces share the same binding path. Named-module HTTP tests render
 functions in template and fragment/tag attributes with reflection denied and both
-compilers excluded. Local reactor proof: 240 tests; the independent Maven example
+compilers excluded. Local reactor proof: 249 tests; the independent Maven example
 also exercises a TLD function. Peano's prerequisite passes 303 tests and all
 361 official EL TCK tests; those results do not certify Jakarta Pages.
 
@@ -359,6 +359,16 @@ Remaining I3 work: runtime ImportHandler mutations, deferred attributes,
 broader output/attribute/translation validation,
 broader namespace/XML-view validation. Unsupported constructs
 fail explicitly. The official TCK has not been run.
+
+Direct TLD discovery is implemented from immutable raw-parse references, retaining
+include/prelude/coda origins and namespace declarations removed by normalization.
+URI aliases and physical resources are separate: standard declarations retain
+alias precedence, forced XML paths bypass aliases, and plain XML namespaces do
+not gain bindings from another page's direct resource. Explicit files may be
+extensionless; JARs use META-INF/taglib.tld. Referenced listeners join the index
+without initialization. Named-attribute/text wrappers retain local bindings and
+source trimming, including explicit-body wrappers. IBARRA-068 and IBARRA-071
+through IBARRA-075 are fixed.
 
 ## Initial I4 implementation
 

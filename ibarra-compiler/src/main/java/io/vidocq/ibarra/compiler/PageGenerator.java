@@ -41,7 +41,7 @@ public final class PageGenerator {
         if (!SourceVersion.isName(className) || !className.contains("."))
             throw new IllegalArgumentException("Generated class needs a qualified Java name: " + className);
         var unit = new TranslationUnit(options).read(path, source);
-        return new Generator(unit.page(), className, unit.properties(), unit.sourceSyntaxes(), unit.responseEncoding(), options).generate();
+        return generate(unit, className, options);
     }
 
     /** Detects and strictly decodes the requested file's byte encoding before translation. */
@@ -49,7 +49,14 @@ public final class PageGenerator {
         if (!SourceVersion.isName(className) || !className.contains("."))
             throw new IllegalArgumentException("Generated class needs a qualified Java name: " + className);
         var unit = new TranslationUnit(options).read(path, source);
-        return new Generator(unit.page(), className, unit.properties(), unit.sourceSyntaxes(), unit.responseEncoding(), options).generate();
+        return generate(unit, className, options);
+    }
+
+    GeneratedPage generate(TranslationUnit.Result unit, String className, GenerationOptions options) {
+        return generate(unit, className, options, TldReferences.discover(List.of(unit), options));
+    }
+    GeneratedPage generate(TranslationUnit.Result unit, String className, GenerationOptions options, TldReferences.Resolved resolved) {
+        return new Generator(unit.page(), className, unit.properties(), unit.sourceSyntaxes(), unit.responseEncoding(), options, resolved).generate();
     }
 
     private final class Generator {
@@ -67,7 +74,7 @@ public final class PageGenerator {
         private final JavaSource declarations = new JavaSource();
         private JavaSource body = new JavaSource();
         private final JavaSource fragments = new JavaSource();
-        private final Map<String, TagLibraryDescriptor> libraries;
+        private final TldReferences.Resolved resolvedLibraries;
         private final Map<String, PageNode.Directive> taglibBindings = new HashMap<>();
         private record NamespaceBinding(String uri, SourceLocation location) {}
         private final Map<String, NamespaceBinding> namespaces = new HashMap<>();
@@ -81,12 +88,12 @@ public final class PageGenerator {
         private int serial;
         private final boolean startupElAllowed;
 
-        Generator(Page page, String className, Map<String, String> properties, Map<String, Page.Syntax> sourceSyntaxes, String responseEncoding, GenerationOptions options) {
+        Generator(Page page, String className, Map<String, String> properties, Map<String, Page.Syntax> sourceSyntaxes, String responseEncoding, GenerationOptions options, TldReferences.Resolved resolved) {
             this.page = page; this.className = className;
             this.sourceSyntaxes = sourceSyntaxes;
             this.responseEncoding = responseEncoding;
             this.startupElAllowed = options.allowStartupEl();
-            this.libraries = options.tagLibraries();
+            this.resolvedLibraries = resolved;
             copy(properties, "default-content-type", "contentType");
             copy(properties, "buffer", "buffer");
             copy(properties, "page-encoding", "pageEncoding");
@@ -246,20 +253,30 @@ public final class PageGenerator {
         }
 
         private void element(PageNode.Element node) {
-            var previous = new HashMap<>(namespaces);
-            for (var attribute : node.attributes().entrySet()) if (attribute.getKey().startsWith("xmlns:"))
-                namespaces.put(attribute.getKey().substring(6), new NamespaceBinding(attribute.getValue(), node.location()));
+            var previous = enterNamespaces(node);
             try { elementContent(node); }
             finally { namespaces.clear(); namespaces.putAll(previous); }
+        }
+        private Map<String, NamespaceBinding> enterNamespaces(PageNode.Element node) {
+            var previous = new HashMap<>(namespaces);
+            for (var attribute : node.attributes().entrySet()) {
+                if (attribute.getKey().startsWith("xmlns:"))
+                    namespaces.put(attribute.getKey().substring(6), new NamespaceBinding(attribute.getValue(), node.location()));
+                else if (attribute.getKey().equals("xmlns"))
+                    namespaces.put("", new NamespaceBinding(attribute.getValue(), node.location()));
+            }
+            return previous;
         }
         private void elementContent(PageNode.Element node) {
             String local = node.name().substring(node.name().lastIndexOf(':') + 1);
             if (!node.namespace().equals(PageParser.JSP_NAMESPACE)) {
-                String uri = node.namespace().startsWith("urn:jsptld:") ? node.namespace().substring("urn:jsptld:".length()) : node.namespace();
-                var library = libraries.get(uri);
+                String uri = node.namespace();
                 var binding = taglibBindings.get(node.name().substring(0, Math.max(0, node.name().indexOf(':'))));
-                String origin = binding != null && uri.equals(binding.attributes().get("uri")) ? binding.location().source() : node.location().source();
-                if (library == null && !uri.contains(":")) library = libraries.get(TranslationUnit.resolve(origin, uri));
+                boolean standard = sourceSyntaxes.get(node.location().source()) == Page.Syntax.STANDARD;
+                var namespace = namespaces.get(node.name().substring(0, Math.max(0, node.name().indexOf(':'))));
+                SourceLocation origin = standard && binding != null && uri.equals(binding.attributes().get("uri")) ? binding.location()
+                        : namespace != null && uri.equals(namespace.uri()) ? namespace.location() : node.location();
+                var library = resolvedLibraries.resolve(uri, origin, standard);
                 if (library != null) { customTag(node, library); return; }
                 if (sourceSyntaxes.get(node.location().source()) == Page.Syntax.STANDARD || node.namespace().startsWith("urn:jsptag")
                         || node.namespace().startsWith("urn:jsptld") || node.namespace().startsWith("jakarta.tags."))
@@ -332,6 +349,8 @@ public final class PageGenerator {
             }
             for (var supplied : invocation.attributes().entrySet()) {
                 var named = supplied.getValue();
+                var previousNamespaces = enterNamespaces(named);
+                try {
                 var attribute = tag.attributes().get(supplied.getKey());
                 var content = namedContent(named);
                 if (attribute == null) {
@@ -349,6 +368,7 @@ public final class PageGenerator {
                     }
                     body.add(handler + "." + setter.name() + "((" + setter.type() + ") (" + argument + "));\n", named.location());
                 }
+                } finally { namespaces.clear(); namespaces.putAll(previousNamespaces); }
             }
             String previousParent = parentTag; parentTag = handler;
             if (kind.simple()) {
@@ -418,32 +438,38 @@ public final class PageGenerator {
                     if (bodySeen) throw error(child.location(), "Duplicate jsp:body");
                     bodySeen = true;
                     var wrapper = (PageNode.Element) child;
-                    allowed(wrapper, Set.of()); content.addAll(wrapper.children());
+                    allowed(wrapper, Set.of());
+                    if (!wrapper.children().isEmpty()) content.add(new PageNode.Element("jsp:text", PageParser.JSP_NAMESPACE,
+                            wrapper.attributes(), wrapper.children(), wrapper.selfClosing(), wrapper.location()));
                 } else throw error(child.location(), "Named attributes and explicit bodies require jsp:body around content");
             }
             return new TagInvocation(named, content);
         }
         private List<PageNode> namedContent(PageNode.Element attribute) {
-            var children = new ArrayList<PageNode>();
-            for (var child : attribute.children()) {
-                if (action(child, "text")) children.addAll(((PageNode.Element) child).children());
-                else children.add(child);
-            }
+            var children = new ArrayList<>(attribute.children());
             if (boolValue(attribute.attributes().getOrDefault("trim", "true"), attribute.location()) && !children.isEmpty()) {
-                for (int index = 0; index < children.size() && children.get(index) instanceof PageNode.Text text; index++) {
-                    int start = 0;
-                    while (start < text.value().length() && xmlSpace(text.value().charAt(start))) start++;
-                    children.set(index, new PageNode.Text(text.value().substring(start), text.location().advance(text.value().substring(0, start))));
-                    if (start < text.value().length()) break;
-                }
-                for (int index = children.size() - 1; index >= 0 && children.get(index) instanceof PageNode.Text text; index--) {
-                    int end = text.value().length();
-                    while (end > 0 && xmlSpace(text.value().charAt(end - 1))) end--;
-                    children.set(index, new PageNode.Text(text.value().substring(0, end), text.location()));
-                    if (end > 0) break;
-                }
+                trimNamed(children, true); trimNamed(children, false);
             }
             return children;
+        }
+        private boolean trimNamed(List<PageNode> children, boolean leading) {
+            for (int index = leading ? 0 : children.size() - 1; index >= 0 && index < children.size(); index += leading ? 1 : -1) {
+                var node = children.get(index);
+                if (node instanceof PageNode.Text text) {
+                    int start = 0, end = text.value().length();
+                    if (leading) while (start < end && xmlSpace(text.value().charAt(start))) start++;
+                    else while (end > start && xmlSpace(text.value().charAt(end - 1))) end--;
+                    children.set(index, new PageNode.Text(text.value().substring(start, end), text.location().advance(text.value().substring(0, start))));
+                    if (start != end) return false;
+                } else if (action(node, "text")) {
+                    var element = (PageNode.Element) node;
+                    var content = new ArrayList<>(element.children());
+                    boolean exhausted = trimNamed(content, leading);
+                    children.set(index, new PageNode.Element(element.name(), element.namespace(), element.attributes(), content, element.selfClosing(), element.location()));
+                    if (!exhausted) return false;
+                } else return false;
+            }
+            return true;
         }
         private String templateLiteral(List<PageNode> nodes) {
             var literal = new StringBuilder();
@@ -452,7 +478,8 @@ public final class PageGenerator {
                 else if (action(node, "text")) literal.append(templateLiteral(((PageNode.Element) node).children()));
                 else if (node instanceof PageNode.Element element && sourceSyntaxes.get(element.location().source()) == Page.Syntax.XML
                         && !element.namespace().equals(PageParser.JSP_NAMESPACE) && !element.namespace().startsWith("urn:jsp")
-                        && !element.namespace().startsWith("jakarta.tags.") && !libraries.containsKey(element.namespace())) {
+                        && !element.namespace().startsWith("jakarta.tags.")
+                        && resolvedLibraries.resolve(element.namespace(), element.location(), false) == null) {
                     literal.append('<').append(element.name());
                     for (var entry : element.attributes().entrySet()) {
                         var normalized = new PageNormalizer(Page.Syntax.XML,
@@ -724,9 +751,7 @@ public final class PageGenerator {
                 String uri = namespace != null ? namespace.uri() : directive == null ? null : directive.attributes().get("uri");
                 SourceLocation origin = namespace != null ? namespace.location() : directive == null ? at : directive.location();
                 if (uri == null) throw error(at, "Unknown function prefix: " + reference.prefix());
-                if (uri.startsWith("urn:jsptld:")) uri = uri.substring(11);
-                var library = libraries.get(uri);
-                if (library == null && !uri.contains(":")) library = libraries.get(TranslationUnit.resolve(origin.source(), uri));
+                var library = resolvedLibraries.resolve(uri, origin, namespace == null && directive != null);
                 if (library == null) throw error(at, "No build-time function library for " + uri);
                 if (library.validationRequired()) throw error(at, "Tag library validators are not supported yet");
                 var declaration = library.functions().get(reference.name());

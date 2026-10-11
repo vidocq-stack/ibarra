@@ -79,7 +79,7 @@ class TagGenerationTest {
     @Test void staticXmlNamedAttributesRejectActionsAndActiveExpressions() throws Exception {
         prepare();
         for (String content : List.of("<x:spaced/>", "<b title='${1}'/>", "${1}")) {
-            String xml = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:x='urn:jsptld:urn:test' version='4.0'><x:echo><jsp:attribute name='label'>" + content + "</jsp:attribute></x:echo></jsp:root>";
+            String xml = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:x='urn:test' version='4.0'><x:echo><jsp:attribute name='label'>" + content + "</jsp:attribute></x:echo></jsp:root>";
             assertThrows(PageParseException.class, () -> generator().generate("/tags.jspx", xml,
                     "fixture.GeneratedPage", options()), content);
         }

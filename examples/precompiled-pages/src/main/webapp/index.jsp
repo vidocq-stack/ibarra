@@ -1,5 +1,5 @@
 <!doctype html>
-<%@ taglib prefix="example" uri="urn:ibarra:example" %>
+<%@ taglib prefix="example" uri="tlds/example.tld" %>
 <%@ page import="java.util.Map.Entry" %>
 <html><head><title>Ibarra precompiled pages</title></head><body>
 <example:frame>

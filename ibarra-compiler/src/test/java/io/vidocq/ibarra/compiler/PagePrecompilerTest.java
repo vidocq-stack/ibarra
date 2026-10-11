@@ -58,12 +58,12 @@ class PagePrecompilerTest {
     }
     @Test void relativeFunctionBindingsCaptureEachIncludeDeclaration() throws Exception {
         prepareFunctions();
-        Files.createDirectories(web.resolve("WEB-INF/one")); Files.createDirectories(web.resolve("WEB-INF/two"));
+        Files.createDirectories(web.resolve("one")); Files.createDirectories(web.resolve("two"));
         String first=Files.readString(web.resolve("WEB-INF/functions.tld"));
-        Files.writeString(web.resolve("WEB-INF/one/lib.tld"),first); Files.writeString(web.resolve("WEB-INF/two/lib.tld"),first.replace("int sum(int,int)","int difference(int,int)"));
-        Files.writeString(web.resolve("WEB-INF/one/bind.jspf"),"<%@ taglib prefix='f' uri='lib.tld' %>${f:sum(4,2)}");
-        Files.writeString(web.resolve("WEB-INF/two/bind.jspf"),"<%@ taglib prefix='f' uri='lib.tld' %>${f:sum(4,2)}");
-        Files.writeString(web.resolve("index.jsp"),"<%@ page session='false' %><%@ include file='WEB-INF/one/bind.jspf' %>|<%@ include file='WEB-INF/two/bind.jspf' %>");
+        Files.writeString(web.resolve("one/lib.tld"),first); Files.writeString(web.resolve("two/lib.tld"),first.replace("int sum(int,int)","int difference(int,int)"));
+        Files.writeString(web.resolve("one/bind.jspf"),"<%@ taglib prefix='f' uri='lib.tld' %>${f:sum(4,2)}");
+        Files.writeString(web.resolve("two/bind.jspf"),"<%@ taglib prefix='f' uri='lib.tld' %>${f:sum(4,2)}");
+        Files.writeString(web.resolve("index.jsp"),"<%@ page session='false' %><%@ include file='one/bind.jspf' %>|<%@ include file='two/bind.jspf' %>");
         precompile(); Path jar=directory.resolve("relative-functions.jar"); jar(classes,jar); assertEquals("6|2",render(jar,true));
     }
     @Test void xmlFunctionNamespacesRestoreTheirLexicalScope() throws Exception {
@@ -71,7 +71,7 @@ class PagePrecompilerTest {
         String second=Files.readString(web.resolve("WEB-INF/functions.tld")).replace("urn:functions","urn:other").replace("int sum(int,int)","int difference(int,int)");
         Files.writeString(web.resolve("WEB-INF/other.tld"),second);
         Files.writeString(web.resolve("index.jsp"),"<%@ page session='false' %><%@ include file='functions.jspx' %>");
-        Files.writeString(web.resolve("functions.jspx"),"<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:f='urn:jsptld:urn:functions' version='4.0'><jsp:text>${f:sum(4,2)}|</jsp:text><jsp:text xmlns:f='urn:jsptld:urn:other'>${f:sum(4,2)}|</jsp:text><jsp:text>${f:sum(4,2)}</jsp:text></jsp:root>");
+        Files.writeString(web.resolve("functions.jspx"),"<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:f='urn:functions' version='4.0'><jsp:text>${f:sum(4,2)}|</jsp:text><jsp:text xmlns:f='urn:other'>${f:sum(4,2)}|</jsp:text><jsp:text>${f:sum(4,2)}</jsp:text></jsp:root>");
         precompile(); Path jar=directory.resolve("xml-functions.jar"); jar(classes,jar); assertEquals("6|2|6",render(jar,true));
     }
     @Test void directFunctionCallsEnforceSignatureTypeVisibility() throws Exception {
@@ -152,6 +152,147 @@ class PagePrecompilerTest {
         Files.writeString(web.resolve("startup.tld"), "<taglib><listener><listener-class>demo.Listener</listener-class></listener></taglib>");
         Files.writeString(web.resolve("WEB-INF/web.xml"), "<web-app><jsp-config><taglib><taglib-uri>urn:startup</taglib-uri><taglib-location>/startup.tld</taglib-location></taglib></jsp-config></web-app>");
         assertNotNull(precompile().indexClass()); assertEquals("demo.Listener", listenerNames());
+    }
+
+    @Test
+    void directlyDeclaredLibrariesRegisterListenersAndIgnoreUnreferencedExternalTlds() throws Exception {
+        prepare(false); listenerClass();
+        Files.createDirectories(web.resolve("outside"));
+        Files.writeString(web.resolve("outside/listeners.tld"), "<taglib><listener><listener-class>demo.Listener</listener-class></listener><listener><listener-class>demo.Listener$Nested</listener-class></listener></taglib>");
+        Files.writeString(web.resolve("outside/ignored.tld"), "malformed unrelated external descriptor");
+        Files.writeString(web.resolve("index.jsp"), "<%@ page session='false' %><%@ taglib prefix='l' uri='/outside/listeners.tld' %>page");
+        precompile(); assertEquals("demo.Listenerdemo.Listener$Nested", listenerNames());
+        Files.writeString(web.resolve("index.jsp"), "<%@ page session='false' %>page");
+        precompile(); assertEquals("", listenerNames());
+    }
+
+    @Test
+    void directJarReferencesFindListenersAndMissingResourcesPreservePublishedOutput() throws Exception {
+        prepare(false); listenerClass();
+        Path jar = web.resolve("external.jar");
+        try (var out = new JarOutputStream(Files.newOutputStream(jar))) {
+            out.putNextEntry(new JarEntry("META-INF/taglib.tld"));
+            out.write("<taglib><listener><listener-class>demo.Listener</listener-class></listener></taglib>".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            out.closeEntry();
+        }
+        Files.writeString(web.resolve("index.jsp"), "<%@ page session='false' %><%@ taglib prefix='l' uri='external.jar' %>page");
+        precompile(); assertEquals("demo.Listener", listenerNames());
+        byte[] descriptor = Files.readAllBytes(classes.resolve("module-info.class"));
+        Files.delete(jar);
+        var failure = assertThrows(PageParseException.class, this::precompile);
+        assertEquals("/index.jsp", failure.location().source());
+        assertArrayEquals(descriptor, Files.readAllBytes(classes.resolve("module-info.class")));
+    }
+
+    @Test
+    void forcedXmlLibraryDeclarationsResolveRelativeToTheirFileAndRegisterListeners() throws Exception {
+        prepareFunctions(); listenerClass();
+        Files.createDirectories(web.resolve("outside"));
+        String tld = Files.readString(web.resolve("WEB-INF/functions.tld")).replace("</taglib>", "<listener><listener-class>demo.Listener</listener-class></listener></taglib>");
+        Files.writeString(web.resolve("outside/functions.tld"), tld);
+        Files.writeString(web.resolve("outside/part.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:f='urn:jsptld:functions.tld' version='4.0'><jsp:directive.page session='false'/><jsp:text>${f:sum(4,2)}</jsp:text></jsp:root>");
+        Files.writeString(web.resolve("index.jsp"), "<%@ page session='false' %><%@ include file='outside/part.jspx' %>");
+        precompile(); assertEquals("demo.Listener", listenerNames());
+        Path jar = directory.resolve("direct-xml.jar"); jar(classes, jar); assertEquals("6", render(jar, true));
+    }
+
+    @Test
+    void forcedXmlPathsBypassAliasesAndDoNotBindPlainNamespacesInOtherPages() throws Exception {
+        prepareFunctions();
+        Files.writeString(web.resolve("actual.tld"), Files.readString(web.resolve("WEB-INF/functions.tld")));
+        Files.writeString(web.resolve("WEB-INF/other.tld"), Files.readString(web.resolve("WEB-INF/functions.tld")).replace("int sum(int,int)", "int difference(int,int)"));
+        Files.writeString(web.resolve("WEB-INF/web.xml"), "<web-app><jsp-config><taglib><taglib-uri>/actual.tld</taglib-uri><taglib-location>/WEB-INF/other.tld</taglib-location></taglib></jsp-config></web-app>");
+        Files.writeString(web.resolve("forced.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:f='urn:jsptld:/actual.tld' version='4.0'><jsp:directive.page session='false'/><jsp:text>${f:sum(4,2)}</jsp:text></jsp:root>");
+        Files.writeString(web.resolve("index.jsp"), "<%@ page session='false' %><%@ include file='forced.jspx' %>|<%@ taglib prefix='f' uri='/actual.tld' %>${f:sum(4,2)}");
+        precompile(); Path jar = directory.resolve("forced-alias.jar"); jar(classes, jar); assertEquals("6|2", render(jar, true));
+        Files.delete(web.resolve("WEB-INF/web.xml"));
+        Files.writeString(web.resolve("index.jsp"), "<%@ page session='false' %><%@ include file='forced.jspx' %>|<%@ include file='plain.jspx' %>");
+        Files.writeString(web.resolve("plain.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page session='false'/><f:literal xmlns:f='/actual.tld'/></jsp:root>");
+        precompile(); jar(classes, jar); assertEquals("6|<f:literal xmlns:f=\"/actual.tld\"/>", render(jar, true));
+    }
+
+    @Test
+    void forcedDeclarationsOnNormalizedDirectivesRetainExtensionlessResourcesAndListeners() throws Exception {
+        prepare(false); listenerClass();
+        Files.writeString(web.resolve("metadata"), "<taglib><listener><listener-class>demo.Listener</listener-class></listener></taglib>");
+        Files.writeString(web.resolve("index.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page xmlns:f='urn:jsptld:/metadata' session='false'/><jsp:text>page</jsp:text></jsp:root>");
+        precompile(); assertEquals("demo.Listener", listenerNames());
+    }
+
+    @Test
+    void preludeAndCodaDirectReferencesUseImmutableSuppliedResourceSnapshots() throws Exception {
+        prepareFunctions(); listenerClass();
+        Files.writeString(web.resolve("index.jsp"), "<%@ page session='false' %>${f:sum(4,2)}|");
+        String tld = Files.readString(web.resolve("WEB-INF/functions.tld")).replace("</taglib>", "<listener><listener-class>demo.Listener</listener-class></listener></taglib>");
+        var group = new JspPropertyGroup(List.of("/index.jsp"), Map.of(), List.of("/first/prelude.jspf"), List.of("/second/coda.jspf"));
+        var options = new GenerationOptions(List.of(group), Map.of(
+                "/first/prelude.jspf", "<%@ taglib prefix='f' uri='library' %>",
+                "/second/coda.jspf", "<%@ taglib prefix='f' uri='library' %>${f:sum(4,2)}"))
+                .withByteSources(Map.of("/first/library", tld.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                        "/second/library", tld.replace("int sum(int,int)", "int difference(int,int)").getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        new PagePrecompiler().precompile(web, classes, modulePaths(), "demo.generated", options);
+        assertEquals("demo.Listener", listenerNames());
+        Path jar = directory.resolve("snapshot-direct.jar"); jar(classes, jar); assertEquals("6|2", render(jar, true));
+    }
+
+    @Test
+    void authoritativeElParsingDoesNotDiscoverTaglibTextInsideQuotedExpressions() throws Exception {
+        prepare(false, true);
+        Files.writeString(web.resolve("index.jsp"), "<%@ page session='false' %>${'<%@ taglib prefix=\"ghost\" uri=\"missing.tld\" %>'}");
+        var group = new JspPropertyGroup(List.of("/index.jsp"), Map.of("el-ignored", "true"), List.of("/prelude.jspf"), List.of());
+        var options = new GenerationOptions(List.of(group), Map.of("/prelude.jspf", "<%@ page isELIgnored='false' %>"));
+        new PagePrecompiler().precompile(web, classes, modulePaths(), "demo.generated", options);
+        Path jar = directory.resolve("quoted-taglib.jar"); jar(classes, jar);
+        assertEquals("<%@ taglib prefix=\"ghost\" uri=\"missing.tld\" %>", render(jar, true));
+    }
+
+    @Test
+    void standaloneGenerationResolvesDirectTldByteSnapshotsWithoutCatalogAliases() throws Exception {
+        prepareFunctions();
+        byte[] tld = Files.readAllBytes(web.resolve("WEB-INF/functions.tld"));
+        var options = GenerationOptions.DEFAULT.withByteSources(Map.of("/outside/library", tld));
+        var generated = new PageGenerator(List.of(classes)).generate("/outside/page.jsp",
+                "<%@ page session='false' %><%@ taglib prefix='f' uri='library' %>${f:sum(2,3)}",
+                "demo.generated.Standalone", options);
+        assertTrue(generated.source().contains("demo.Functions.sum("));
+        assertEquals(1, generated.auxiliaryClasses().size());
+        assertNull(System.getProperty("ibarra.function.initialized"));
+    }
+
+    @Test
+    void namedScalarAndFragmentAttributesPreserveLocalNamespaceBindingsAndTrimming() throws Exception {
+        prepareFunctions();
+        Path source = directory.resolve("Echo.java");
+        Files.writeString(source, """
+                package demo;
+                public class Echo extends jakarta.servlet.jsp.tagext.SimpleTagSupport {
+                    private String label; private jakarta.servlet.jsp.tagext.JspFragment piece;
+                    public void setLabel(String value) { label = value; }
+                    public void setPiece(jakarta.servlet.jsp.tagext.JspFragment value) { piece = value; }
+                    public void doTag() throws jakarta.servlet.jsp.JspException, java.io.IOException {
+                        getJspContext().getOut().write(label + "|");
+                        var body = piece == null ? getJspBody() : piece; body.invoke(null); body.invoke(null);
+                    }
+                }
+                """);
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, "--release", "25", "--module-path",
+                modulePath() + File.pathSeparator + classes, "--add-modules", "demo.web", "--patch-module", "demo.web=" + source.getParent(), "-d", classes.toString(), source.toString()));
+        Files.writeString(web.resolve("WEB-INF/echo.tld"), "<taglib><uri>urn:echo</uri><tag><name>echo</name><tag-class>demo.Echo</tag-class><body-content>scriptless</body-content><attribute><name>label</name><type>java.lang.String</type><rtexprvalue>true</rtexprvalue></attribute><attribute><name>piece</name><fragment>true</fragment></attribute></tag></taglib>");
+        Files.createDirectories(web.resolve("outside"));
+        Files.writeString(web.resolve("outside/sum.tld"), Files.readString(web.resolve("WEB-INF/functions.tld")));
+        Files.writeString(web.resolve("outside/difference.tld"), Files.readString(web.resolve("WEB-INF/functions.tld")).replace("int sum(int,int)", "int difference(int,int)"));
+        String body = "<t:echo><jsp:attribute name='label' xmlns:f='urn:jsptld:/outside/difference.tld'> ${f:sum(4,2)} </jsp:attribute>"
+                + "<jsp:attribute name='piece' xmlns:f='urn:jsptld:/outside/difference.tld'><jsp:text xmlns:f='urn:jsptld:/outside/sum.tld'> ${f:sum(4,2)} </jsp:text></jsp:attribute></t:echo>";
+        Files.writeString(web.resolve("index.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:echo' version='4.0'><jsp:directive.page session='false'/>" + body + "</jsp:root>");
+        Files.writeString(web.resolve("index.jsp"), "<%@ page session='false' %><%@ include file='index.jspx' %>");
+        precompile(); Path jar = directory.resolve("named-namespace.jar"); jar(classes, jar); assertEquals("2|66", render(jar, true));
+        Files.writeString(web.resolve("index.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:echo' xmlns:f='urn:functions' version='4.0'><jsp:directive.page session='false'/>" + body + "<jsp:text>|${f:sum(4,2)}</jsp:text></jsp:root>");
+        precompile(); jar(classes, jar); assertEquals("2|66|6", render(jar, true));
+        String explicit = "<t:echo label='body'><jsp:body xmlns:f='urn:jsptld:/outside/difference.tld'>${f:sum(4,2)}</jsp:body></t:echo>";
+        Files.writeString(web.resolve("index.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:echo' version='4.0'><jsp:directive.page session='false'/>" + explicit + "</jsp:root>");
+        precompile(); jar(classes, jar); assertEquals("body|22", render(jar, true));
+        Files.writeString(web.resolve("index.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:echo' xmlns:f='urn:functions' version='4.0'><jsp:directive.page session='false'/>" + explicit + "<jsp:text>|${f:sum(4,2)}</jsp:text></jsp:root>");
+        precompile(); jar(classes, jar); assertEquals("body|22|6", render(jar, true));
     }
 
     @Test

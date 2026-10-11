@@ -97,8 +97,10 @@ Declare functions in a discovered TLD, alongside tags or in a function-only libr
 ----
 
 A standard page binds the prefix with a taglib directive and calls
-`${example:welcome(param.name)}`. JSPX binds it through the library URI or
-`urn:jsptld:` resource namespace. XML prefix bindings follow lexical scope;
+`${example:welcome(param.name)}`. JSPX uses the library URI as its plain namespace
+or forces a descriptor path with `urn:jsptld:/tlds/example.tld`. A forced path
+bypasses URI aliases; it does not accept another absolute URI after the prefix.
+XML prefix bindings follow lexical scope, including named-attribute/text wrappers;
 included relative declarations retain their own resource origin.
 
 Peano's expression AST exposes every qualified call and argument count. Ibarra
@@ -120,8 +122,9 @@ registration, TLD XML nor class-name loading. Unprefixed calls keep their usual 
 resolution; these bindings apply to qualified TLD functions.
 
 The catalogue discovers WEB-INF resources and library resources, plus explicit
-web.xml aliases or supplied generation metadata. A page-relative TLD outside
-those roots needs an explicit mapping (BUG.md IBARRA-068). Invoked libraries with
+web.xml aliases or supplied generation metadata. Direct declarations also load
+TLD/JAR snapshots outside those roots, keeping resource bindings separate from
+URI aliases and registering their listeners. Invoked libraries with
 TagLibraryValidator metadata are rejected, including function-only libraries.
 Interpreter preview does not support these descriptor-only bindings and fails
 explicitly. Deferred attributes and runtime function-map mutation remain outside
@@ -141,6 +144,6 @@ render repeated request values, TLD functions and private beans with Peano refle
 Tests cover bytecode immutability, collisions, diagnostics, required module reads
 and incremental cleanup. The independent Maven example compiles EL through the
 actual precompile goal, calls a TLD function and explicitly requires Peano API.
-The local Ibarra reactor passes 240 tests. Peano's compatible prerequisite passes
+The local Ibarra reactor passes 249 tests. Peano's compatible prerequisite passes
 303 tests and 361/361 official EL TCK tests. The official Pages TCK remains unrun;
 these unit and integration results are not Pages certification.

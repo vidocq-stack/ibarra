@@ -46,6 +46,13 @@ application accessor-table dispatch with Peano's reflection fallback denied.
 
 == Build-generated TLD listeners
 
+Directly declared TLD/JAR resources also contribute listeners, including references
+from includes, preludes, codas and forced XML namespace declarations. Metadata is
+captured before normalization removes declaration wrappers. Listener types are
+validated and deduplicated with the implicit/explicit catalogue before generating
+the index; no runtime TLD scan is introduced. See
+xref:modules/tag-handlers.adoc[direct resource and URI resolution].
+
 The precompiler scans loose TLDs recursively under `WEB-INF`, excluding the
 `classes` and `lib` directories, and `META-INF` resources of the application and
 reachable named library modules. Static and unrelated dependency modules are

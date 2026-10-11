@@ -73,6 +73,8 @@ class FoyHttpPagesTest {
                 assertEquals("hello-A:method", get(client, base + "/functions.jsp?who=A").body());
                 assertEquals("hello-A:1:methodmethod!", get(client, base + "/functions.jspx?who=A").body());
                 assertEquals("hello-B:1:methodmethod!", get(client, base + "/functions.jspx?who=B").body());
+                assertEquals("hello-A:1:xx!|ready|1", get(client, base + "/external.jsp?who=A").body());
+                assertEquals("hello-B:1:xx!|ready|1", get(client, base + "/external.jspx?who=B").body());
                 var sharedCalls = new java.util.ArrayList<java.util.concurrent.CompletableFuture<HttpResponse<String>>>();
                 for (int i = 0; i < 16; i++) sharedCalls.add(client.sendAsync(
                         HttpRequest.newBuilder(URI.create(base + (i % 2 == 0 ? "/shared.jsp" : "/shared.jspx"))).build(), HttpResponse.BodyHandlers.ofString()));
@@ -98,7 +100,7 @@ class FoyHttpPagesTest {
                 assertEquals(404, get(client, base + "/WEB-INF/secret.jsp").statusCode());
             }
         } finally { try { if (deployed) container.undeploy(archive); } finally { container.stop(); } }
-        assertEquals("1", Files.readString(directory.resolve("listener-destroyed.txt")));
+        assertEquals("1:1", Files.readString(directory.resolve("listener-destroyed.txt")));
     }
 
     private static HttpResponse<String> get(HttpClient client, String url) throws Exception {
@@ -149,6 +151,16 @@ class FoyHttpPagesTest {
                 }
                 """);
         Path listener = source.resolve("app/Startup.java"); Files.createDirectories(listener.getParent());
+        Path externalListener = source.resolve("app/ExternalStartup.java");
+        Files.writeString(externalListener, """
+                package app;
+                public class ExternalStartup implements jakarta.servlet.ServletContextListener {
+                    public static int constructed;
+                    public ExternalStartup() { constructed++; System.setProperty("ibarra.external.initialized", "yes"); }
+                    public void contextInitialized(jakarta.servlet.ServletContextEvent event) { event.getServletContext().setAttribute("externalTld", "ready"); }
+                    public void contextDestroyed(jakarta.servlet.ServletContextEvent event) { event.getServletContext().setAttribute("externalDestroyed", "1"); }
+                }
+                """);
         Files.writeString(listener, """
                 package app;
                 public class Startup implements jakarta.servlet.ServletContextListener, jakarta.servlet.ServletRequestListener {
@@ -199,7 +211,11 @@ class FoyHttpPagesTest {
                 }
                 """);
         assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, "--release", "25", "--module-path",
-                modulePath(true), "-d", output.toString(), info.toString(), listener.toString(), wrap.toString(), upper.toString(), fragment.toString(), profile.toString(), accessors.toString(), constants.toString(), scopeBean.toString()));
+                modulePath(true), "-d", output.toString(), info.toString(), listener.toString(), wrap.toString(), upper.toString(), fragment.toString(), profile.toString(), accessors.toString(), constants.toString(), scopeBean.toString(), externalListener.toString()));
+        Files.createDirectories(web.resolve("outside"));
+        Files.writeString(web.resolve("outside/library.tld"), "<taglib><listener><listener-class>app.ExternalStartup</listener-class></listener><tag><name>wrap</name><tag-class>app.Wrap</tag-class><body-content>scriptless</body-content><attribute><name>label</name><type>java.lang.String</type><required>true</required><rtexprvalue>true</rtexprvalue></attribute></tag><function><name>greet</name><function-class>app.Constants</function-class><function-signature>java.lang.String greet(java.lang.String)</function-signature></function></taglib>");
+        Files.writeString(web.resolve("external.jsp"), "<%@ page session='false' %><%@ taglib prefix='e' uri='outside/library.tld' %><e:wrap label='${e:greet(param.who)}'>x</e:wrap>|<%= application.getAttribute(\"externalTld\") %>|<%= app.ExternalStartup.constructed %>");
+        Files.writeString(web.resolve("external.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:e='urn:jsptld:/outside/library.tld' version='4.0'><jsp:directive.page session='false'/><e:wrap label='${e:greet(param.who)}'>x</e:wrap><jsp:text>|</jsp:text><jsp:expression>application.getAttribute(\"externalTld\")</jsp:expression><jsp:text>|</jsp:text><jsp:expression>app.ExternalStartup.constructed</jsp:expression></jsp:root>");
         Files.writeString(web.resolve("shared.jsp"), "<%@ page session='false' %><jsp:useBean id='shared' class='app.ScopeBean' scope='application'>created:</jsp:useBean><jsp:getProperty name='shared' property='id'/>");
         Files.writeString(web.resolve("shared.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page session='false'/><jsp:useBean id='shared' class='app.ScopeBean' scope='application'><jsp:text>created:</jsp:text></jsp:useBean><jsp:getProperty name='shared' property='id'/></jsp:root>");
         Files.writeString(web.resolve("session.jsp"), "<jsp:useBean id='shared' class='app.ScopeBean' scope='session'>created:</jsp:useBean><jsp:getProperty name='shared' property='id'/>");
@@ -216,15 +232,15 @@ class FoyHttpPagesTest {
                 """);
         Files.writeString(web.resolve("tags.jsp"), "<%@ page session='false' %><%@ taglib prefix='t' uri='urn:tags' %><t:wrap label='${param.label}'><t:upper>body</t:upper></t:wrap>");
         Files.writeString(web.resolve("compiled-el.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page session='false'/><jsp:useBean id='profile' class='app.Profile'/><jsp:text>${param.who}:${profile.name}:${[1,2,3].stream().map(x->x*2).toList()[1]}</jsp:text></jsp:root>");
-        Files.writeString(web.resolve("imports.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false' import='app.Constants'/><t:wrap label='${Constants.TEXT}'><jsp:body>${Constants.caption()}:${HttpServletResponse != null ? '200' : 'bad'}</jsp:body></t:wrap></jsp:root>");
+        Files.writeString(web.resolve("imports.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:tags' version='4.0'><jsp:directive.page session='false' import='app.Constants'/><t:wrap label='${Constants.TEXT}'><jsp:body>${Constants.caption()}:${HttpServletResponse != null ? '200' : 'bad'}</jsp:body></t:wrap></jsp:root>");
         Files.writeString(web.resolve("imports.jspf"), "<%@ page import='app.Constants' %>");
         Files.writeString(web.resolve("imports.jsp"), "<%@ page session='false' %><%@ include file='imports.jspf' %>${Constants.TEXT}");
         Files.writeString(web.resolve("WEB-INF/functions.tld"), "<taglib><uri>urn:fn</uri><function><name>greet</name><function-class>app.Constants</function-class><function-signature>java.lang.String greet(java.lang.String)</function-signature></function><function><name>caption</name><function-class>app.Constants</function-class><function-signature>java.lang.String caption()</function-signature></function></taglib>");
         Files.writeString(web.resolve("functions.jsp"), "<%@ page session='false' %><%@ taglib prefix='f' uri='urn:fn' %>${f:greet(param.who)}:${f:caption()}");
-        Files.writeString(web.resolve("functions.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' xmlns:f='urn:jsptld:urn:fn' version='4.0'><jsp:directive.page session='false'/><t:wrap label='${f:greet(param.who)}'><jsp:body>${f:caption()}</jsp:body></t:wrap></jsp:root>");
-        Files.writeString(web.resolve("tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false'/><t:wrap label='xml'><t:upper>body</t:upper></t:wrap></jsp:root>");
-        Files.writeString(web.resolve("named-tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false'/><t:fragment><jsp:attribute name='piece'> fragment </jsp:attribute><jsp:body><t:upper><jsp:body>body</jsp:body></t:upper></jsp:body></t:fragment></jsp:root>");
-        Files.writeString(web.resolve("static-named-tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false'/><t:staticWrap><jsp:attribute name='label'><b title='&quot;&amp;'><jsp:text>label</jsp:text></b></jsp:attribute><jsp:body>B</jsp:body></t:staticWrap></jsp:root>");
+        Files.writeString(web.resolve("functions.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:tags' xmlns:f='urn:fn' version='4.0'><jsp:directive.page session='false'/><t:wrap label='${f:greet(param.who)}'><jsp:body>${f:caption()}</jsp:body></t:wrap></jsp:root>");
+        Files.writeString(web.resolve("tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:tags' version='4.0'><jsp:directive.page session='false'/><t:wrap label='xml'><t:upper>body</t:upper></t:wrap></jsp:root>");
+        Files.writeString(web.resolve("named-tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:tags' version='4.0'><jsp:directive.page session='false'/><t:fragment><jsp:attribute name='piece'> fragment </jsp:attribute><jsp:body><t:upper><jsp:body>body</jsp:body></t:upper></jsp:body></t:fragment></jsp:root>");
+        Files.writeString(web.resolve("static-named-tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:tags' version='4.0'><jsp:directive.page session='false'/><t:staticWrap><jsp:attribute name='label'><b title='&quot;&amp;'><jsp:text>label</jsp:text></b></jsp:attribute><jsp:body>B</jsp:body></t:staticWrap></jsp:root>");
         Files.writeString(web.resolve("WEB-INF/startup.tld"), "<taglib><listener><listener-class>app.Startup</listener-class></listener></taglib>");
         Files.writeString(web.resolve("WEB-INF/duplicate.tld"), "<taglib><listener><listener-class>app.Startup</listener-class></listener></taglib>");
         Files.writeString(web.resolve("listeners.jsp"), "<%@ page session='false' %><%= application.getAttribute(\"tld\") %> <%= request.getAttribute(\"tldRequest\") %> <%= app.Startup.constructed %>");
@@ -235,6 +251,7 @@ class FoyHttpPagesTest {
         Files.writeString(web.resolve("WEB-INF/secret.jsp"), "<%@ page session='false' %>SECRET");
         new PagePrecompiler().precompile(web, output, paths(true), null, GenerationOptions.DEFAULT);
         assertNull(System.getProperty("ibarra.import.initialized"), "Import discovery initialized application code");
+        assertNull(System.getProperty("ibarra.external.initialized"), "Direct TLD discovery initialized application code");
         Files.writeString(output.resolve("web.xml"), """
                 <web-app xmlns="https://jakarta.ee/xml/ns/jakartaee" version="6.1">
                   <servlet><servlet-name>named</servlet-name><jsp-file>/index.jsp</jsp-file></servlet>
@@ -291,7 +308,7 @@ class FoyHttpPagesTest {
                             System.in.read();
                             server.stop();
                         }
-                        Files.writeString(Path.of(args[1]), String.valueOf(context.getAttribute("tldDestroyed")));
+                        Files.writeString(Path.of(args[1]), context.getAttribute("tldDestroyed") + ":" + context.getAttribute("externalDestroyed"));
                     }
                 }
                 """);

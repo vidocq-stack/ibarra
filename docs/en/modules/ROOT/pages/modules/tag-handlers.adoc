@@ -5,15 +5,29 @@
 
 `TldParser` retains immutable `TagDescriptor`, `TagAttribute` and `TldFunction` metadata.
 The precompiler resolves root descriptor aliases, implicit library URIs and
-context-relative TLD paths. Explicit aliases take precedence; library resources
+context-relative TLD paths. Standard declarations use explicit aliases first; library resources
 precede loose WEB-INF resources. Relative taglib declarations retain their
 source origin across static includes. XML tag namespaces using `urn:jsptld:`
-are resolved through the same build-time catalogue.
+force direct resource lookup, bypassing URI aliases. Ordinary XML namespaces use
+only URI mappings; discovering an external resource does not bind that namespace
+in unrelated pages.
+
+Direct TLD references retain immutable metadata from the raw per-file parse
+before normalization removes XML declaration wrappers. Includes, preludes and
+codas resolve relative paths from their own declaration origins. The precompiler
+reads referenced resource snapshots, including files outside implicit discovery
+roots and JARs containing META-INF/taglib.tld. Explicit TLD files need no .tld
+extension. Unreferenced external descriptors are ignored; referenced listeners
+join the generated index without class initialization. Reused translation units
+need no second parse during generation.
 
 Standalone generation can supply the catalogue with
 `GenerationOptions.withTagLibraries`. Its compatible constructors and other
 option helpers retain the immutable map. Runtime artifacts contain generated
 calls and factories, without TLD parsing or class-name lookup.
+Standalone generators can also provide direct descriptor bytes through
+`withByteSources`. Supplied resource metadata retains its existing relative-path
+fallback; discovered aliases remain separate from physical resource bindings.
 
 Class-File inspection validates public concrete handlers, public no-argument
 constructors, implemented interfaces and public instance setters. Static attribute
@@ -65,6 +79,9 @@ and simple handlers. Their bodies must be scriptless. Tags inside named scalar
 or fragment bodies use the recipient handler as parent. Capture failures restore
 the writer and release classic recipients, without calling their own catch/finally
 hooks during setter setup. Enclosing handlers retain their normal failure cleanup.
+Local XML namespace bindings on jsp:attribute, jsp:body and nested jsp:text wrappers apply
+to both scalar captures and fragments, then restore the enclosing prefix bindings.
+Trimming changes source boundary text while retaining namespace-bearing wrappers.
 
 == Current boundary
 

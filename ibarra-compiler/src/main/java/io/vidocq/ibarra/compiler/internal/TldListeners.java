@@ -22,13 +22,11 @@ package io.vidocq.ibarra.compiler.internal;
 
 import io.vidocq.ibarra.compiler.*;
 import io.vidocq.ibarra.spi.PageDescriptor;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.module.*;
 import java.nio.file.Path;
 import java.nio.file.Files;
 import java.util.*;
-import java.util.jar.JarInputStream;
 import org.w3c.dom.Element;
 
 /** Build-only TLD discovery in web resources and the named application module graph. */
@@ -37,6 +35,16 @@ public final class TldListeners {
         public Catalog { listeners = List.copyOf(listeners); libraries = Map.copyOf(libraries); }
     }
     private TldListeners() { }
+
+    /** Adds directly declared resources and their build-validated listener factories. */
+    public static List<String> referenced(Catalog catalog, Collection<TagLibraryDescriptor> libraries, List<Path> paths) {
+        var listeners = new LinkedHashSet<>(catalog.listeners());
+        var classes = new BeanClasses(paths);
+        for (var library : new LinkedHashSet<>(libraries))
+            for (String type : library.listenerClasses())
+                if (!listeners.contains(type)) listeners.add(classes.listener(type, new SourceLocation(library.resourcePath(), 1, 1)));
+        return List.copyOf(listeners);
+    }
     public static List<String> discover(Map<String, byte[]> web, List<Path> dependencies, Path output, ModuleDescriptor application) throws IOException {
         return catalog(web, dependencies, output, application).listeners();
     }
@@ -45,7 +53,7 @@ public final class TldListeners {
         var configuredLibraries = new ArrayList<TagLibraryDescriptor>();
         var mappings = new LinkedHashMap<String, TagLibraryDescriptor>();
         var parser = new TldParser();
-        configured(web, parser, configuredLibraries, mappings);
+        configured(web, configuredLibraries, mappings);
         Path applicationPath = output.toAbsolutePath().normalize();
         Path metadata = applicationPath.resolve("META-INF");
         if (Files.isDirectory(metadata)) try (var resources = Files.walk(metadata)) {
@@ -91,7 +99,7 @@ public final class TldListeners {
         }
         return new Catalog(List.copyOf(listeners.values()), mappings);
     }
-    private static void configured(Map<String, byte[]> web, TldParser parser, List<TagLibraryDescriptor> libraries,
+    private static void configured(Map<String, byte[]> web, List<TagLibraryDescriptor> libraries,
             Map<String, TagLibraryDescriptor> mappings) throws IOException {
         byte[] xml = web.get("/WEB-INF/web.xml");
         if (xml == null) return;
@@ -121,20 +129,8 @@ public final class TldListeners {
                 catch (IllegalArgumentException failure) { throw new PageParseException(at, "Invalid taglib location", failure); }
                 byte[] resource = web.get(location);
                 if (resource == null) throw new PageParseException(at, "Taglib location is absent: " + location);
-                if (location.endsWith(".jar")) {
-                    boolean found = false;
-                    try (var jar = new JarInputStream(new ByteArrayInputStream(resource))) {
-                        for (var item = jar.getNextJarEntry(); item != null; item = jar.getNextJarEntry()) {
-                            if (item.getName().equals("META-INF/taglib.tld")) {
-                                var library = parser.parse(location + "!/META-INF/taglib.tld", jar.readAllBytes());
-                                libraries.add(library); mappings.put(uri, library); mappings.put(location, library); found = true; break;
-                            }
-                        }
-                    }
-                    if (!found) throw new PageParseException(at, "Taglib JAR has no META-INF/taglib.tld: " + location);
-                } else {
-                    var library = parser.parse(location, resource); libraries.add(library); mappings.put(uri, library); mappings.put(location, library);
-                }
+                var library = TldReferences.read(location, resource, at);
+                libraries.add(library); mappings.put(uri, library); mappings.put(location, library);
             }
         }
     }

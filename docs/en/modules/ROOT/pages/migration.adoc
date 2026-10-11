@@ -16,3 +16,11 @@ Standard pages, standard actions, custom tags with TLDs, tag files and `jsp-conf
 * **Jasper-specific settings** — `development`, `checkInterval`, `compilerSourceVM` and other `JspServlet` init parameters have no Ibarra equivalent.
 * **`jsp:useBean beanName`** (serialized beans) — support is an open question.
 * **Tag handler pooling** — Ibarra does not pool handlers; a handler that relied on reuse between invocations must not.
+
+== XML TLD namespaces in the development line
+
+Use `xmlns:f="urn:example:functions"` for a mapped library URI, or
+`xmlns:f="urn:jsptld:/tlds/functions.tld"` to force that physical descriptor.
+The earlier `urn:jsptld:urn:example:functions` form mixed these modes and is now
+rejected. Forced paths bypass aliases; plain namespaces use mappings only.
+Direct discovery does not add implicit URI entries for external descriptors.

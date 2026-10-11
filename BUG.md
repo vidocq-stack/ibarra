@@ -1,5 +1,56 @@
 # BUG.md — Ibarra
 
+## IBARRA-075 · 2026-10-11 · Explicit tag bodies lose local namespace bindings
+
+- Symptom: a function prefix declared on jsp:body disappears when its children
+  are extracted, causing an unknown-prefix error or using the enclosing binding.
+- Minimal repro: the explicit-body cases in
+  namedScalarAndFragmentAttributesPreserveLocalNamespaceBindingsAndTrimming.
+- Cause: tagInvocation flattens the body wrapper without retaining xmlns metadata.
+- Status: FIXED by preserving the wrapper as an internal text container, retaining
+  namespace push/pop for classic content and generated SimpleTag body fragments.
+
+## IBARRA-074 · 2026-10-11 · Direct discovery rejects supplied relative resource metadata
+
+- Symptom: a standalone generator with caller-supplied path metadata rejects a
+  relative taglib declaration because no descriptor bytes were supplied.
+- Minimal repro: TagGenerationTest.relativeTaglibBindingsRetainTheirDeclarationOriginAcrossIncludes.
+- Cause: direct resource lookup incorrectly requires the metadata diagnostic path
+  to match the supplied binding key, losing the existing resource-map contract.
+- Status: FIXED by separating caller-supplied resource metadata from discovered
+  aliases; standard relative declarations retain their metadata-only fallback.
+
+## IBARRA-073 · 2026-10-11 · Named-attribute wrappers lose local EL namespace bindings
+
+- Symptom: a function prefix declared on jsp:attribute fails as unknown; flattening
+  jsp:text also loses its local namespace override during named-body generation.
+- Minimal repro: namedScalarAndFragmentAttributesPreserveLocalNamespaceBindingsAndTrimming.
+- Cause: named attributes bypass element namespace push/pop, and namedContent
+  flattens jsp:text before evaluating its namespace-bearing wrapper.
+- Status: FIXED by scoped wrapper bindings and retained jsp:text nodes with recursive
+  source-boundary trimming. Scalar captures and repeatable fragments preserve bindings.
+
+## IBARRA-071 · 2026-10-11 · Forced XML TLD paths are interpreted as URI aliases
+
+- Symptom: `xmlns:f='urn:jsptld:/actual.tld'` resolves an alias for /actual.tld
+  rather than reading that descriptor. Direct-path additions may also bind plain
+  namespaces in unrelated pages through the shared alias map.
+- Minimal repro: forcedXmlPathsBypassAliasesAndDoNotBindPlainNamespacesInOtherPages
+  expects a direct sum function and mapped difference function (6|2), but gets 2|2.
+- Cause: forced paths and ordinary aliases share one undifferentiated catalogue.
+- Status: FIXED by separate immutable alias/resource maps and explicit standard,
+  plain XML and forced XML resolution modes. Named XML URIs use plain namespaces;
+  forced urn:jsptld URNs require web resource paths.
+
+## IBARRA-072 · 2026-10-11 · Normalized XML nodes lose declaration-only TLD references
+
+- Symptom: a forced TLD namespace on jsp:directive.page is lost before discovery,
+  so its listener is missing from the generated application index.
+- Minimal repro: forcedDeclarationsOnNormalizedDirectivesRetainExtensionlessResourcesAndListeners.
+- Cause: scanning normalized Page nodes misses xmlns carriers removed by normalization.
+- Status: FIXED by retaining immutable declaration references from the raw per-file
+  parse, with original coordinates, before structural normalization and inclusion.
+
 ## IBARRA-069 · 2026-10-11 · Shared-scope useBean creation is rejected
 
 - Symptom: valid session/application useBean declarations with a class fail translation.
@@ -26,8 +77,9 @@
   outside WEB-INF and no explicit web.xml mapping fails library lookup.
 - Cause: implicit discovery covers WEB-INF and named-module META-INF resources;
   direct undeclared resources are not separately discovered from page declarations.
-- Status: OPEN; explicit aliases/supplied metadata work. Direct-resource discovery
-  must also retain correct TLD listener reachability before it is broadened.
+- Status: FIXED; directly referenced TLD/JAR resources are read from build-time
+  snapshots and their listeners join the generated index. Include origins and
+  explicit alias precedence are preserved; unused external TLDs are not scanned.
 
 ## IBARRA-067 · 2026-10-11 · Void function signatures escape class-file type conversion
 

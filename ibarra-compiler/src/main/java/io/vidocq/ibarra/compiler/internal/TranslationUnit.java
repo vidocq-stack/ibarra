@@ -26,7 +26,13 @@ import java.util.*;
 
 /** Build-side inclusion and property-group selection without reading web resources. */
 public final class TranslationUnit {
-    public record Result(Page page, Map<String, String> properties, Map<String, Page.Syntax> sourceSyntaxes, String responseEncoding) { }
+    public record Result(Page page, Map<String, String> properties, Map<String, Page.Syntax> sourceSyntaxes,
+            String responseEncoding, List<TldReferences.Reference> tagLibraries) {
+        public Result { tagLibraries = List.copyOf(tagLibraries); }
+        public Result(Page page, Map<String, String> properties, Map<String, Page.Syntax> sourceSyntaxes, String responseEncoding) {
+            this(page, properties, sourceSyntaxes, responseEncoding, List.of());
+        }
+    }
     private final GenerationOptions options;
     private final Map<PageNode.Text, List<SourceLocation>> origins = new IdentityHashMap<>();
     private final Set<String> stack = new LinkedHashSet<>();
@@ -36,6 +42,7 @@ public final class TranslationUnit {
     private final Map<String, String> unitBindings = new LinkedHashMap<>();
     private ParserOptions unitOptions;
     private boolean strictNamespaces;
+    private final Set<TldReferences.Reference> tagLibraries = new LinkedHashSet<>();
 
     public TranslationUnit(GenerationOptions options) { this.options = options; }
 
@@ -59,11 +66,12 @@ public final class TranslationUnit {
         unitOptions = new ParserOptions(bool(settings.get("isELIgnored"), defaults.elIgnored()),
                 bool(settings.get("deferredSyntaxAllowedAsLiteral"), defaults.deferredSyntaxAllowedAsLiteral()));
         strictNamespaces = bool(properties.get("error-on-undeclared-namespace"), false);
+        tagLibraries.clear();
         raw = readRoot(path, source, properties);
         validateTaglibOrder(raw, new HashSet<>(Set.of("jsp")));
         var nodes = new PageNormalizer(syntax, defaults, origins, sourceSyntaxes).normalizeStructured(raw);
         return new Result(new Page(path, syntax, nodes), Map.copyOf(properties), Map.copyOf(sourceSyntaxes),
-                decodedSources.containsKey(path) ? decodedSources.get(path).responseEncoding() : null);
+                decodedSources.containsKey(path) ? decodedSources.get(path).responseEncoding() : null, List.copyOf(tagLibraries));
     }
 
     private List<PageNode> readRoot(String path, String source, Map<String, String> properties) {
@@ -137,10 +145,26 @@ public final class TranslationUnit {
             } else raw = new StandardParser(document, unitOptions == null
                     ? new ParserOptions(bool(properties.get("el-ignored"), false), bool(properties.get("deferred-syntax-allowed-as-literal"), false))
                     : unitOptions, unitBindings, strictNamespaces).parse();
+            tagLibraries(raw);
             validateEncoding(raw, properties(path), new HashSet<>());
             raw = new PageNormalizer(fileSyntax, ParserOptions.DEFAULT, origins).structure(raw);
             return expand(raw, properties);
         } finally { stack.remove(path); }
+    }
+
+    private void tagLibraries(List<PageNode> nodes) {
+        for (var node : nodes) {
+            if (node instanceof PageNode.Directive directive && directive.name().equals("taglib")
+                    && directive.attributes().containsKey("uri"))
+                tagLibraries.add(new TldReferences.Reference(directive.attributes().get("uri"), directive.location(), false));
+            else if (node instanceof PageNode.Element element) {
+                for (var attribute : element.attributes().entrySet())
+                    if ((attribute.getKey().equals("xmlns") || attribute.getKey().startsWith("xmlns:"))
+                            && attribute.getValue().startsWith("urn:jsptld:"))
+                        tagLibraries.add(new TldReferences.Reference(attribute.getValue().substring(11), element.location(), true));
+                tagLibraries(element.children());
+            }
+        }
     }
 
     private void validateEncoding(List<PageNode> nodes, Map<String, String> properties, Set<String> encodedFiles) {

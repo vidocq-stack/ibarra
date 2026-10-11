@@ -21,6 +21,8 @@ package io.vidocq.ibarra.compiler;
 
 import io.vidocq.ibarra.compiler.internal.JavaSource;
 import io.vidocq.ibarra.compiler.internal.TldListeners;
+import io.vidocq.ibarra.compiler.internal.TldReferences;
+import io.vidocq.ibarra.compiler.internal.TranslationUnit;
 import io.vidocq.ibarra.spi.PageDescriptor;
 import java.io.*;
 import java.lang.classfile.*;
@@ -72,16 +74,22 @@ public final class PagePrecompiler {
                 throw new IllegalArgumentException("Conflicting supplied tag library: " + entry.getKey());
         }
         var configured = new GenerationOptions(options.propertyGroups(), options.sources(), false, bytes, libraries);
+        var units = new TreeMap<String, TranslationUnit.Result>();
+        for (var entry : resources.entrySet()) if (entry.getKey().endsWith(".jsp") || entry.getKey().endsWith(".jspx")) {
+            PageDescriptor.validatePath(entry.getKey());
+            units.put(entry.getKey(), new TranslationUnit(configured).read(entry.getKey(), entry.getValue()));
+        }
+        var resolved = TldReferences.discover(units.values(), configured, options.tagLibraries());
+        var referencedLibraries = new ArrayList<>(libraries.values()); referencedLibraries.addAll(resolved.resources().values());
+        var listeners = TldListeners.referenced(catalog, referencedLibraries, paths);
         var generator = new PageGenerator(paths, descriptor);
         var sources = new ArrayList<GeneratedPage>();
         var pages = new TreeMap<String, String>();
-        for (var entry : resources.entrySet()) if (entry.getKey().endsWith(".jsp") || entry.getKey().endsWith(".jspx")) {
-            PageDescriptor.validatePath(entry.getKey());
+        for (var entry : units.entrySet()) {
             String name = packageName + ".Page_" + hash(entry.getKey());
             pages.put(entry.getKey(), name);
-            sources.add(generator.generate(entry.getKey(), entry.getValue(), name, configured));
+            sources.add(generator.generate(entry.getValue(), name, configured, resolved));
         }
-        var listeners = catalog.listeners();
         String provider = pages.isEmpty() && listeners.isEmpty() ? null : packageName + ".GeneratedPageIndex";
         if (sources.stream().anyMatch(source -> !source.auxiliaryClasses().isEmpty())
                 && descriptor.requires().stream().noneMatch(value -> value.name().equals("io.vidocq.peano.api")

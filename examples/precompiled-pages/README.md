@@ -5,7 +5,8 @@ packages, and uses the `ibarra-maven-plugin:precompile` goal at `process-classes
 The generated page index is registered in the compiled Java module descriptor.
 The application JAR contains compiled pages, not the compiler or generated Java.
 Its private application package also contains a SimpleTag handler described by
-WEB-INF/example.tld. The page invokes it through direct construction/setters and
+`tlds/example.tld`, referenced directly from the page without a web.xml alias.
+The page invokes it through direct construction/setters and
 named scalar/fragment attributes and an explicit body; no package exports or opens
 are needed.
 
@@ -13,6 +14,9 @@ The same TLD declares the fixed-arity `example:welcome` function. Its public
 static method is validated from class files and invoked directly by generated
 code; it requires no accessor provider, exports or runtime TLD parsing.
 `${example:welcome(param.name)}` uses the current request parameter.
+Only directly declared external descriptors are read; this resource does not
+create an implicit URI entry in the catalogue. In JSPX, a direct resource would
+use `xmlns:example="urn:jsptld:/tlds/example.tld"`.
 
 The greeting bean uses application scope. Its direct construction and publication
 are coordinated across requests; the `Application greeting created.` paragraph
