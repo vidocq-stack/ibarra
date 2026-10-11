@@ -8,3 +8,4 @@
 ** xref:reference.adoc[Reference]
 ** xref:migration.adoc[Migration]
 ** xref:modules/maven-plugin.adoc[Maven precompiler]
+** xref:modules/foy-binding.adoc[Foy binding]

@@ -31,7 +31,11 @@ on:
         required: true
         default:     "0.3.0"
       foy_release:
-        description: "io.vidocq.foy:* (all artifacts under io.vidocq.foy) — stable version (must be released on Central first)"
+        description: "io.vidocq.foy:* — stable version containing the JSP-engine SPI (must be released on Central first)"
+        type: string
+        required: true
+      chappe_release:
+        description: "io.vidocq.chappe:* (all artifacts under io.vidocq.chappe) — stable version (must be released on Central first)"
         type: string
         required: true
         default:     "0.3.0"
@@ -62,6 +66,7 @@ jobs:
           overrides: |
             io.vidocq=${{ inputs.vidocq_parent_release }}
             io.vidocq.foy=${{ inputs.foy_release }}
+            io.vidocq.chappe=${{ inputs.chappe_release }}
             io.vidocq.peano=${{ inputs.peano_release }}
           central-username: ${{ secrets.CENTRAL_USERNAME }}
           central-password: ${{ secrets.CENTRAL_PASSWORD }}

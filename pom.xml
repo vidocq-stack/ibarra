@@ -68,11 +68,11 @@
         <jakarta.el.version>6.0.1</jakarta.el.version>
 
         <!-- Vidocq upstreams (referenced via properties to allow cross-repo PR
-             overrides). Managed only — no module depends on them yet (PLAN.md):
-             peano is the default EL provider (milestone I3), foy hosts the
-             JSP-engine SPI binding (milestone I5). -->
+             overrides). Peano is the default EL provider in generation tests;
+             the Foy API hosts the optional JSP-engine binding. -->
         <peano.version>0.4.0-SNAPSHOT</peano.version>
         <foy.version>0.4.0-SNAPSHOT</foy.version>
+        <chappe.version>0.4.0-SNAPSHOT</chappe.version>
     </properties>
 
     <!--
@@ -87,6 +87,7 @@
         <module>ibarra-core</module>
         <module>ibarra-compiler</module>
         <module>ibarra-maven-plugin</module>
+        <module>ibarra-foy</module>
     </modules>
 
     <dependencyManagement>
@@ -109,6 +110,11 @@
             </dependency>
 
             <!-- Runtime implementations (Vidocq) -->
+            <dependency>
+                <groupId>io.vidocq.foy</groupId>
+                <artifactId>foy-api</artifactId>
+                <version>${foy.version}</version>
+            </dependency>
             <dependency>
                 <groupId>io.vidocq.peano</groupId>
                 <artifactId>peano-core</artifactId>

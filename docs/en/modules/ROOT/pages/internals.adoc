@@ -14,7 +14,7 @@ How Ibarra is designed to work inside. The runtime in `ibarra-core` implements m
 | `ibarra-api` | `io.vidocq.ibarra.api` | Immutable page policy, descriptor and constructor-based index SPI
 | `ibarra-compiler` | `io.vidocq.ibarra.compiler` | Parser/model, initial Java generator and build-time compiler; I3 in progress
 | `ibarra-maven-plugin` | — | Build-only `precompile` goal — initial I4 implemented
-| `ibarra-foy` | `io.vidocq.ibarra.foy` | Binding to Foy's JSP-engine SPI — planned, I5
+| `ibarra-foy` | `io.vidocq.ibarra.foy` | Initial I5 Foy binding; routing and application lifecycle
 | `ibarra-tck` | — | Official TCK runner, `-Ptck` profile only
 |===
 
@@ -121,7 +121,7 @@ Fixtures run generated classes on the module path with direct construction.
 The core module is patched only for the unit fixture's internal factory access;
 an additional I4 fixture packages a separate application JAR and discovers its
 unexported pages through the Java module service declaration, with compiler
-modules excluded. Foy integration remains I5.
+modules excluded. Initial I5 also verifies HTTP deployment on Foy/Chappe.
 
 == Modular packaging (initial I4)
 
@@ -154,7 +154,12 @@ typed shared beans are supported. This is not TCK certification.
 
 == Foy integration
 
-Foy will expose a JSP-engine SPI: deploy-time callback with the `JspConfigDescriptor`, the servlet mapped to `*.jsp`, the servlet backing `addJspFile`, and the TLD-declared listeners. Without Ibarra, Foy keeps working with JSP unmapped.
+Foy API exposes the optional `JspEngine` service. Deployment opens an application
+with its `ServletContext` and Java module layer before initializers/listeners.
+The binding supplies `*.jsp` / `*.jspx` routing and fresh named JSP instances.
+Foy exposes immutable `JspConfigDescriptor` views and closes engine state after
+component destruction. Without an engine, JSP remains unmapped. TLD listeners
+are pending; see xref:modules/foy-binding.adoc[the binding reference].
 
 == AOT compatibility
 

@@ -1,22 +1,29 @@
 = Usage
-:description: Intended usage patterns of Ibarra — precompiled pages, custom tags, tag files, development mode. In design.
+:description: Precompiled page usage and the remaining tag and development-mode work.
 
 [.lead]
-Nothing on this page works yet. It lists the usage patterns Ibarra is designed for, in the order the milestones deliver them.
+Precompiled pages and the initial Foy binding are available. Sections marked
+planned describe work that remains.
 
 == Precompiled pages (default)
 
-`ibarra-maven-plugin` translates every `.jsp` / `.jspx` and tag file of the web application during the build and generates a page index. Foy maps `*.jsp` to Ibarra's servlet, which looks pages up in the index — no class loading by name, no compiler at run time.
+`ibarra-maven-plugin` translates `.jsp` / `.jspx` pages during the build and
+generates a constructor-based index. Foy maps `*.jsp` / `*.jspx` to Ibarra's
+router, which finds pages in that index. Runtime deployment needs neither
+class loading by name nor compiler modules. See
+xref:modules/foy-binding.adoc[the binding reference] for application layers and lifecycle.
 
-== Custom tags and tag files
+== Custom tags and tag files (planned)
 
 TLDs (`WEB-INF/**/*.tld`, `META-INF/**/*.tld` of libraries) are read at translation time: generated code instantiates tag handlers and calls their attribute setters directly. Tag files under `WEB-INF/tags` are compiled like pages.
 
 == `jsp-config`
 
-`jsp-property-group` settings from `web.xml` (encoding, `el-ignored`, `scripting-invalid`, preludes and codas, buffer, `error-on-el-not-found`…) are applied at translation time, using the descriptor Foy parses.
+The Maven plugin reads root `web.xml` property groups at translation time.
+Foy separately exposes root/fragment configuration through the standard
+Servlet API at deployment. Automatic fragment-aware translation is pending.
 
-== Development mode (degraded)
+== Development mode (planned, degraded)
 
 A page without a precompiled class can be translated on first request through `javax.tools`. This needs the `java.compiler` module, logs a warning per page, and is off by default in production.
 

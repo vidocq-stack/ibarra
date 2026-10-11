@@ -124,7 +124,7 @@ reflective fallback and Vauban's runtime fallbacks.
 | Module (artefact) | Java module | Kind | Requires | Exports |
 |---|---|---|---|---|
 | `ibarra-api` | `io.vidocq.ibarra.api` | runtime | `transitive jakarta.servlet.jsp` | `io.vidocq.ibarra.spi` (`PageOptions`, `PageDescriptor`, `PageIndex`) |
-| `ibarra-core` | `io.vidocq.ibarra.core` | runtime | `transitive jakarta.servlet.jsp`, `io.vidocq.ibarra.api` | nothing — installs its `JspFactory` with `JspFactory.setDefaultFactory` at deployment (the spec defines no service lookup for it), `uses PageIndex` |
+| `ibarra-core` | `io.vidocq.ibarra.core` | runtime | `transitive jakarta.servlet.jsp`, `io.vidocq.ibarra.api` | qualified binding API to `ibarra-foy` only; installs its container `JspFactory`, `uses PageIndex` |
 | `ibarra-compiler` | `io.vidocq.ibarra.compiler` | build (+ dev mode planned) | `io.vidocq.ibarra.api`, `java.xml`, `static java.compiler`; Peano compiler integration pending | `io.vidocq.ibarra.compiler` |
 | `ibarra-maven-plugin` | (Maven plugin, class path) | build | `ibarra-compiler` | — |
 | `ibarra-foy` | `io.vidocq.ibarra.foy` | runtime | `io.vidocq.ibarra.core`, Foy's SPI module | nothing — `provides` Foy's JSP-engine SPI |
@@ -132,7 +132,7 @@ reflective fallback and Vauban's runtime fallbacks.
 | `ibarra-bench` | — | JMH, not deployed | — | — |
 
 Today `ibarra-api`, `ibarra-core` (I1 runtime), `ibarra-compiler` (I2 parser/model,
-initial I3/I4 generation and packaging), `ibarra-maven-plugin` and `ibarra-tck`
+initial I3/I4 generation and packaging), `ibarra-maven-plugin`, `ibarra-foy` and `ibarra-tck`
 (skeleton) exist. The Maven plugin runs only in Maven's build-time classpath;
 application pages and the runtime remain strict named Java modules.
 
@@ -146,31 +146,31 @@ present (soft integration, `requires static`, to validate).
 
 ### Foy (Jakarta Servlet 6.1) — the JSP-engine SPI
 
-Foy currently has stubs: `VidocqServletContext.addJspFile(...)` registers
-nothing useful and `getJspConfigDescriptor()` returns `null`. Foy will expose an
-SPI (to be designed **in Foy**; this is Ibarra's proposal):
+The initial binding uses an optional service exported by Foy API:
 
 ```java
-// in a Foy SPI module — sketch, names to be agreed with Foy
 public interface JspEngine {
-    /** Called once per web application, before servlets are initialised. */
-    void deploy(ServletContext context, JspConfigDescriptor jspConfig);
-    /** Servlet mapped by the container to *.jsp / *.jspx (servlet name "jsp"). */
-    Servlet jspServlet();
-    /** Backs ServletContext.addJspFile(name, jspFile) and <jsp-file> servlets. */
-    Servlet servletFor(String jspFile);
-    /** Listener class names declared in TLDs, registered by the container (Servlet 6.1, TLD listeners). */
-    List<String> tldListeners();
+    Application deploy(ServletContext context, ModuleLayer applicationLayer) throws ServletException;
+    interface Application extends AutoCloseable {
+        Servlet servlet();
+        Servlet servletFor(String jspFile);
+        void close();
+    }
 }
 ```
 
 - Foy parses `jsp-config` from `web.xml` / fragments into the standard
-  `JspConfigDescriptor` and returns it from `getJspConfigDescriptor()`; Ibarra
-  consumes it.
+  `JspConfigDescriptor` and returns it from `getJspConfigDescriptor()`.
+  Translation remains build-time; fragment-aware packaging is still pending.
 - Foy discovers the engine with `ServiceLoader` (`uses JspEngine`); with no
   engine present `*.jsp` stays unmapped and `addJspFile` keeps its current
   behaviour — Foy keeps working without Ibarra.
 - `ibarra-foy` is the only Ibarra module that depends on Foy.
+- Page indexes belong to the supplied application layer, with parent providers
+  excluded before instantiation. Extension pages initialize once; named JSP
+  registrations receive fresh instances. Stop/drain HTTP before undeployment.
+- TLD listener discovery and tag handlers remain pending. See the Antora
+  `modules/foy-binding` reference for bootstrap ownership and test tooling.
 
 ### Peano (Jakarta Expression Language 6.0)
 
@@ -224,7 +224,7 @@ the runtime's packaging goal, after I8.
 | I2 | `ibarra-compiler` parser: standard + XML syntax, directives, scripting, template text, page model | implemented: 36 parser corpus tests, clean install green |
 | I3 | Generator: Java source for pages, standard actions, EL via `jakarta.el` (Peano in tests), `jsp-config` property groups | in progress: generated fixtures render; static EL and remaining semantics pending |
 | I4 | `ibarra-maven-plugin` precompile goal + page index; extend `ibarra-api` SPI | initial implementation: independent application JAR precompiled and rendered; web fragments and broader configuration pending |
-| I5 | `ibarra-foy` + Foy's JSP-engine SPI (Foy-side PR), `*.jsp` mapping, `addJspFile`, `getJspConfigDescriptor`, TLD listeners | end-to-end test on Foy/Chappe |
+| I5 | `ibarra-foy` + Foy's JSP-engine SPI (Foy-side PR), `*.jsp` mapping, `addJspFile`, `getJspConfigDescriptor`, TLD listeners | initial HTTP implementation: JSP/JSPX, named registrations, includes, lifecycle; TLD listeners pending |
 | I6 | Custom tags: TLD parsing, classic + simple handlers, scripting variables, validators | |
 | I7 | Tag files, fragments, `jsp:invoke` / `jsp:doBody`; Peano compiled expressions in pages | |
 | I8 | Official TCK through `ibarra-tck` (Arquillian adapter on Foy) | 100 % PASS recorded in docs `tck` page |
@@ -303,7 +303,7 @@ Proof: `./mvnw -o -ntp clean install` under Temurin 25 passes 166 tests:
 the module path, construct pages directly and patch the core only to install
 its internal factory. I4 additionally compiles a separate application module,
 packages it as a JAR and discovers its unexported constructor-based page index
-with compiler modules excluded. Foy deployment remains I5. Module, dependency, codegen and
+with compiler modules excluded. Initial Foy deployment is available in I5. Module, dependency, codegen and
 concurrency reviews have run; fixed regressions are recorded in `BUG.md`.
 
 Strict policies are implemented: generated immutable `PageOptions` carry
@@ -343,7 +343,7 @@ discovers/renders a separate application JAR with compiler modules excluded.
 The goal handles `.jsp`/`.jspx`, root web.xml property groups, stable generated
 names and content-verified incremental cleanup. Default packages derive from the
 application module name. Web-fragment merging, TLD/taglib configuration, custom
-extension mappings and Foy deployment remain pending. Packaging never enables
+extension mappings and Foy deployment are verified by the initial I5 HTTP fixture. Packaging never enables
 startup EL interpretation. Maven's provided/build dependencies are named in the
 Antora Maven plugin reference; none enter application/runtime artifacts.
 
@@ -354,8 +354,9 @@ Antora Maven plugin reference; none enter application/runtime artifacts.
    after the source path is TCK-green?
 2. **TCK deployment model** — runtime translation vs precompiling Arquillian
    adapter (see "TCK plan").
-3. **Foy SPI shape and module** — the `JspEngine` sketch above, which Foy module
-   exports it, and who parses `jsp-config` (Foy, recommended).
+3. **Foy SPI shape and module** — resolved for initial I5: Foy API exports the
+   application-scoped service above, Foy parses `jsp-config`, Ibarra owns page
+   catalogues. TLD listener integration remains open.
 4. **Peano coupling** — `requires static io.vidocq.peano.*` soft integration in
    `ibarra-core`, or keep the core strictly on `jakarta.el` and put the Peano
    accelerations in a separate `ibarra-peano` module?

@@ -21,7 +21,12 @@ package io.vidocq.ibarra.spi;
 
 import java.util.List;
 
-/** Build-generated catalogue discovered through a Java module service declaration. */
+/**
+ * Build-generated catalogue discovered through a Java module service declaration.
+ * Providers use a public constructor in their application module, as generated
+ * by the precompiler. Static {@code provider()} methods returning this shared
+ * interface are unsupported: their service type cannot establish layer ownership.
+ */
 @FunctionalInterface
 public interface PageIndex {
     /** Immutable page descriptors; retrieving them must not construct servlets. */

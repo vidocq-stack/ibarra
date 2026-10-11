@@ -10,11 +10,11 @@ Reference data for Ibarra `{project-version}`. Entries marked _planned_ do not e
 |===
 | Maven coordinates | Java module | Notes
 
-| `io.vidocq.ibarra:ibarra-core` | `io.vidocq.ibarra.core` | I1 runtime implemented; container binding planned
+| `io.vidocq.ibarra:ibarra-core` | `io.vidocq.ibarra.core` | I1 runtime; qualified container binding API
 | `io.vidocq.ibarra:ibarra-api` | `io.vidocq.ibarra.api` | Immutable page options, descriptors and constructor-based index SPI
 | `io.vidocq.ibarra:ibarra-compiler` | `io.vidocq.ibarra.compiler` | I2 parser/model and initial I3 generator/compiler
 | `io.vidocq.ibarra:ibarra-maven-plugin` | — | xref:modules/maven-plugin.adoc[`precompile` goal], build time only
-| `io.vidocq.ibarra:ibarra-foy` | `io.vidocq.ibarra.foy` | _planned_ — Foy binding
+| `io.vidocq.ibarra:ibarra-foy` | `io.vidocq.ibarra.foy` | xref:modules/foy-binding.adoc[Initial Foy binding]
 |===
 
 == Runtime dependencies

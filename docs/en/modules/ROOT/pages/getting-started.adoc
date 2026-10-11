@@ -1,10 +1,10 @@
 = Getting started
-:description: Precompile an application module with Ibarra; container integration remains planned.
+:description: Precompile an application module with Ibarra and deploy it in Foy.
 
 [.lead]
-Ibarra cannot deploy JSP source files yet: the runtime/parser and initial Java
-generation and modular packaging are implemented. Container binding remains
-planned; precompiled application JARs are tested against servlet doubles.
+Ibarra compiles JSP/JSPX into application modules during the build. The initial
+Foy binding serves those pages over HTTP without a runtime compiler. Build-time
+EL, tag handlers and TLD listeners remain pending.
 
 == Prerequisites
 
@@ -39,15 +39,16 @@ no exports or opens. Put pages in `src/main/webapp` and run `mvn package`.
 See xref:modules/maven-plugin.adoc[the plugin reference] and the repository's
 `examples/precompiled-pages` for a complete buildable example.
 
-`ibarra-foy` remains planned for container binding. Default packaging rejects EL
+Deploy with `ibarra-foy` and the explicit application layer as described in
+xref:modules/foy-binding.adoc[the binding reference]. Default packaging rejects EL
 until build-time EL integration is available; it never enables startup preview.
 
-== A first page (target, milestone I5)
+== A first page (initial I5)
 
 [source,jsp]
 ----
-<%@ page contentType="text/html;charset=UTF-8" %>
-<p>Hello, ${param.name}!</p>
+<%@ page contentType="text/html;charset=UTF-8" session="false" %>
+<p>Hello!</p>
 ----
 
 Placed in `src/main/webapp/hello.jsp`, it is compiled during the build and served by Foy at `/hello.jsp`.
@@ -84,8 +85,8 @@ compiler is not available yet, so EL generation fails by default. Tests/previews
 can explicitly select `GenerationOptions.DEFAULT.withStartupEl(true)`, which
 initializes interpreter expressions once per servlet instance at startup.
 
-The Maven goal, page-index discovery and runtime factory installation are still
-I4/I5 work. See xref:internals.adoc[Internals] for the current action boundaries.
+The Maven goal, page-index discovery and runtime factory installation are
+implemented in initial I4/I5. See xref:internals.adoc[Internals] for the current action boundaries.
 
 == Building Ibarra from source
 

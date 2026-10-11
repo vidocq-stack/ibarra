@@ -19,10 +19,11 @@
  */
 
 /**
- * Ibarra — Jakarta Pages 4.0 implementation (scaffold).
+ * Ibarra — Jakarta Pages 4.0 implementation.
  *
- * <p>Nothing is exported: {@code io.vidocq.ibarra.core.internal} is the page
- * runtime. {@code jakarta.servlet.jsp} brings {@code jakarta.servlet} and
+ * <p>No package has an unqualified export. The binding API is reserved for
+ * Ibarra Foy; {@code io.vidocq.ibarra.core.internal} remains hidden.
+ * {@code jakarta.servlet.jsp} brings {@code jakarta.servlet} and
  * {@code jakarta.el} transitively; the Expression Language implementation
  * (Peano by default) is discovered at run time through the standard
  * {@code jakarta.el.ExpressionFactory} service, and the runtime will be plugged
@@ -32,4 +33,5 @@ module io.vidocq.ibarra.core {
     requires io.vidocq.ibarra.api;
     requires transitive jakarta.servlet.jsp;
     uses io.vidocq.ibarra.spi.PageIndex;
+    exports io.vidocq.ibarra.core.binding to io.vidocq.ibarra.foy;
 }

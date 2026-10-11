@@ -34,7 +34,11 @@ final class PrecompiledPages {
         pages = Map.copyOf(collected);
     }
     static PrecompiledPages discover(ModuleLayer layer) {
-        return new PrecompiledPages(ServiceLoader.load(Objects.requireNonNull(layer), PageIndex.class));
+        Objects.requireNonNull(layer);
+        var indexes = ServiceLoader.load(layer, PageIndex.class).stream()
+                .filter(provider -> layer.modules().contains(provider.type().getModule()))
+                .map(ServiceLoader.Provider::get).toList();
+        return new PrecompiledPages(indexes);
     }
     PageDescriptor find(String path) { return pages.get(path); }
 }

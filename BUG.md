@@ -1,5 +1,22 @@
 # BUG.md — Ibarra
 
+## IBARRA-042 · 2026-10-11 · Missing page requests grow the router cache
+
+- Symptom: distinct missing JSP URLs retain one cache entry each.
+- Minimal repro: `RouterLifecycleTest` sends 100 distinct missing page lookups
+  after concurrent requests initialize one real page.
+- Cause: caching negative catalogue lookups in the servlet task map.
+- Status: fixed by checking the immutable catalogue before allocating a task;
+  cache entries are bounded by the finite set of precompiled pages.
+
+## IBARRA-043 · 2026-10-11 · One failing page destruction skips other pages
+
+- Symptom: an exception from one page's `destroy()` prevents later cleanup.
+- Minimal repro: `RouterLifecycleTest` installs two initialized pages, one of
+  which throws during destruction, and checks both are destroyed once.
+- Cause: router cleanup stopped on the first unchecked exception.
+- Status: fixed by logging individual failures and continuing destruction.
+
 Reproducible bugs (internal issue, regression, incorrect behavior not yet fixed).
 Entry format: `short id · date · symptom · minimal repro · cause hypothesis · status`.
 

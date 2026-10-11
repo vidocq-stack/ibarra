@@ -1,0 +1,63 @@
+= Foy binding
+:description: Deploy precompiled Ibarra pages in Foy through its optional JSP-engine service.
+
+== Runtime modules
+
+`ibarra-foy` requires `ibarra-core` and `foy-api`. It provides
+`io.vidocq.foy.spi.jsp.JspEngine`, exports no packages and opens none.
+Core exposes its binding API only to this module. Foy itself has no Jakarta
+Pages dependency and continues to run without an engine.
+
+Deploy with `WebAppDeployer.deploy(model, options, applicationLayer)`.
+The application's named module requires `io.vidocq.ibarra.api` and carries the
+generated `PageIndex` service declaration. Indexes belong to the supplied
+layer: indexes from its parents are excluded before construction. Use the
+precompiler's constructor-based index providers; static providers returning
+the shared `PageIndex` interface cannot establish layer ownership.
+
+== Routing and ownership
+
+Foy opens the engine before servlet initializers and listeners. It maps the
+container servlet named `jsp` to `*.jsp` and `*.jspx`, subject to existing
+application mappings. `addJspFile` and descriptor `jsp-file` declarations
+create independent page instances with their own servlet names and init
+parameters. Missing compiled pages return HTTP 404; no translation occurs at
+runtime. Direct requests into `WEB-INF` or `META-INF` are refused.
+
+The extension router initializes each requested page once. Concurrent requests
+share the completed initialization task. Unknown paths never grow its cache.
+Foy owns initialization/destruction of named pages; the router owns its cached
+pages. Individual destruction failures are logged without skipping other pages.
+
+The container must serialize installation of the standard global `JspFactory`
+during bootstrap, before concurrent deployments or competing JSP engines.
+Ibarra reuses its container factory, rejects an already installed foreign
+implementation, and releases application contexts independently at undeployment.
+Stop and drain the HTTP server before closing the deployment. Engine close
+runs after servlet and listener destruction; it does not drain active requests.
+
+Foy exposes immutable standard `JspConfigDescriptor` views from root and
+ordered fragment descriptors. Translation still happens at build time using
+the Maven plugin's root descriptor settings; automatic fragment translation
+configuration and TLD listeners remain pending. Build-time EL also awaits
+Peano, and production generation keeps EL disabled.
+
+== Container verification and test dependencies
+
+The HTTP fixture uses Arquillian's `DeployableContainer` lifecycle and
+ShrinkWrap archives, starts Foy/Chappe in a subprocess, and deploys pages in a
+child Java module layer. It checks JSP/JSPX, includes, named registrations,
+virtual request threads and HTTP 404. Neither `java.compiler` nor
+`io.vidocq.ibarra.compiler` is resolved in that runtime process.
+
+Test-only dependencies are JUnit, Ibarra compiler, Foy core, Chappe core,
+`arquillian-container-spi:1.8.0.Final`, and ShrinkWrap API/implementation
+`1.2.6`. Their transitive tooling dependencies remain outside runtime artifacts.
+Test compilation and the Arquillian control process use a classpath because
+those tooling JARs have incompatible automatic module descriptors. The deployed
+application and server use explicit named modules only.
+
+While the Foy SPI PR is pending, PR validation builds an immutable Foy commit
+at a local release-style version and persists that version in Ibarra's POM.
+This prerequisite publishes no artifacts. Remove the temporary source pin once
+a published Foy version includes the SPI.
