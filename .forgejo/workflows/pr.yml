@@ -165,12 +165,6 @@ jobs:
           print(f"plugin.xml synced: {n}")
           PY
 
-      - name: Build the pending Foy SPI prerequisite from its immutable source revision
-        if: steps.changes.outputs.docs-only != 'true'
-        # Temporary prerequisite until the Foy SPI is merged and published.
-        # Its release-style version is installed locally and persisted in the POM.
-        run: python3 .forgejo/build-foy-prerequisite.py
-
       - name: Build, test & install the producer locally
         if: steps.changes.outputs.docs-only != 'true'
         # install (not deploy): the PR artifact lands in ~/.m2 only — nothing is published.
