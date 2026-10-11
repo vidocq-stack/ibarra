@@ -23,6 +23,22 @@ package io.vidocq.ibarra.compiler;
 import java.util.Objects;
 
 /** Immutable, build-only attribute contract from a TLD. */
-public record TagAttribute(String name, String type, boolean required, boolean runtimeExpression, boolean fragment) {
-    public TagAttribute { Objects.requireNonNull(name); Objects.requireNonNull(type); }
+public record TagAttribute(String name, String type, boolean required, boolean runtimeExpression, boolean fragment,
+        String deferredValueType, DeferredMethodSignature deferredMethod) {
+    public TagAttribute(String name, String type, boolean required, boolean runtimeExpression, boolean fragment) {
+        this(name, type, required, runtimeExpression, fragment, null, null);
+    }
+    public TagAttribute {
+        Objects.requireNonNull(name); Objects.requireNonNull(type);
+        if (deferredValueType != null && deferredMethod != null || fragment && (deferredValueType != null || deferredMethod != null))
+            throw new IllegalArgumentException("Conflicting deferred attribute contracts");
+    }
+    /** Whether this attribute permits deferred expressions. */
+    public boolean deferred() { return deferredValueType != null || deferredMethod != null; }
+    /** Exact setter input, independent of the expected expression result type. */
+    public String setterType() {
+        if (deferred()) return runtimeExpression ? "java.lang.Object"
+                : deferredMethod == null ? "jakarta.el.ValueExpression" : "jakarta.el.MethodExpression";
+        return type;
+    }
 }

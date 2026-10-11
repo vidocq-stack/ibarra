@@ -149,7 +149,9 @@ production packaging. Page imports resolve lazily through generated class litera
 TLD functions use immutable Peano descriptors and generated direct static invokers.
 Shared-scope bean lookup/construction/publication use an application-owned
 reentrant lock; creator-only bodies run after unlocking.
-Runtime import changes, deferred attributes,
+Typed deferred tag attributes capture variables/functions per invocation and
+scope method metadata lookup to the application loader with finally restoration.
+Runtime import changes,
 bean creation and full semantic validation remain open.
 Mixed-syntax includes/preludes/codas structure each file before expanding the
 translation unit, then apply the global EL policy. Source syntax remains available

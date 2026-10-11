@@ -130,12 +130,72 @@ Interpreter preview does not support these descriptor-only bindings and fails
 explicitly. Deferred attributes and runtime function-map mutation remain outside
 this implementation.
 
+== Deferred tag attributes
+
+TLD attributes may declare `deferred-value` with an optional expected type
+(default Object), or `deferred-method` with an optional method signature
+(default `void method()`). Pure setters must accept ValueExpression or
+MethodExpression exactly. Combining either declaration with rtexprvalue=true
+requires an Object setter; the dynamic type and deferred expected type remain
+separate contracts. Fragment/deferred conflicts and malformed signatures fail
+descriptor parsing. Expected classes are inspected without initialization;
+staged javac validates module accessibility.
+
+[source,xml]
+----
+<attribute>
+  <name>target</name>
+  <deferred-value><type>java.lang.String</type></deferred-value>
+</attribute>
+<attribute>
+  <name>action</name>
+  <deferred-method>
+    <method-signature>java.lang.String documented(java.lang.String)</method-signature>
+  </deferred-method>
+</attribute>
+----
+
+Use `target="#{param.name}"` and `action="#{profile.greet}"`. The signature's
+method name is documentation only; its return/parameter classes define the
+expected method contract. Peano compiles both expression forms at build time.
+Generated code directly constructs an expression per tag invocation, capturing
+the current VariableMapper bindings and immutable TLD function descriptors.
+The temporary construction context is discarded; container request/page contexts
+are not stored in expression fields. User-supplied mapped expressions retain
+their own normal binding/lifetime semantics.
+
+Pure deferred values accept literals and hash expressions; literals remain
+isLiteralText=true and values are coerced when the handler evaluates them.
+Methods accept hash expressions and convertible non-void literals. Literal method
+validation supports primitive/boxed scalars, String/Object and BigInteger/BigDecimal;
+other literal return targets fail explicitly at translation. Nonliteral signatures
+may use public application types and arrays. Mixed attributes defer only active
+hash syntax; literals, dollar syntax and scripting values are evaluated immediately
+using the dynamic contract. Escaping, EL-ignored and deferred-literal policies
+are applied before classification. A single attribute cannot mix active dollar
+and hash expressions.
+
+Named deferred attributes accept trimmed text and EL, with scoped bindings on
+named/text wrappers. Executable named-body capture and composites rebinding one
+function name to different targets remain explicit diagnostics. Preview mode
+does not silently replace deferred compilation with parsing.
+
+Literal protocol classes are emitted through the Class-File API rather than
+reparsing escaped literal data. They preserve source/literal metadata, long strings
+and serial identities. A generated method adapter keeps only a class anchor and
+delegate. Metadata/reference lookup and invocation use the application's loader,
+restoring the caller loader in finally, including failure and concurrent calls.
+This exposes the application's generated accessor tables with reflection denied
+even when the caller thread belongs to the host layer. No ClassLoader or
+PageContext is serialized by the adapter.
+
 == Remaining work and proof
 
 Immediate template/action/tag EL uses the delivered compiler, including scopes,
 map/list navigation, operators, calls, lambdas and fixed-arity TLD functions.
-Deferred attributes remain follow-up work.
-Pages-specific VariableMapper capture is not added by class-only constructors.
+Typed deferred tag attributes are implemented within the boundaries above.
+Immediate static expressions use class-only constructors; deferred tag expressions
+capture the invoking context's VariableMapper through per-invocation constructors.
 I3 remains in progress; the official Pages TCK has not been run.
 
 A packaged named-module fixture renders with both compilers excluded and a
@@ -144,6 +204,9 @@ render repeated request values, TLD functions and private beans with Peano refle
 Tests cover bytecode immutability, collisions, diagnostics, required module reads
 and incremental cleanup. The independent Maven example compiles EL through the
 actual precompile goal, calls a TLD function and explicitly requires Peano API.
-The local Ibarra reactor passes 249 tests. Peano's compatible prerequisite passes
+The local Ibarra reactor passes 263 tests. Peano's compatible prerequisite passes
 303 tests and 361/361 official EL TCK tests. The official Pages TCK remains unrun;
 these unit and integration results are not Pages certification.
+Deferred fixtures also verify setter overload selection, writability, variable
+capture, literal interpreter agreement, serialization, loader restoration and
+private-bean method dispatch over HTTP in both JSP syntaxes.

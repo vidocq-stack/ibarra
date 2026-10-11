@@ -23,6 +23,11 @@ are coordinated across requests; the `Application greeting created.` paragraph
 appears only for its creator. The body runs after unlocking and is not an atomic
 initialization transaction.
 
+`example:greeting` receives a deferred ValueExpression for `#{param.name}` and a
+literal MethodExpression for `Welcome`. Its handler evaluates them through the
+current EL context. The TLD specifies their expected String types; generated
+expression classes ship with the application, with no runtime parsing or compiler.
+
 Run from the Ibarra checkout root with Java 25:
 
 ```sh

@@ -109,7 +109,9 @@ ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
    `withStartupEl(true)` remains an interpreter preview; packaging rejects it.
    Never add an automatic runtime parsing fallback. Fixed-arity TLD functions use
    build-validated descriptors and generated direct static invokers. Deferred
-   attributes and other remaining Pages semantics keep I3 in progress.
+   tag attributes use typed per-invocation compiled expressions, with creation-time
+   variable/function capture and scoped method metadata/evaluation. Broader
+   translation semantics keep I3 in progress.
    Generated page imports use lazy direct class literals from build-time metadata;
    runtime ImportHandler mutations are rejected explicitly in that mode.
 
@@ -126,8 +128,10 @@ ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
     packages accessible to the generated application module. Initial I6 handlers
     use fresh instances and direct calls, including custom-tag named/fragment
     attributes and explicit bodies. Namespaced dynamic attributes, tagdependent
-    bodies, variables, TEI/TLV, tag files and deferred attributes remain unsupported
+    bodies, variables, TEI/TLV and tag files remain unsupported
     with translation diagnostics; do not silently ignore their semantics.
+    Deferred named attributes accept text/EL; executable body capture and custom
+    literal method return conversion remain explicit follow-up boundaries.
 
 ## Conventions
 

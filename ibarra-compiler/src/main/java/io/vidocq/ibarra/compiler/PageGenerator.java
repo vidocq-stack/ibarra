@@ -83,6 +83,8 @@ public final class PageGenerator {
         private final List<String> expressions = new ArrayList<>();
         private final List<SourceLocation> expressionLocations = new ArrayList<>();
         private final List<Map<String, BeanClasses.Function>> expressionFunctions = new ArrayList<>();
+        private record ExpressionSpec(String expectedType, DeferredMethodSignature method, boolean deferred, boolean literal) { }
+        private final List<ExpressionSpec> expressionSpecs = new ArrayList<>();
         private final Map<String, String> beans = new LinkedHashMap<>();
         private boolean needsFactory;
         private int serial;
@@ -123,21 +125,25 @@ public final class PageGenerator {
             result.add("public final class " + simple + " extends " + simple + "$Lifecycle {\n");
             var compiled = new ArrayList<GeneratedClass>();
             for (int i = 0; i < expressions.size(); i++) {
+                var spec = expressionSpecs.get(i);
                 if (startupElAllowed) result.add("private jakarta.el.ValueExpression _jspxExpression" + i + ";\n");
                 else {
                     String name = className + "$Expression" + i;
                     try {
-                        compiled.add(new GeneratedClass(name, io.vidocq.peano.compiler.ExpressionCompiler.compile(name, expressions.get(i))));
+                        compiled.add(new GeneratedClass(name, spec.literal() ? LiteralExpressions.compile(name, expressions.get(i), spec.method() != null)
+                                : spec.method() == null ? io.vidocq.peano.compiler.ExpressionCompiler.compile(name, expressions.get(i))
+                                : io.vidocq.peano.compiler.ExpressionCompiler.compileMethod(name, expressions.get(i))));
                     } catch (jakarta.el.ELException invalid) {
                         throw error(expressionLocations.get(i), "Cannot compile EL: " + invalid.getMessage());
                     }
                     var functions = expressionFunctions.get(i);
                     if (!functions.isEmpty()) functionDefinitions(result, i, functions);
-                    result.add("private static final jakarta.el.ValueExpression _jspxExpression" + i + " = new " + name + "("
+                    if (!spec.deferred()) result.add("private static final jakarta.el.ValueExpression _jspxExpression" + i + " = new " + name + "("
                             + (functions.isEmpty() ? "" : "_jspxFunctionContext" + i + "(), ") + "Object.class);\n");
                 }
             }
             result.add(declarations);
+            if (expressionSpecs.stream().anyMatch(spec -> spec.method() != null)) methodScope(result);
             result.add(fragments);
             result.add("@Override protected final void _jspxInitialize() {\n");
             if (startupElAllowed && !expressions.isEmpty()) {
@@ -314,7 +320,7 @@ public final class PageGenerator {
             var tag = library.tags().get(local);
             if (tag == null) throw error(node.location(), "Unknown tag " + local + " in " + library.resourcePath());
             if (library.validationRequired() || tag.unsupportedMetadata())
-                throw error(node.location(), "Tag validators, scripting variables, deferred metadata and tag files are not supported yet");
+                throw error(node.location(), "Tag validators, scripting variables and tag files are not supported yet");
             if (tag.bodyContent().equals("tagdependent")) throw error(node.location(), "Tag-dependent bodies require raw-source translation support");
             var kind = classes.handler(tag.handlerClass(), node.location());
             if (kind.simple() && tag.bodyContent().equals("JSP")) throw error(node.location(), "SimpleTag cannot have JSP body-content");
@@ -340,11 +346,13 @@ public final class PageGenerator {
                     body.add(handler + ".setDynamicAttribute(null, " + JavaSource.quote(supplied.getKey()) + ", " + value(supplied.getValue(), node.location(), false) + ");\n", node.location());
                 } else {
                     if (attribute.fragment()) throw error(node.location(), "Fragment attributes require jsp:attribute");
-                    var setter = attribute.runtimeExpression()
-                            ? classes.tagSetter(tag.handlerClass(), attribute.name(), attribute.type(), node.location())
+                    var setter = attribute.runtimeExpression() || attribute.deferred()
+                            ? classes.tagSetter(tag.handlerClass(), attribute.name(), attribute.setterType(), node.location())
                             : classes.setter(tag.handlerClass(), attribute.name(), node.location());
                     var target = new TagAttribute(attribute.name(), setter.type(), attribute.required(), attribute.runtimeExpression(), false);
-                    body.add(handler + "." + setter.name() + "((" + setter.type() + ") (" + tagValue(supplied.getValue(), target, node.location()) + "));\n", node.location());
+                    String argument = attribute.deferred() ? deferredAttribute(attributeInput(supplied.getValue(), node.location()), attribute, node.location())
+                            : tagValue(supplied.getValue(), target, node.location());
+                    body.add(handler + "." + setter.name() + "((" + setter.type() + ") (" + argument + "));\n", node.location());
                 }
             }
             for (var supplied : invocation.attributes().entrySet()) {
@@ -357,11 +365,12 @@ public final class PageGenerator {
                     if (!tag.dynamicAttributes() || supplied.getKey().contains(":")) throw error(named.location(), "Unknown or namespaced tag attribute: " + supplied.getKey());
                     body.add(handler + ".setDynamicAttribute(null, " + JavaSource.quote(supplied.getKey()) + ", " + capture(content, named.location(), handler) + ");\n", named.location());
                 } else {
-                    var setter = attribute.runtimeExpression()
-                            ? classes.tagSetter(tag.handlerClass(), attribute.name(), attribute.type(), named.location())
+                    var setter = attribute.runtimeExpression() || attribute.deferred()
+                            ? classes.tagSetter(tag.handlerClass(), attribute.name(), attribute.setterType(), named.location())
                             : classes.setter(tag.handlerClass(), attribute.name(), named.location());
                     String argument;
                     if (attribute.fragment()) argument = fragment(content, named.location(), handler);
+                    else if (attribute.deferred()) argument = deferredAttribute(deferredInput(content, named.location()), attribute, named.location());
                     else if (attribute.runtimeExpression()) argument = stringConversion(capture(content, named.location(), handler), setter.type(), named.location());
                     else {
                         argument = literalValue(templateLiteral(content), new TagAttribute(attribute.name(), setter.type(), attribute.required(), false, false), named.location());
@@ -564,6 +573,110 @@ public final class PageGenerator {
             String literal = normalized.stream().map(node -> ((PageNode.Text) node).value()).collect(java.util.stream.Collectors.joining());
             return literalValue(literal, attribute, at);
         }
+        private record DeferredInput(String code, String literal, boolean hash, boolean dollar,
+                Map<String, BeanClasses.Function> functions) { }
+        private DeferredInput attributeInput(String raw, SourceLocation at) {
+            if (raw.startsWith("<%=") && raw.endsWith("%>"))
+                return new DeferredInput(raw, null, false, true, Map.of());
+            var pieces = new PageNormalizer(sourceSyntaxes.getOrDefault(at.source(), Page.Syntax.STANDARD),
+                    new ParserOptions(bool("isELIgnored", false), bool("deferredSyntaxAllowedAsLiteral", false)), Map.of())
+                    .normalizeStructured(List.of(new PageNode.Text(raw, at)));
+            return deferredInput(pieces, at);
+        }
+        private DeferredInput deferredInput(List<PageNode> pieces, SourceLocation at) {
+            var code = new StringBuilder(); var literal = new StringBuilder();
+            var functions = new TreeMap<String, BeanClasses.Function>(); boolean[] kinds = new boolean[2];
+            deferredParts(pieces, at, code, literal, functions, kinds);
+            return new DeferredInput(code.toString(), literal.toString(), kinds[0], kinds[1], Map.copyOf(functions));
+        }
+        private void deferredParts(List<PageNode> pieces, SourceLocation at, StringBuilder code, StringBuilder literal,
+                Map<String, BeanClasses.Function> functions, boolean[] kinds) {
+            for (var piece : pieces) {
+                if (piece instanceof PageNode.Text text) {
+                    literal.append(text.value());
+                    code.append(text.value().replace("\\", "\\\\").replace("${", "\\${").replace("#{", "\\#{"));
+                } else if (piece instanceof PageNode.Expression expression) {
+                    kinds[expression.deferred() ? 0 : 1] = true;
+                    String source = (expression.deferred() ? "#{" : "${") + expression.code() + "}";
+                    code.append(source);
+                    for (var entry : functionBindings(source, expression.location()).entrySet()) {
+                        var previous = functions.putIfAbsent(entry.getKey(), entry.getValue());
+                        if (previous != null && !previous.equals(entry.getValue()))
+                            throw error(expression.location(), "Deferred composite cannot rebind one function name");
+                    }
+                } else if (action(piece, "text")) {
+                    var wrapper = (PageNode.Element) piece; var previous = enterNamespaces(wrapper);
+                    try { deferredParts(wrapper.children(), at, code, literal, functions, kinds); }
+                    finally { namespaces.clear(); namespaces.putAll(previous); }
+                } else throw error(at, "Deferred named attributes require text and EL, without executable body capture");
+            }
+        }
+        private String deferredAttribute(DeferredInput input, TagAttribute attribute, SourceLocation at) {
+            if (input.hash() && input.dollar()) throw error(at, "Attribute cannot mix immediate and deferred expressions");
+            if (!input.hash() && attribute.runtimeExpression()) {
+                var dynamic = new TagAttribute(attribute.name(), attribute.type(), attribute.required(), true, false);
+                if (!input.dollar()) return literalValue(input.literal(), dynamic, at);
+                if (input.code().startsWith("<%=")) return tagValue(input.code(), dynamic, at);
+                if (startupElAllowed) throw error(at, "Mixed deferred attributes require build-time compilation");
+                String expected = classes.expressionType(attribute.type(), at);
+                int index = registerExpression(input.code(), at, new ExpressionSpec(expected, null, true, false), input.functions());
+                String context = input.functions().isEmpty() ? "pageContext.getELContext()"
+                        : "_jspxFunctionContext" + index + "(pageContext.getELContext())";
+                return "new " + className + "$Expression" + index + "(" + context + ", " + expected + ".class).getValue(pageContext.getELContext())";
+            }
+            if (input.dollar()) throw error(at, "Deferred attribute requires #{} syntax: " + attribute.name());
+            if (startupElAllowed) throw error(at, "Deferred attributes require build-time compilation");
+            String expected; DeferredMethodSignature method = null;
+            if (attribute.deferredMethod() != null) {
+                var signature = attribute.deferredMethod();
+                expected = classes.expressionType(signature.returnType(), at);
+                method = new DeferredMethodSignature(expected, signature.parameters().stream().map(type -> classes.expressionType(type, at)).toList());
+                if (!input.hash()) validateMethodLiteral(input.literal(), expected, at);
+            } else expected = classes.expressionType(attribute.deferredValueType(), at);
+            var spec = new ExpressionSpec(expected, method, true, !input.hash());
+            int index = registerExpression(input.hash() ? input.code() : input.literal(), at, spec, input.hash() ? input.functions() : Map.of());
+            String context = spec.literal() ? "" : expressionFunctions.get(index).isEmpty() ? "pageContext.getELContext(), "
+                    : "_jspxFunctionContext" + index + "(pageContext.getELContext()), ";
+            String construction = "new " + className + "$Expression" + index + "(" + context + expected + ".class"
+                    + (method == null ? "" : ", new Class<?>[]{" + method.parameters().stream().map(type -> type + ".class").collect(java.util.stream.Collectors.joining(",")) + "}") + ")";
+            return method == null ? construction : "new _jspxScopedMethodExpression(" + className + ".class, " + construction + ")";
+        }
+        private void methodScope(JavaSource source) {
+            source.add("private static final class _jspxScopedMethodExpression extends jakarta.el.MethodExpression {\n"
+                    + "private static final long serialVersionUID=1L; private final Class<?> owner; private final jakarta.el.MethodExpression delegate;\n"
+                    + "_jspxScopedMethodExpression(Class<?> owner, jakarta.el.MethodExpression delegate) { this.owner=owner; this.delegate=delegate; }\n"
+                    + "private <T> T scoped(java.util.function.Supplier<T> operation) { var thread=Thread.currentThread(); var previous=thread.getContextClassLoader();\n"
+                    + "try { var loader=owner.getClassLoader(); if(loader!=null) thread.setContextClassLoader(loader); return operation.get(); } finally { thread.setContextClassLoader(previous); } }\n"
+                    + "public Object invoke(jakarta.el.ELContext context,Object[] parameters) { return scoped(()->delegate.invoke(context,parameters)); }\n"
+                    + "public jakarta.el.MethodInfo getMethodInfo(jakarta.el.ELContext context) { return scoped(()->delegate.getMethodInfo(context)); }\n"
+                    + "public jakarta.el.MethodReference getMethodReference(jakarta.el.ELContext context) { return scoped(()->delegate.getMethodReference(context)); }\n"
+                    + "public String getExpressionString() { return delegate.getExpressionString(); }\n"
+                    + "public boolean isLiteralText() { return delegate.isLiteralText(); }\n"
+                    + "public boolean isParametersProvided() { return delegate.isParametersProvided(); }\n"
+                    + "public boolean equals(Object other) { return other instanceof _jspxScopedMethodExpression expression && owner==expression.owner && delegate.equals(expression.delegate); }\n"
+                    + "public int hashCode() { return java.util.Objects.hash(owner,delegate); }\n}\n");
+        }
+        private void validateMethodLiteral(String literal, String type, SourceLocation at) {
+            if (type.equals("void")) throw error(at, "Literal deferred method cannot return void");
+            if (!Set.of("byte", "java.lang.Byte", "short", "java.lang.Short", "int", "java.lang.Integer", "long", "java.lang.Long",
+                    "float", "java.lang.Float", "double", "java.lang.Double", "java.math.BigInteger", "java.math.BigDecimal",
+                    "boolean", "java.lang.Boolean", "char", "java.lang.Character", "java.lang.String", "java.lang.Object").contains(type))
+                throw error(at, "Literal deferred method return conversion is unsupported: " + type);
+            try {
+                if (!literal.isEmpty()) switch (type) {
+                    case "byte", "java.lang.Byte" -> Byte.valueOf(literal);
+                    case "short", "java.lang.Short" -> Short.valueOf(literal);
+                    case "int", "java.lang.Integer" -> Integer.valueOf(literal);
+                    case "long", "java.lang.Long" -> Long.valueOf(literal);
+                    case "float", "java.lang.Float" -> Float.valueOf(literal);
+                    case "double", "java.lang.Double" -> Double.valueOf(literal);
+                    case "java.math.BigInteger" -> new java.math.BigInteger(literal);
+                    case "java.math.BigDecimal" -> new java.math.BigDecimal(literal);
+                    case "boolean", "java.lang.Boolean", "char", "java.lang.Character", "java.lang.String", "java.lang.Object" -> { }
+                    default -> throw error(at, "Literal deferred method return conversion is unsupported: " + type);
+                }
+            } catch (NumberFormatException invalid) { throw error(at, "Invalid literal for deferred method return type " + type); }
+        }
         private String literalValue(String literal, TagAttribute attribute, SourceLocation at) {
             String type = attribute.type();
             try {
@@ -741,6 +854,15 @@ public final class PageGenerator {
         }
 
         private String expression(String code, SourceLocation at) {
+            int index = registerExpression(code, at, new ExpressionSpec("java.lang.Object", null, false, false), null);
+            return "_jspxExpression" + index + ".getValue(pageContext.getELContext())";
+        }
+        private int registerExpression(String code, SourceLocation at, ExpressionSpec spec, Map<String, BeanClasses.Function> supplied) {
+            var functions = supplied == null ? functionBindings(code, at) : supplied;
+            int index = expressions.size(); expressions.add(code); expressionLocations.add(at); expressionFunctions.add(Map.copyOf(functions)); expressionSpecs.add(spec);
+            return index;
+        }
+        private Map<String, BeanClasses.Function> functionBindings(String code, SourceLocation at) {
             var functions = new TreeMap<String, BeanClasses.Function>();
             List<io.vidocq.peano.compiler.FunctionReference> references;
             try { references = io.vidocq.peano.compiler.ExpressionCompiler.functions(code); }
@@ -760,8 +882,7 @@ public final class PageGenerator {
                 if (reference.argumentCount() != function.parameters().size()) throw error(at, "Function argument count does not match " + declaration.signature());
                 functions.put(reference.prefix() + ":" + reference.name(), function);
             }
-            int index = expressions.size(); expressions.add(code); expressionLocations.add(at); expressionFunctions.add(Map.copyOf(functions));
-            return "_jspxExpression" + index + ".getValue(pageContext.getELContext())";
+            return Map.copyOf(functions);
         }
         private void functionDefinitions(JavaSource source, int index, Map<String, BeanClasses.Function> functions) {
             var names = new TreeMap<String, String>(); int ordinal = 0;
@@ -778,9 +899,10 @@ public final class PageGenerator {
                         + (function.returnType().equals("void") ? "" : "return ") + function.owner() + "." + function.method() + "(" + String.join(", ", arguments) + ");\n"
                         + (function.returnType().equals("void") ? "return null;\n" : "") + "}\n}\n");
             }
-            source.add("private static jakarta.el.ELContext _jspxFunctionContext" + index + "() { return new jakarta.el.ELContext() {\n"
-                    + "public jakarta.el.ELResolver getELResolver() { return new jakarta.el.CompositeELResolver(); }\n"
-                    + "public jakarta.el.VariableMapper getVariableMapper() { return null; }\n"
+            source.add("private static jakarta.el.ELContext _jspxFunctionContext" + index + "() { return _jspxFunctionContext" + index + "(null); }\n"
+                    + "private static jakarta.el.ELContext _jspxFunctionContext" + index + "(jakarta.el.ELContext delegate) { return new jakarta.el.ELContext() {\n"
+                    + "public jakarta.el.ELResolver getELResolver() { return delegate == null ? new jakarta.el.CompositeELResolver() : delegate.getELResolver(); }\n"
+                    + "public jakarta.el.VariableMapper getVariableMapper() { return delegate == null ? null : delegate.getVariableMapper(); }\n"
                     + "public jakarta.el.FunctionMapper getFunctionMapper() { return new io.vidocq.peano.spi.CompiledFunctionMapper() {\n"
                     + "public io.vidocq.peano.spi.FunctionDescriptor resolveCompiledFunction(String prefix, String name) { return switch(prefix + \":\" + name) {\n");
             for (var entry : new TreeMap<>(functions).entrySet()) {

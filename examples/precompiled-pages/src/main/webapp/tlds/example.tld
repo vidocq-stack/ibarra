@@ -3,6 +3,13 @@
     <tlib-version>1.0</tlib-version>
     <short-name>example</short-name>
     <uri>urn:ibarra:example</uri>
+    <tag>
+        <name>greeting</name>
+        <tag-class>io.vidocq.ibarra.example.DeferredGreeting</tag-class>
+        <body-content>empty</body-content>
+        <attribute><name>target</name><required>true</required><deferred-value><type>java.lang.String</type></deferred-value></attribute>
+        <attribute><name>title</name><required>true</required><deferred-method><method-signature>java.lang.String title()</method-signature></deferred-method></attribute>
+    </tag>
     <function>
         <name>welcome</name>
         <function-class>io.vidocq.ibarra.example.Greeting</function-class>

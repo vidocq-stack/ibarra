@@ -30,7 +30,8 @@ Initial classic/simple tag handlers now render through direct constructors,
 setters and generated scriptless body/named fragments. Custom-tag named scalar
 attributes and explicit bodies are supported. Full tag metadata and tag files remain pending.
 Page type/package imports now resolve through build-generated class references.
-TLD functions use generated direct static calls. Deferred attributes, dynamic import changes and official TCK
+TLD functions use generated direct static calls. Typed deferred tag values/methods
+are compiled and constructed per invocation. Dynamic import changes and official TCK
 certification remain pending.
 Directly declared TLD resources and their listeners are discovered at build time,
 with separate URI alias and forced XML path resolution.

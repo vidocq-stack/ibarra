@@ -26,6 +26,32 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class TagMetadataTest {
+    @Test
+    void deferredMetadataRetainsExpectedTypesSignaturesAndExactSetterContracts() {
+        var library = parse("<tag><name>x</name><tag-class>example.X</tag-class>"
+                + "<attribute><name>value</name><deferred-value><type>java.lang.Integer</type></deferred-value></attribute>"
+                + "<attribute><name>action</name><deferred-method/></attribute>"
+                + "<attribute><name>mixed</name><rtexprvalue>true</rtexprvalue><deferred-value/></attribute></tag>");
+        var tag = library.tags().get("x");
+        assertFalse(tag.unsupportedMetadata());
+        assertEquals("java.lang.Integer", tag.attributes().get("value").deferredValueType());
+        assertEquals("jakarta.el.ValueExpression", tag.attributes().get("value").setterType());
+        assertEquals("void", tag.attributes().get("action").deferredMethod().returnType());
+        assertEquals(List.of(), tag.attributes().get("action").deferredMethod().parameters());
+        assertEquals("jakarta.el.MethodExpression", tag.attributes().get("action").setterType());
+        assertEquals("java.lang.Object", tag.attributes().get("mixed").setterType());
+        assertEquals("java.lang.Object", tag.attributes().get("mixed").deferredValueType());
+    }
+
+    @Test
+    void malformedOrConflictingDeferredMetadataFailsAtTheDescriptor() {
+        for (String fields : List.of("<deferred-value/><deferred-method/>", "<fragment>true</fragment><deferred-value/>",
+                "<deferred-value><type>void</type></deferred-value>",
+                "<deferred-value><type>java.lang.String</type><type>java.lang.Object</type></deferred-value>",
+                "<deferred-method><method-signature>not a signature</method-signature></deferred-method>",
+                "<deferred-method><method-signature>void run(void)</method-signature></deferred-method>"))
+            assertThrows(PageParseException.class, () -> parse("<tag><name>x</name><tag-class>example.X</tag-class><attribute><name>a</name>" + fields + "</attribute></tag>"));
+    }
     private TagLibraryDescriptor parse(String body) {
         return new TldParser().parse("/WEB-INF/tags.tld", ("<taglib xmlns='https://jakarta.ee/xml/ns/jakartaee'>"
                 + body + "</taglib>").getBytes(StandardCharsets.UTF_8));

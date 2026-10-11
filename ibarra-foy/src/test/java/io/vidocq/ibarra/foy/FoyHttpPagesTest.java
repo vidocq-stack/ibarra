@@ -75,6 +75,8 @@ class FoyHttpPagesTest {
                 assertEquals("hello-B:1:methodmethod!", get(client, base + "/functions.jspx?who=B").body());
                 assertEquals("hello-A:1:xx!|ready|1", get(client, base + "/external.jsp?who=A").body());
                 assertEquals("hello-B:1:xx!|ready|1", get(client, base + "/external.jspx?who=B").body());
+                assertEquals("A|Direct:call", get(client, base + "/deferred.jsp?who=A").body(), Files.readString(directory.resolve("server.log")));
+                assertEquals("B|Direct:call", get(client, base + "/deferred.jspx?who=B").body());
                 var sharedCalls = new java.util.ArrayList<java.util.concurrent.CompletableFuture<HttpResponse<String>>>();
                 for (int i = 0; i < 16; i++) sharedCalls.add(client.sendAsync(
                         HttpRequest.newBuilder(URI.create(base + (i % 2 == 0 ? "/shared.jsp" : "/shared.jspx"))).build(), HttpResponse.BodyHandlers.ofString()));
@@ -114,7 +116,25 @@ class FoyHttpPagesTest {
         Files.writeString(info, "module integration.pages { requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; provides io.vidocq.peano.spi.AccessorProvider with app.Accessors; }");
         Path profile = source.resolve("app/Profile.java"), accessors = source.resolve("app/Accessors.java"), constants = source.resolve("app/Constants.java");
         Files.createDirectories(profile.getParent());
-        Files.writeString(profile, "package app; public class Profile { public String getName() { return \"Direct\"; } }");
+        Files.writeString(profile, "package app; public class Profile { public String getName() { return \"Direct\"; } public String greet(String name){return getName()+\":\"+name;} }");
+        Path deferred = source.resolve("app/Deferred.java");
+        Files.writeString(deferred, """
+                package app;
+                public class Deferred extends jakarta.servlet.jsp.tagext.SimpleTagSupport {
+                    private jakarta.el.ValueExpression value; private jakarta.el.MethodExpression action;
+                    public void setValue(jakarta.el.ValueExpression value){this.value=value;}
+                    public void setAction(jakarta.el.MethodExpression action){this.action=action;}
+                    public void doTag() throws java.io.IOException {
+                        var page=(jakarta.servlet.jsp.PageContext)getJspContext();
+                        page.getRequest().setAttribute("later",page.getRequest().getParameter("who"));
+                        var context=page.getELContext();
+                        var loader=Thread.currentThread().getContextClassLoader();
+                        action.getMethodInfo(context); action.getMethodReference(context);
+                        page.getOut().write(value.getValue(context)+"|"+action.invoke(context,new Object[]{"call"}));
+                        if(Thread.currentThread().getContextClassLoader()!=loader)throw new AssertionError("Deferred method leaked application loader");
+                    }
+                }
+                """);
         Path scopeBean = source.resolve("app/ScopeBean.java");
         Files.writeString(scopeBean, "package app; public class ScopeBean { private static final java.util.concurrent.atomic.AtomicInteger sequence=new java.util.concurrent.atomic.AtomicInteger(); private final int id=sequence.incrementAndGet(); public int getId(){return id;} }");
         Files.writeString(constants, "package app; public class Constants { private Constants(){} public static final String TEXT=text(); private static String text(){System.setProperty(\"ibarra.import.initialized\",\"yes\");return \"imported\";} public static String caption(){return \"method\";} public static String greet(String value){return \"hello-\"+value;} }");
@@ -126,6 +146,15 @@ class FoyHttpPagesTest {
                             public Class<?> targetType() { return Profile.class; }
                             public Object getValue(jakarta.el.ELContext context, Object base, Object property) {
                                 if (base instanceof Profile profile && "name".equals(property)) { context.setPropertyResolved(base, property); return profile.getName(); }
+                                return null;
+                            }
+                            public jakarta.el.MethodReference getMethodReference(jakarta.el.ELContext context,Object base,String method,Class<?>[] types,Object[] arguments) {
+                                if (base instanceof Profile && method.equals("greet")) return new jakarta.el.MethodReference(base,
+                                    new jakarta.el.MethodInfo("greet",String.class,new Class<?>[]{String.class}),new java.lang.annotation.Annotation[0],arguments);
+                                return null;
+                            }
+                            public Object invoke(jakarta.el.ELContext context,Object base,Object method,Class<?>[] types,Object[] arguments) {
+                                if (base instanceof Profile profile && "greet".equals(method)) {context.setPropertyResolved(base,method);return profile.greet(context.convertToType(arguments[0],String.class));}
                                 return null;
                             }
                             public Class<?> getType(jakarta.el.ELContext context, Object base, Object property) { return null; }
@@ -211,7 +240,10 @@ class FoyHttpPagesTest {
                 }
                 """);
         assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, "--release", "25", "--module-path",
-                modulePath(true), "-d", output.toString(), info.toString(), listener.toString(), wrap.toString(), upper.toString(), fragment.toString(), profile.toString(), accessors.toString(), constants.toString(), scopeBean.toString(), externalListener.toString()));
+                modulePath(true), "-d", output.toString(), info.toString(), listener.toString(), wrap.toString(), upper.toString(), fragment.toString(), profile.toString(), accessors.toString(), constants.toString(), scopeBean.toString(), externalListener.toString(), deferred.toString()));
+        Files.writeString(web.resolve("WEB-INF/deferred.tld"), "<taglib><uri>urn:deferred</uri><tag><name>run</name><tag-class>app.Deferred</tag-class><body-content>empty</body-content><attribute><name>value</name><deferred-value><type>java.lang.String</type></deferred-value></attribute><attribute><name>action</name><deferred-method><method-signature>java.lang.String documented(java.lang.String)</method-signature></deferred-method></attribute></tag></taglib>");
+        Files.writeString(web.resolve("deferred.jsp"), "<%@ page session='false' %><%@ taglib prefix='d' uri='urn:deferred' %><jsp:useBean id='profile' class='app.Profile'/><d:run value='#{requestScope.later}' action='#{profile.greet}'/>");
+        Files.writeString(web.resolve("deferred.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:d='urn:deferred' version='4.0'><jsp:directive.page session='false'/><jsp:useBean id='profile' class='app.Profile'/><d:run><jsp:attribute name='value'> #{requestScope.later} </jsp:attribute><jsp:attribute name='action'> #{profile.greet} </jsp:attribute></d:run></jsp:root>");
         Files.createDirectories(web.resolve("outside"));
         Files.writeString(web.resolve("outside/library.tld"), "<taglib><listener><listener-class>app.ExternalStartup</listener-class></listener><tag><name>wrap</name><tag-class>app.Wrap</tag-class><body-content>scriptless</body-content><attribute><name>label</name><type>java.lang.String</type><required>true</required><rtexprvalue>true</rtexprvalue></attribute></tag><function><name>greet</name><function-class>app.Constants</function-class><function-signature>java.lang.String greet(java.lang.String)</function-signature></function></taglib>");
         Files.writeString(web.resolve("external.jsp"), "<%@ page session='false' %><%@ taglib prefix='e' uri='outside/library.tld' %><e:wrap label='${e:greet(param.who)}'>x</e:wrap>|<%= application.getAttribute(\"externalTld\") %>|<%= app.ExternalStartup.constructed %>");

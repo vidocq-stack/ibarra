@@ -37,6 +37,27 @@ public final class BeanClasses {
     private final List<Path> paths;
     public BeanClasses(List<Path> paths) { this.paths = List.copyOf(paths); }
 
+    /** Resolves public expression signature types from class files, without initialization. */
+    public String expressionType(String type, SourceLocation at) {
+        String suffix = "";
+        while (type.endsWith("[]")) { suffix += "[]"; type = type.substring(0, type.length() - 2); }
+        if (Set.of("void", "boolean", "byte", "short", "int", "long", "float", "double", "char").contains(type))
+            return type + suffix;
+        String candidate = type;
+        while (true) {
+            ClassModel model;
+            try { model = read(candidate, at); }
+            catch (PageParseException absent) {
+                int dot = candidate.lastIndexOf('.');
+                if (dot < 0 || !absent.getMessage().contains("absent from the build module path")) throw absent;
+                candidate = candidate.substring(0, dot) + "$" + candidate.substring(dot + 1); continue;
+            }
+            if ((model.flags().flagsMask() & ClassFile.ACC_PUBLIC) == 0)
+                throw new PageParseException(at, "Expression signature type must be public: " + type);
+            return sourceName(candidate, at) + suffix;
+        }
+    }
+
     public Function function(TldFunction definition, SourceLocation at) {
         var signature = java.util.regex.Pattern.compile("\\s*(.+?)\\s+([\\p{L}_$][\\p{L}\\p{N}_$]*)\\s*\\((.*?)\\)\\s*").matcher(definition.signature());
         if (!signature.matches()) throw new PageParseException(at, "Invalid function signature: " + definition.signature());

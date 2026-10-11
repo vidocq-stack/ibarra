@@ -230,7 +230,7 @@ the runtime's packaging goal, after I8.
 | I0 | Scaffold: reactor, `ibarra-core` module, `ibarra-tck` skeleton, docs, this plan | `./mvnw -ntp install` green (this commit) |
 | I1 | Runtime API: `JspFactory`, `PageContext`, `JspWriter` / `BodyContent` buffering, scopes, error pages — driven by hand-written `HttpJspPage` fixtures | implemented: unit tests against Foy-free servlet doubles, clean install green |
 | I2 | `ibarra-compiler` parser: standard + XML syntax, directives, scripting, template text, page model | implemented: 36 parser corpus tests, clean install green |
-| I3 | Generator: Java source for pages, standard actions, compiled EL and `jsp-config` property groups | in progress: build-time Peano EL, generated accessors, static page imports and fixed-arity TLD functions render; deferred attributes/runtime import changes and remaining semantics pending |
+| I3 | Generator: Java source for pages, standard actions, compiled EL and `jsp-config` property groups | in progress: compiled EL/accessors/imports/functions, atomic shared beans and typed deferred tag attributes render; runtime import changes and broader validation remain pending |
 | I4 | `ibarra-maven-plugin` precompile goal + page index; extend `ibarra-api` SPI | initial implementation: independent application JAR precompiled and rendered; web fragments and broader configuration pending |
 | I5 | `ibarra-foy` + Foy's JSP-engine SPI (Foy-side PR), `*.jsp` mapping, `addJspFile`, `getJspConfigDescriptor`, TLD listeners | initial HTTP implementation with build-generated TLD listeners; broader deployment/TCK coverage pending |
 | I6 | Custom tags: TLD parsing, classic + simple handlers, scripting variables, validators | initial rendering: Tag/IterationTag/BodyTag/TryCatchFinally, SimpleTag bodies, named scalar/fragment attributes, explicit bodies and unqualified dynamic attributes; variables/validators/full metadata pending |
@@ -344,7 +344,7 @@ from class files and emits direct invokers using the request EL context for
 coercion. Standard directives, relative included declarations and lexically scoped
 JSPX namespaces share the same binding path. Named-module HTTP tests render
 functions in template and fragment/tag attributes with reflection denied and both
-compilers excluded. Local reactor proof: 249 tests; the independent Maven example
+compilers excluded. Local reactor proof: 263 tests; the independent Maven example
 also exercises a TLD function. Peano's prerequisite passes 303 tests and all
 361 official EL TCK tests; those results do not certify Jakarta Pages.
 
@@ -355,7 +355,19 @@ and named-module HTTP tests cover one application bean across JSP/JSPX pages,
 session cookie reuse/isolation, constructor/type/body failures and scope reuse.
 No lock registry, hidden session attributes or new module dependency is introduced.
 
-Remaining I3 work: runtime ImportHandler mutations, deferred attributes,
+Deferred-value and deferred-method tag attributes retain typed immutable metadata.
+Generated classes are constructed per invocation and capture the current
+VariableMapper and build-known function descriptors without retaining their
+creation context. Pure deferred literals use Class-File API literal protocol
+classes; mixed attributes defer only active hash expressions. Method metadata and
+invocation use a serializable application-class anchor with loader restoration,
+including failures/concurrent evaluation outside the original page call.
+Literal protocols are checked against the interpreter; HTTP JSP/JSPX private-bean
+methods run with reflection denied and compilers excluded. Initial named deferred
+attributes accept text/EL only; custom literal method return coercion remains
+unsupported. IBARRA-076 through IBARRA-079 are fixed.
+
+Remaining I3 work: runtime ImportHandler mutations,
 broader output/attribute/translation validation,
 broader namespace/XML-view validation. Unsupported constructs
 fail explicitly. The official TCK has not been run.

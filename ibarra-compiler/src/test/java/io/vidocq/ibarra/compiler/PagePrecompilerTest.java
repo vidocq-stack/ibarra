@@ -35,6 +35,237 @@ class PagePrecompilerTest {
     private Path classes;
     private Path web;
     private final List<Path> extraModules = new ArrayList<>();
+
+    @Test
+    void deferredValuesRemainLazyAndTypedForSimpleAndClassicTags() throws Exception {
+        prepareDeferredTags();
+        Files.writeString(web.resolve("index.jsp"), deferredPrefix()
+                + "<%request.setAttribute(\"later\",1);%><d:value value='#{requestScope.later}'/>|<d:classic value='42'/>"
+                + "|<% pageContext.getELContext().getVariableMapper().setVariable(\"bound\", new demo.DeferredTag.Token(\"before\")); %><d:capture value='#{bound}'/>");
+        precompile(); Path jar = directory.resolve("deferred-values.jar"); jar(classes, jar);
+        assertEquals("V:java.lang.Integer:false:5|V:java.lang.Integer:true:42|V:java.lang.Object:false:before", render(jar, true));
+    }
+
+    @Test
+    void deferredMethodsUseTypedCompiledLiteralAndVariableTargets() throws Exception {
+        prepareDeferredTags();
+        Files.writeString(web.resolve("index.jsp"), deferredPrefix()
+                + "<d:method action='17'/>|<%pageContext.setAttribute(\"callback\",new demo.DeferredTag.Callback());%><d:method action='#{callback}'/>");
+        precompile(); Path jar = directory.resolve("deferred-methods.jar"); jar(classes, jar);
+        assertEquals("M:java.lang.Integer:true:17|M:java.lang.Integer:false:101", render(jar, true));
+    }
+
+    @Test
+    void deferredMethodsSerializeAndRestoreLoadersOnFailuresAndConcurrentCalls() throws Exception {
+        prepareDeferredTags();
+        Files.writeString(web.resolve("index.jsp"), deferredPrefix()
+                + "<%request.setAttribute(\"probe\",true);%><d:method action='17'/>|"
+                + "<%pageContext.setAttribute(\"callback\",new demo.DeferredTag.Callback());%><d:method action='#{callback}'/>");
+        precompile(); Path jar = directory.resolve("deferred-scope-serialization.jar"); jar(classes, jar);
+        assertEquals("M:java.lang.Integer:true:17|M:java.lang.Integer:false:101", render(jar, true));
+    }
+
+    @Test
+    void deferredLiteralClassesSupportLongStringsWithoutConstantPoolOverflow() throws Exception {
+        prepareDeferredTags();
+        String literal = "é😀".repeat(8_000);
+        Files.writeString(web.resolve("index.jsp"), deferredPrefix() + "<%@ page pageEncoding='UTF-8' %><d:capture value='" + literal + "'/>");
+        precompile(); Path jar = directory.resolve("deferred-long-literal.jar"); jar(classes, jar);
+        assertEquals("V:java.lang.Object:true:" + literal, render(jar, true));
+    }
+
+    @Test
+    void mixedDeferredAttributesDeferOnlyHashExpressions() throws Exception {
+        prepareDeferredTags();
+        Files.writeString(web.resolve("index.jsp"), deferredPrefix()
+                + "<%request.setAttribute(\"later\",1);%><d:mixed value='${requestScope.later}'/>|<d:mixed value='#{requestScope.later}'/>"
+                + "|<d:mixed value='literal'/>|<d:mixedMethod action='literal'/>");
+        precompile(); Path jar = directory.resolve("mixed-deferred.jar"); jar(classes, jar);
+        assertEquals("O:java.lang.Integer:1|V:java.lang.Integer:false:5|O:java.lang.String:literal|O:java.lang.String:literal", render(jar, true));
+    }
+
+    @Test
+    void mixedLiteralsPreserveBackslashesAndNamedImmediateFunctionsKeepLocalBindings() throws Exception {
+        prepareFunctions(); prepareDeferredTags();
+        Files.writeString(web.resolve("part.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:d='urn:deferred' version='4.0'><d:mixed><jsp:attribute name='value'><jsp:text xmlns:f='urn:functions'>${f:sum(2,3)}</jsp:text></jsp:attribute></d:mixed></jsp:root>");
+        Files.writeString(web.resolve("index.jsp"), deferredPrefix() + "<d:mixed value='a\\b'/>|<%@ include file='part.jspx' %>");
+        precompile(); Path jar = directory.resolve("mixed-literal-binding.jar"); jar(classes, jar);
+        assertEquals("O:java.lang.String:a\\b|O:java.lang.Integer:5", render(jar, true));
+    }
+
+    @Test
+    void deferredNamedTextAndEscapedLiteralsPreserveLiteralMetadata() throws Exception {
+        prepareDeferredTags();
+        Files.writeString(web.resolve("index.jsp"), deferredPrefix()
+                + "<d:capture><jsp:attribute name='value'> Hello#{requestScope.answer} </jsp:attribute></d:capture>"
+                + "|<d:capture value='\\#{literal}'/>");
+        precompile(); Path jar = directory.resolve("deferred-named.jar"); jar(classes, jar);
+        assertEquals("V:java.lang.Object:false:Hello42|V:java.lang.Object:true:#{literal}", render(jar, true));
+        Files.writeString(web.resolve("index.jsp"), deferredPrefix() + "<%@ page deferredSyntaxAllowedAsLiteral='true' %><d:capture value='#{literal}'/>");
+        precompile(); jar(classes, jar); assertEquals("V:java.lang.Object:true:#{literal}", render(jar, true));
+    }
+
+    @Test
+    void deferredTldFunctionsCaptureNamedNamespacesAndCreationVariableBindings() throws Exception {
+        prepareFunctions(); prepareDeferredTags();
+        Files.createDirectories(web.resolve("outside"));
+        Files.writeString(web.resolve("outside/functions.tld"), Files.readString(web.resolve("WEB-INF/functions.tld")).replace("int sum(int,int)", "int difference(int,int)"));
+        Files.writeString(web.resolve("part.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:d='urn:deferred' version='4.0'><d:capture><jsp:attribute name='value' xmlns:f='urn:jsptld:/outside/functions.tld'>#{f:sum(4,2)}:#{bound}</jsp:attribute></d:capture></jsp:root>");
+        Files.writeString(web.resolve("index.jsp"), deferredPrefix() + "<%@ taglib prefix='f' uri='urn:functions' %>"
+                + "<%request.setAttribute(\"later\",1);%><d:value value='#{f:sum(requestScope.later,2)}'/>|"
+                + "<%pageContext.getELContext().getVariableMapper().setVariable(\"bound\",new demo.DeferredTag.Token(\"before\"));%><%@ include file='part.jspx' %>");
+        precompile(); Path jar = directory.resolve("deferred-functions.jar"); jar(classes, jar);
+        assertEquals("V:java.lang.Integer:false:7|V:java.lang.Object:false:2:before", render(jar, true));
+    }
+
+    @Test
+    void literalExpressionProtocolsMatchInterpreterMetadataAndConversion() throws Exception {
+        prepareDeferredTags();
+        var factory = jakarta.el.ExpressionFactory.newInstance();
+        var context = new jakarta.el.StandardELContext(factory);
+        var value = factory.createValueExpression("42", Integer.class);
+        var method = factory.createMethodExpression(context, "17", Integer.class, new Class<?>[]{String.class});
+        String expected = "V:" + value.getExpectedType().getName() + ":" + value.isLiteralText() + ":" + value.getValue(context)
+                + "|M:" + method.getMethodInfo(context).getReturnType().getName() + ":" + method.isLiteralText() + ":" + method.invoke(context, new Object[]{"x"});
+        Files.writeString(web.resolve("index.jsp"), deferredPrefix() + "<d:value value='42'/>|<d:method action='17'/>");
+        precompile(); Path jar = directory.resolve("deferred-literal-oracle.jar"); jar(classes, jar);
+        assertEquals(expected, render(jar, true));
+    }
+
+    @Test
+    void deferredTranslationRejectsWrongSyntaxVoidLiteralsAndInvalidCoercion() throws Exception {
+        prepareDeferredTags();
+        for (String tag : List.of("<d:value value='${1}'/>", "<d:method action='${callback}'/>",
+                "<d:voidMethod action='literal'/>", "<d:method action='not-an-integer'/>",
+                "<d:value value='#{1}${2}'/>", "<d:arrayMethod action=''/>",
+                "<d:capture><jsp:attribute name='value'><d:capture value='x'/></jsp:attribute></d:capture>")) {
+            Files.writeString(web.resolve("index.jsp"), deferredPrefix() + tag);
+            assertThrows(PageParseException.class, this::precompile, tag);
+        }
+    }
+
+    @Test
+    void deferredValuesRetainWritableExpressionSemantics() throws Exception {
+        prepareDeferredTags();
+        Files.writeString(web.resolve("index.jsp"), deferredPrefix() + "<%request.setAttribute(\"write\",true);%><d:value value='#{requestScope.answer}'/>");
+        precompile(); Path jar = directory.resolve("deferred-write.jar"); jar(classes, jar);
+        assertEquals("V:java.lang.Integer:false:99", render(jar, true));
+    }
+
+    @Test
+    void deferredSetterContractsSignatureVisibilityAndRequiredModuleReadsAreValidated() throws Exception {
+        prepareDeferredTags();
+        Path tld = web.resolve("WEB-INF/deferred.tld");
+        String original = Files.readString(tld);
+        Files.writeString(tld, original.replace("</taglib>", deferredTag("wrongSetter", "<attribute><name>action</name><deferred-value/></attribute>", false) + "</taglib>"));
+        Files.writeString(web.resolve("index.jsp"), deferredPrefix() + "<d:wrongSetter action='#{requestScope.answer}'/>");
+        assertThrows(PageParseException.class, this::precompile);
+        Files.writeString(tld, original.replace("<type>java.lang.Integer</type>", "<type>demo.DeferredTag.Secret</type>"));
+        Files.writeString(web.resolve("index.jsp"), deferredPrefix() + "<d:value value='#{requestScope.answer}'/>");
+        assertThrows(PageParseException.class, this::precompile);
+        Files.writeString(tld, original);
+        Path info = directory.resolve("original/module-info.java");
+        Files.writeString(info, "module demo.web { requires io.vidocq.ibarra.api; }");
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null,null,null,"--release","25","--module-path",modulePath(),"-d",classes.toString(),info.toString()));
+        var failure = assertThrows(IllegalArgumentException.class, this::precompile);
+        assertTrue(failure.getMessage().contains("io.vidocq.peano.api"));
+    }
+
+    private String deferredPrefix() { return "<%@ page session='false' %><%@ taglib prefix='d' uri='urn:deferred' %>"; }
+    private void prepareDeferredTags() throws Exception {
+        prepare(false, true);
+        Path source = directory.resolve("DeferredTag.java"), classic = directory.resolve("ClassicDeferredTag.java");
+        Files.writeString(source, """
+                package demo;
+                public class DeferredTag extends jakarta.servlet.jsp.tagext.SimpleTagSupport {
+                    private static class Secret {}
+                    private Object value, action; private String valueKind, actionKind;
+                    public void setValue(jakarta.el.ValueExpression expression) { value=expression; valueKind="V"; }
+                    public void setValue(Object expression) { value=expression; valueKind="O"; }
+                    public void setAction(jakarta.el.MethodExpression expression) { action=expression; actionKind="M"; }
+                    public void setAction(Object expression) { action=expression; actionKind="O"; }
+                    public void doTag() throws java.io.IOException { print((jakarta.servlet.jsp.PageContext)getJspContext(),value,action,valueKind,actionKind); }
+                    public static void print(jakarta.servlet.jsp.PageContext page,Object value,Object action,String vk,String ak) throws java.io.IOException {
+                        var context=page.getELContext(); page.getRequest().setAttribute("later",5);
+                        context.getVariableMapper().setVariable("bound",new Token("after"));
+                        if(value instanceof jakarta.el.ValueExpression expression) {
+                            if(page.getRequest().getAttribute("write")!=null) {if(expression.isReadOnly(context))throw new AssertionError("Deferred value became read only");expression.setValue(context,99);}
+                            page.getOut().write("V:"+expression.getExpectedType().getName()+":"+expression.isLiteralText()+":"+expression.getValue(context));
+                        }
+                        else if(value!=null) page.getOut().write(vk+":"+value.getClass().getName()+":"+value);
+                        if(action instanceof jakarta.el.MethodExpression expression) {
+                            if(page.getRequest().getAttribute("probe")!=null) probe(expression,context);
+                            var loader=Thread.currentThread().getContextClassLoader();
+                            page.getOut().write("M:"+expression.getMethodInfo(context).getReturnType().getName()+":"+expression.isLiteralText()+":"+expression.invoke(context,new Object[]{"x"}));
+                            if(Thread.currentThread().getContextClassLoader()!=loader)throw new AssertionError("Method leaked loader");
+                        }
+                        else if(action!=null) page.getOut().write(ak+":"+action.getClass().getName()+":"+action);
+                    }
+                    public static class Token extends jakarta.el.ValueExpression {
+                        private final Object value; public Token(Object value){this.value=value;}
+                        public Object getValue(jakarta.el.ELContext c){return value;} public void setValue(jakarta.el.ELContext c,Object value){throw new jakarta.el.PropertyNotWritableException();}
+                        public boolean isReadOnly(jakarta.el.ELContext c){return true;} public Class<?> getType(jakarta.el.ELContext c){return Object.class;}
+                        public Class<?> getExpectedType(){return Object.class;} public String getExpressionString(){return "token";}
+                        public boolean isLiteralText(){return true;} public boolean equals(Object other){return this==other;} public int hashCode(){return System.identityHashCode(this);}
+                    }
+                    public static class Callback extends jakarta.el.MethodExpression {
+                        public jakarta.el.MethodInfo getMethodInfo(jakarta.el.ELContext c){return new jakarta.el.MethodInfo("callback",Integer.class,new Class<?>[]{String.class});}
+                        public Object invoke(jakarta.el.ELContext c,Object[] arguments){if("fail".equals(arguments[0]))throw new jakarta.el.ELException("callback failure");return 100+((String)arguments[0]).length();}
+                        public String getExpressionString(){return "callback";} public boolean isLiteralText(){return false;}
+                        public boolean equals(Object other){return this==other;} public int hashCode(){return System.identityHashCode(this);}
+                    }
+                    private static void probe(jakarta.el.MethodExpression expression,jakarta.el.ELContext context) {
+                        var loader=Thread.currentThread().getContextClassLoader();
+                        try {
+                            var bytes=new java.io.ByteArrayOutputStream();
+                            try(var output=new java.io.ObjectOutputStream(bytes)){output.writeObject(expression);}
+                            try(var input=new java.io.ObjectInputStream(new java.io.ByteArrayInputStream(bytes.toByteArray()))){
+                                var restored=(jakarta.el.MethodExpression)input.readObject();
+                                if(!expression.equals(restored)||expression.hashCode()!=restored.hashCode())throw new AssertionError("Method serialization identity");
+                                restored.invoke(context,new Object[]{"x"});
+                            }
+                        } catch(Exception failure){throw new AssertionError(failure);}
+                        try {expression.getMethodReference(context);} catch(UnsupportedOperationException expected){}
+                        if(Thread.currentThread().getContextClassLoader()!=loader)throw new AssertionError("Metadata leaked loader");
+                        if(!expression.isLiteralText()) {
+                            try{expression.invoke(context,new Object[]{"fail"});throw new AssertionError("Method did not fail");}
+                            catch(jakarta.el.ELException expected){if(!expected.getMessage().contains("callback failure"))throw expected;}
+                            if(Thread.currentThread().getContextClassLoader()!=loader)throw new AssertionError("Failure leaked loader");
+                        } else {
+                            var factory=jakarta.el.ExpressionFactory.newInstance();
+                            try(var executor=java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+                                var calls=new java.util.ArrayList<java.util.concurrent.Future<?>>();
+                                for(int i=0;i<8;i++)calls.add(executor.submit(()->{
+                                    var thread=Thread.currentThread(); var original=thread.getContextClassLoader();
+                                    var caller=new ClassLoader(original){}; thread.setContextClassLoader(caller);
+                                    try {
+                                        var own=new jakarta.el.StandardELContext(factory);expression.getMethodInfo(own);expression.invoke(own,new Object[]{"x"});
+                                        if(thread.getContextClassLoader()!=caller)throw new AssertionError("Concurrent loader leaked");
+                                    } finally {thread.setContextClassLoader(original);}
+                                }));
+                                for(var call:calls)call.get(5,java.util.concurrent.TimeUnit.SECONDS);
+                            } catch(Exception failure){throw new AssertionError(failure);}
+                        }
+                    }
+                }
+                """);
+        Files.writeString(classic, "package demo; public class ClassicDeferredTag extends jakarta.servlet.jsp.tagext.TagSupport { private jakarta.el.ValueExpression value; public void setValue(jakarta.el.ValueExpression v){value=v;} public int doStartTag() throws jakarta.servlet.jsp.JspException {try{DeferredTag.print(pageContext,value,null,\"V\",null);}catch(java.io.IOException e){throw new jakarta.servlet.jsp.JspException(e);}return SKIP_BODY;} }");
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null,null,null,"--release","25","--module-path",modulePath()+File.pathSeparator+classes,
+                "--add-modules","demo.web","--patch-module","demo.web="+source.getParent(),"-d",classes.toString(),source.toString(),classic.toString()));
+        Files.createDirectories(web.resolve("WEB-INF"));
+        String value = "<attribute><name>value</name><deferred-value><type>java.lang.Integer</type></deferred-value></attribute>";
+        String action = "<attribute><name>action</name><deferred-method><method-signature>java.lang.Integer documented(java.lang.String)</method-signature></deferred-method></attribute>";
+        Files.writeString(web.resolve("WEB-INF/deferred.tld"), "<taglib><uri>urn:deferred</uri>"
+                + deferredTag("value", value, false) + deferredTag("classic", value, true)
+                + deferredTag("capture", "<attribute><name>value</name><deferred-value/></attribute>", false)
+                + deferredTag("method", action, false) + deferredTag("voidMethod", "<attribute><name>action</name><deferred-method/></attribute>", false)
+                + deferredTag("mixed", value.replace("<deferred-value>", "<rtexprvalue>true</rtexprvalue><deferred-value>"), false)
+                + deferredTag("mixedMethod", "<attribute><name>action</name><rtexprvalue>true</rtexprvalue><deferred-method/></attribute>", false)
+                + deferredTag("arrayMethod", "<attribute><name>action</name><deferred-method><method-signature>java.lang.String[] array()</method-signature></deferred-method></attribute>", false) + "</taglib>");
+    }
+    private String deferredTag(String name,String attributes,boolean classic) {
+        return "<tag><name>"+name+"</name><tag-class>demo."+(classic?"ClassicDeferredTag":"DeferredTag")+"</tag-class><body-content>empty</body-content>"+attributes+"</tag>";
+    }
     @Test void tldFunctionsRenderThroughDirectCallsWithoutRuntimeExpressionCreation() throws Exception {
         prepareFunctions();
         Files.writeString(web.resolve("index.jsp"), functionPrefix()+"<%request.setAttribute(\"values\",new String[]{\"a\",\"b\"});%>${f:sum('7',2)}|${f:sum(f:sum(1,2),3)}|${f:length(values)}|${f:none()}|${f:over(3)}");
@@ -399,6 +630,7 @@ class PagePrecompilerTest {
         new PageCompiler().compile(List.of(new GeneratedPage("io.vidocq.ibarra.core.internal.ListenerMain", main, Map.of())), harness,
                 List.of("--module-path", modulePath(), "--add-modules", "io.vidocq.ibarra.core", "--patch-module", "io.vidocq.ibarra.core=" + harness.resolve(".ibarra-sources")));
         var process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin/java").toString(),
+                "-Dpeano.reflection=deny",
                 "--limit-modules", "io.vidocq.ibarra.core,demo.web", "--module-path", modulePath() + File.pathSeparator + classes,
                 "--add-modules", "demo.web", "--patch-module", "io.vidocq.ibarra.core=" + harness,
                 "-m", "io.vidocq.ibarra.core/io.vidocq.ibarra.core.internal.ListenerMain")
@@ -638,6 +870,7 @@ class PagePrecompilerTest {
                         "--patch-module", "io.vidocq.ibarra.core=" + harness.resolve(".ibarra-sources")));
         var process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin/java").toString(),
                 "--limit-modules", "io.vidocq.ibarra.core,demo.web" + (el ? ",io.vidocq.peano.core" : ""),
+                "-Dpeano.reflection=deny",
                 "--module-path", modulePath() + File.pathSeparator + jar, "--add-modules", "demo.web" + (el ? ",io.vidocq.peano.core" : ""),
                 "--patch-module", "io.vidocq.ibarra.core=" + harness,
                 "-m", "io.vidocq.ibarra.core/io.vidocq.ibarra.core.internal.PackagedMain")

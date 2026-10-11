@@ -87,14 +87,15 @@ Trimming changes source boundary text while retaining namespace-bearing wrappers
 
 This is an initial I6 implementation. Broader standard-action named-attribute
 support, namespaced dynamic attributes, tagdependent bodies,
-scripting variables, TagExtraInfo, TagLibraryValidator, tag files and deferred
-attribute semantics remain follow-up work. Unsupported invoked metadata fails
+scripting variables, TagExtraInfo, TagLibraryValidator and tag files
+remain follow-up work. Unsupported invoked metadata fails
 translation; no reflective fallback or handler pooling is enabled.
 
 Java-expression request values must match the declared runtime attribute type.
 Production packaging compiles immediate EL with Peano; runtime parsing is not
 enabled. Fixed-arity TLD functions use direct static invokers as described in
-xref:modules/compiled-el.adoc[Compiled EL]. Deferred attributes remain unsupported.
+xref:modules/compiled-el.adoc[Compiled EL]. Typed deferred-value/deferred-method
+attributes follow the contracts described there.
 The official Pages TCK has not been run.
 
 == Verification

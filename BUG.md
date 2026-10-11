@@ -1,5 +1,45 @@
 # BUG.md — Ibarra
 
+## IBARRA-079 · 2026-10-12 · Deferred private-bean methods fail in the Foy application layer
+
+- Symptom: the deferred.jsp HTTP fixture returns 500 when invoking profile.greet
+  in an unexported application package with reflection denied.
+- Minimal repro: FoyHttpPagesTest deferred JSP/JSPX scenarios, expected A|Direct:call.
+- Cause: Peano's API metadata lookup uses the caller thread's context class loader,
+  which is the host loader; the child application's accessor provider is missed.
+- Status: FIXED by an immutable generated method-expression adapter anchoring the
+  page class and scoping metadata/invocation to its loader with finally restoration.
+  The adapter retains no PageContext/request and keeps reflection denied.
+
+## IBARRA-076 · 2026-10-12 · Deferred tag attributes are rejected as unsupported metadata
+
+- Symptom: tags declaring deferred-value or deferred-method cannot be translated.
+- Minimal repro: deferredValuesRemainLazyAndTypedForSimpleAndClassicTags and
+  deferredMethodsUseTypedCompiledLiteralAndVariableTargets.
+- Cause: TldParser marks deferred metadata unsupported and no typed expression
+  construction path exists for handler setters.
+- Status: FIXED by immutable expected type/signature metadata, compiled per-invocation
+  expressions and exact ValueExpression/MethodExpression/Object setter selection.
+
+## IBARRA-077 · 2026-10-12 · Mixed deferred values lose literal escaping and local function bindings
+
+- Symptom: mixed attribute literals can double backslashes; named immediate EL
+  loses local namespace bindings when it is reparsed through the generic value path.
+- Minimal repro: mixedLiteralsPreserveBackslashesAndNamedImmediateFunctionsKeepLocalBindings.
+- Cause: reconstructed EL text is passed back through JSP normalization rather than
+  retaining normalized literal data and captured function metadata.
+- Status: FIXED by direct literal conversion and invocation-owned compiled immediate
+  values retaining their creation-time variable/function bindings.
+
+## IBARRA-078 · 2026-10-12 · Empty method literals bypass translation-time return validation
+
+- Symptom: a pure deferred method with String[] return type and an empty literal
+  translates, then fails conversion at invocation.
+- Minimal repro: deferredTranslationRejectsWrongSyntaxVoidLiteralsAndInvalidCoercion.
+- Cause: return-type support is checked only for nonempty strings.
+- Status: FIXED by validating supported literal return types before numeric conversion,
+  including empty values; void and unsupported targets fail translation.
+
 ## IBARRA-075 · 2026-10-11 · Explicit tag bodies lose local namespace bindings
 
 - Symptom: a function prefix declared on jsp:body disappears when its children

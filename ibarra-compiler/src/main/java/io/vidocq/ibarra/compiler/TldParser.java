@@ -96,11 +96,26 @@ public final class TldParser {
             if (key.equals("variable")) { unsupported = true; continue; }
             if (key.equals("attribute")) {
                 var values = new LinkedHashMap<String, String>();
+                String deferredValue = null; DeferredMethodSignature deferredMethod = null;
                 for (var value : DeploymentXml.children(child)) {
                     requireNamespace(value, namespace, at);
                     String name = value.getLocalName();
                     if (name.equals("description")) continue;
-                    if (name.equals("deferred-value") || name.equals("deferred-method")) { unsupported = true; continue; }
+                    if (name.equals("deferred-value") || name.equals("deferred-method")) {
+                        if (deferredValue != null || deferredMethod != null) throw new PageParseException(at, "Conflicting or duplicate deferred declarations");
+                        var deferredFields = new LinkedHashMap<String, String>();
+                        String expected = name.equals("deferred-value") ? "type" : "method-signature";
+                        for (var field : DeploymentXml.children(value)) {
+                            requireNamespace(field, namespace, at);
+                            if (!field.getLocalName().equals(expected) || deferredFields.putIfAbsent(expected, field.getTextContent().trim()) != null)
+                                throw new PageParseException(at, "Invalid deferred attribute metadata");
+                        }
+                        if (name.equals("deferred-value")) {
+                            deferredValue = deferredFields.getOrDefault(expected, "java.lang.Object").replaceAll("\\s+", "");
+                            if (!DeferredMethodSignature.validType(deferredValue, false)) throw new PageParseException(at, "Invalid deferred value type: " + deferredValue);
+                        } else deferredMethod = DeferredMethodSignature.parse(deferredFields.getOrDefault(expected, "void method()"), at);
+                        continue;
+                    }
                     if (!Set.of("name", "type", "required", "rtexprvalue", "fragment").contains(name)
                             || values.putIfAbsent(name, value.getTextContent().trim()) != null)
                         throw new PageParseException(at, "Invalid or duplicate tag attribute field: " + name);
@@ -113,10 +128,11 @@ public final class TldParser {
                 String type = values.getOrDefault("type", fragment ? "jakarta.servlet.jsp.tagext.JspFragment" : runtime ? "java.lang.Object" : "java.lang.String");
                 if (fragment && (values.containsKey("type") || values.containsKey("rtexprvalue")))
                     throw new PageParseException(at, "Fragment attributes cannot declare type or rtexprvalue");
-                if (!Set.of("boolean", "byte", "short", "int", "long", "float", "double", "char").contains(type) && !SourceVersion.isName(type))
+                if (fragment && (deferredValue != null || deferredMethod != null)) throw new PageParseException(at, "Fragment attributes cannot be deferred");
+                if (!DeferredMethodSignature.validType(type, false))
                     throw new PageParseException(at, "Invalid tag attribute type: " + type);
                 var attribute = new TagAttribute(name, type, bool(values, "required", false, at),
-                        runtime, fragment);
+                        runtime, fragment, deferredValue, deferredMethod);
                 if (attributes.putIfAbsent(name, attribute) != null) throw new PageParseException(at, "Duplicate tag attribute: " + name);
                 continue;
             }
