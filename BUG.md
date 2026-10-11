@@ -1,5 +1,37 @@
 # BUG.md — Ibarra
 
+## IBARRA-045 · 2026-10-11 · Checked listener constructors cannot use plain suppliers
+
+- Symptom: a valid public no-argument listener constructor declaring a checked
+  exception makes generated index compilation fail.
+- Minimal repro: `PagePrecompilerTest.namedLibraryTldsAreDiscoveredOnlyInsideTheApplicationDependencyGraph`
+  uses a constructor declaring a checked Throwable (previously IOException).
+- Cause: constructor method references cannot propagate checked exceptions
+  through Supplier.get.
+- Status: FIXED; direct constructor factories preserve RuntimeException/Error
+  and wrap checked Throwable as the cause of a deployment failure. No listener
+  is instantiated at build time.
+
+## IBARRA-046 · 2026-10-11 · Relative taglib mappings use the wrong base
+
+- Symptom: `tlds/example.tld` loads `/tlds/example.tld` instead of
+  `/WEB-INF/tlds/example.tld`, or incorrectly reports a missing location.
+- Minimal repro: `PagePrecompilerTest.relativeTaglibLocationsResolveAgainstWebInfWebXml`.
+- Cause: prepending a slash instead of resolving against `/WEB-INF/web.xml`.
+- Status: FIXED; resolve as required by Pages 4.0 section 7.3.6.1, then validate
+  the normalized context-relative resource path.
+
+## IBARRA-044 · 2026-10-11 · TLD discovery rejects recoverable generated outputs
+
+- Symptom: incremental precompilation fails if an owned generated directory
+  has been removed while its previous provider remains in module-info.class.
+- Minimal repro: `PagePrecompilerTest.missingOwnedDirectoriesDoNotPreventRemovingPages`
+  and `missingOwnedDirectoriesCanBeRebuiltWithoutChangingApplicationMetadata`.
+- Cause: TLD discovery uses ModuleFinder on the stale application output,
+  which validates service provider packages before repair.
+- Status: FIXED; scan the application's META-INF directly and use ModuleFinder
+  only for dependency modules.
+
 ## IBARRA-042 · 2026-10-11 · Missing page requests grow the router cache
 
 - Symptom: distinct missing JSP URLs retain one cache entry each.

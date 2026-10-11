@@ -36,6 +36,9 @@ public final class IbarraJspEngine implements JspEngine {
         return new Application() {
             private final AtomicBoolean closed = new AtomicBoolean();
             public Servlet servlet() { return servlet; }
+            public java.util.List<JspEngine.Listener> listeners() {
+                return pages.listeners().stream().map(listener -> new JspEngine.Listener(listener.type(), listener::createListener)).toList();
+            }
             public Servlet servletFor(String path) {
                 if (closed.get()) throw new IllegalStateException("JSP application is closed");
                 var page = pages.createPage(path);

@@ -73,13 +73,13 @@ sdk env
 ## Architecture
 
 ```
-ibarra-api    ← Immutable page options, constructor-based descriptors and index SPI
+ibarra-api    ← Immutable page/listener constructor factories and index SPI
 ibarra-core   ← I1 runtime: JspFactory, PageContext, JspWriter, BodyContent,
                 JspApplicationContext (tags and full Pages EL resolver chain planned)
 ibarra-compiler ← I2 parser/model; I3 generation and I4 application packaging;
                   internal API + java.xml + static java.compiler
 ibarra-maven-plugin ← Build-only precompile goal, Maven classpath exception
-ibarra-foy    ← Optional Foy engine binding, strict application layers and HTTP routing
+ibarra-foy    ← Optional Foy engine binding, application layers, routing and TLD listeners
 ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
 (planned)     ibarra-bench (JMH)
 ```
@@ -114,6 +114,13 @@ ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
     Java module `provides`, never classpath service files or runtime class-name
     lookup. The Maven plugin alone uses Maven's build-time classpath as designed
     in PLAN.md; Maven libraries must never enter application/runtime artifacts.
+
+11. **TLD boundary** — discovery and class-file validation run only at build time.
+    Generated listener factories call constructors directly; metadata discovery
+    must never initialize listener classes. Runtime TLD parsing/class-name lookup
+    is prohibited. Libraries must be reachable named modules with listener
+    packages accessible to the generated application module. Tag-handler
+    translation remains I6.
 
 ## Conventions
 

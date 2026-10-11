@@ -62,10 +62,12 @@ class FoyHttpPagesTest {
                 assertEquals("Hello C true named", get(client, base + "/named?who=C").body());
                 assertEquals("beforepieceafter", get(client, base + "/include.jsp").body());
                 assertEquals("XML", get(client, base + "/document.jspx").body());
+                assertEquals("ready ready 1", get(client, base + "/listeners.jsp").body());
                 assertEquals(404, get(client, base + "/missing.jsp").statusCode());
                 assertEquals(404, get(client, base + "/WEB-INF/secret.jsp").statusCode());
             }
         } finally { try { if (deployed) container.undeploy(archive); } finally { container.stop(); } }
+        assertEquals("1", Files.readString(directory.resolve("listener-destroyed.txt")));
     }
 
     private static HttpResponse<String> get(HttpClient client, String url) throws Exception {
@@ -77,8 +79,27 @@ class FoyHttpPagesTest {
         Files.createDirectories(output); Files.createDirectories(source); Files.createDirectories(web.resolve("WEB-INF"));
         Path info = source.resolve("module-info.java");
         Files.writeString(info, "module integration.pages { requires io.vidocq.ibarra.api; }");
+        Path listener = source.resolve("app/Startup.java"); Files.createDirectories(listener.getParent());
+        Files.writeString(listener, """
+                package app;
+                public class Startup implements jakarta.servlet.ServletContextListener, jakarta.servlet.ServletRequestListener {
+                    public static int constructed;
+                    public Startup() { constructed++; }
+                    public void contextInitialized(jakarta.servlet.ServletContextEvent event) {
+                        var context = event.getServletContext();
+                        try { context.addServlet("forbidden", new jakarta.servlet.http.HttpServlet() { }); throw new AssertionError("TLD listener can configure servlets"); }
+                        catch (UnsupportedOperationException expected) { }
+                        context.setAttribute("tld", "ready");
+                    }
+                    public void requestInitialized(jakarta.servlet.ServletRequestEvent event) { event.getServletRequest().setAttribute("tldRequest", "ready"); }
+                    public void contextDestroyed(jakarta.servlet.ServletContextEvent event) { event.getServletContext().setAttribute("tldDestroyed", "1"); }
+                }
+                """);
         assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, "--release", "25", "--module-path",
-                modulePath(true), "-d", output.toString(), info.toString()));
+                modulePath(true), "-d", output.toString(), info.toString(), listener.toString()));
+        Files.writeString(web.resolve("WEB-INF/startup.tld"), "<taglib><listener><listener-class>app.Startup</listener-class></listener></taglib>");
+        Files.writeString(web.resolve("WEB-INF/duplicate.tld"), "<taglib><listener><listener-class>app.Startup</listener-class></listener></taglib>");
+        Files.writeString(web.resolve("listeners.jsp"), "<%@ page session='false' %><%= application.getAttribute(\"tld\") %> <%= request.getAttribute(\"tldRequest\") %> <%= app.Startup.constructed %>");
         Files.writeString(web.resolve("index.jsp"), "<%@ page session='false' %>Hello <%= request.getParameter(\"who\") %> <%= Thread.currentThread().isVirtual() %> <%= config.getServletName() %>");
         Files.writeString(web.resolve("piece.jsp"), "<%@ page session='false' %>piece");
         Files.writeString(web.resolve("document.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page session='false'/><jsp:text>XML</jsp:text></jsp:root>");
@@ -131,13 +152,16 @@ class FoyHttpPagesTest {
                             DescriptorMerger.merge(WebXmlParser.parse(input), DescriptorMerger.AnnotatedComponents.none(), options.componentFactory(), model);
                         }
                         model.initializer((types, context) -> context.addJspFile("dynamic", "/index.jsp").addMapping("/dynamic"));
+                        jakarta.servlet.ServletContext context;
                         try (var deployment = WebAppDeployer.deploy(model.build(), options, layer);
                              var server = Server.builder().host("127.0.0.1").port(0).handler(deployment.handler()).build()) {
                             server.start();
+                            context = deployment.servletContext();
                             System.out.println("READY:" + server.port()); System.out.flush();
                             System.in.read();
                             server.stop();
                         }
+                        Files.writeString(Path.of(args[1]), String.valueOf(context.getAttribute("tldDestroyed")));
                     }
                 }
                 """);
@@ -185,7 +209,8 @@ class FoyHttpPagesTest {
                 process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin/java").toString(),
                         "--module-path", configuration.modulePath + File.pathSeparator + configuration.directory.resolve("host"),
                         "--limit-modules", "integration.host,io.vidocq.chappe.core",
-                        "--add-modules", "io.vidocq.chappe.core", "-m", "integration.host/host.Main", jar.toString())
+                        "--add-modules", "io.vidocq.chappe.core", "-m", "integration.host/host.Main", jar.toString(),
+                        configuration.directory.resolve("listener-destroyed.txt").toString())
                         .redirectErrorStream(true).redirectOutput(log.toFile()).start();
                 long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
                 while (System.nanoTime() < deadline && process.isAlive()) {

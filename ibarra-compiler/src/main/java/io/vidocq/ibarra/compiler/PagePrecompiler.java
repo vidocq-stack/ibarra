@@ -20,6 +20,7 @@
 package io.vidocq.ibarra.compiler;
 
 import io.vidocq.ibarra.compiler.internal.JavaSource;
+import io.vidocq.ibarra.compiler.internal.TldListeners;
 import io.vidocq.ibarra.spi.PageDescriptor;
 import java.io.*;
 import java.lang.classfile.*;
@@ -73,8 +74,9 @@ public final class PagePrecompiler {
             pages.put(entry.getKey(), name);
             sources.add(generator.generate(entry.getKey(), entry.getValue(), name, configured));
         }
-        String provider = pages.isEmpty() ? null : packageName + ".GeneratedPageIndex";
-        if (provider != null) sources.add(index(provider, pages));
+        var listeners = TldListeners.discover(resources, modulePath, output, descriptor);
+        String provider = pages.isEmpty() && listeners.isEmpty() ? null : packageName + ".GeneratedPageIndex";
+        if (provider != null) sources.add(index(provider, pages, listeners));
         var originalPackages = new TreeSet<String>();
         try (var files = Files.walk(output)) {
             for (Path file : files.filter(Files::isRegularFile).filter(file -> file.toString().endsWith(".class")).toList()) {
@@ -147,7 +149,7 @@ public final class PagePrecompiler {
         catch (NoSuchAlgorithmException failure) { throw new IllegalStateException(failure); }
     }
 
-    private static GeneratedPage index(String name, Map<String, String> pages) {
+    private static GeneratedPage index(String name, Map<String, String> pages, List<String> listeners) {
         int dot = name.lastIndexOf('.');
         var source = new StringBuilder("package ").append(name.substring(0, dot)).append(";\npublic final class ")
                 .append(name.substring(dot + 1)).append(" implements ").append(SERVICE).append(" {\n")
@@ -159,7 +161,18 @@ public final class PagePrecompiler {
                     .append(entry.getValue()).append("::new)");
             comma = true;
         }
-        source.append(");\npublic java.util.List<io.vidocq.ibarra.spi.PageDescriptor> pages() { return PAGES; }\n}\n");
+        source.append(");\npublic java.util.List<io.vidocq.ibarra.spi.PageDescriptor> pages() { return PAGES; }\n")
+                .append("private static final java.util.List<io.vidocq.ibarra.spi.ListenerDescriptor> LISTENERS = java.util.List.of(");
+        comma = false;
+        for (String listener : listeners) {
+            if (comma) source.append(',');
+            source.append("new io.vidocq.ibarra.spi.ListenerDescriptor(").append(listener).append(".class, () -> { try { return new ")
+                    .append(listener).append("(); } catch (java.lang.RuntimeException | java.lang.Error failure) { throw failure; }")
+                    .append(" catch (java.lang.Throwable failure) { throw new java.lang.IllegalStateException(")
+                    .append(JavaSource.quote("Cannot construct TLD listener " + listener)).append(", failure); } })");
+            comma = true;
+        }
+        source.append(");\npublic java.util.List<io.vidocq.ibarra.spi.ListenerDescriptor> listeners() { return LISTENERS; }\n}\n");
         return new GeneratedPage(name, source.toString(), Map.of());
     }
 

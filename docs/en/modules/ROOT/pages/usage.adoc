@@ -15,6 +15,11 @@ xref:modules/foy-binding.adoc[the binding reference] for application layers and 
 
 == Custom tags and tag files (planned)
 
+TLD listener declarations are already discovered at build time and registered
+through Foy's normal listener lifecycle. They do not require any tag calls or
+JSP pages. See xref:modules/foy-binding.adoc[the binding reference]. The tag
+handler/file translation below remains planned.
+
 TLDs (`WEB-INF/**/*.tld`, `META-INF/**/*.tld` of libraries) are read at translation time: generated code instantiates tag handlers and calls their attribute setters directly. Tag files under `WEB-INF/tags` are compiled like pages.
 
 == `jsp-config`

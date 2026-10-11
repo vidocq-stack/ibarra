@@ -41,6 +41,12 @@ Class-File API. `PageIndex.pages()` returns immutable `PageDescriptor` values;
 `ServiceLoader` and rejects duplicate web resource paths. A page descriptor
 does not own servlet initialization or deployment lifecycle.
 
+`PageIndex.listeners()` returns immutable `ListenerDescriptor` factories and
+defaults to an empty list for existing providers. Listener types are deduplicated
+without construction; factories return the exact declared class. Build-only
+`TldParser` / `TagLibraryDescriptor` metadata and generated listener lifecycle
+are described in xref:modules/foy-binding.adoc[the Foy binding reference].
+
 == Generated-page policies
 
 Generated application modules must explicitly require both `jakarta.servlet.jsp`

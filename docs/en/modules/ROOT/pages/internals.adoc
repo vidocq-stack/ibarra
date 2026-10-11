@@ -159,7 +159,8 @@ with its `ServletContext` and Java module layer before initializers/listeners.
 The binding supplies `*.jsp` / `*.jspx` routing and fresh named JSP instances.
 Foy exposes immutable `JspConfigDescriptor` views and closes engine state after
 component destruction. Without an engine, JSP remains unmapped. TLD listeners
-are pending; see xref:modules/foy-binding.adoc[the binding reference].
+use build-generated constructor factories and the normal container lifecycle;
+see xref:modules/foy-binding.adoc[the binding reference].
 
 == AOT compatibility
 

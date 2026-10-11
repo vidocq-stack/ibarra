@@ -8,6 +8,7 @@
     <name>Ibarra :: Foy binding</name>
     <description>Precompiled page engine provider for Foy's application lifecycle</description>
     <dependencies>
+        <dependency><groupId>io.vidocq.ibarra</groupId><artifactId>ibarra-api</artifactId></dependency>
         <dependency><groupId>io.vidocq.ibarra</groupId><artifactId>ibarra-core</artifactId></dependency>
         <dependency><groupId>io.vidocq.foy</groupId><artifactId>foy-api</artifactId></dependency>
         <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><scope>test</scope></dependency>

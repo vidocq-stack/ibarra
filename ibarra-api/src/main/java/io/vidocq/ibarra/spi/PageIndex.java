@@ -31,4 +31,6 @@ import java.util.List;
 public interface PageIndex {
     /** Immutable page descriptors; retrieving them must not construct servlets. */
     List<PageDescriptor> pages();
+    /** TLD listener factories; metadata discovery must not initialize listener classes. */
+    default List<ListenerDescriptor> listeners() { return List.of(); }
 }

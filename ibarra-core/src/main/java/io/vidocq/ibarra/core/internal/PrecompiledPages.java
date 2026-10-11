@@ -21,17 +21,25 @@ package io.vidocq.ibarra.core.internal;
 
 import io.vidocq.ibarra.spi.PageDescriptor;
 import io.vidocq.ibarra.spi.PageIndex;
+import io.vidocq.ibarra.spi.ListenerDescriptor;
 import java.util.*;
 
 /** Immutable deployment catalogue. Page instances remain container-owned. */
 final class PrecompiledPages {
     private final Map<String, PageDescriptor> pages;
+    private final List<ListenerDescriptor> listeners;
     PrecompiledPages(Iterable<PageIndex> indexes) {
         var collected = new TreeMap<String, PageDescriptor>();
-        for (var index : indexes) for (var page : Objects.requireNonNull(index.pages(), "Page index returned null"))
-            if (collected.putIfAbsent(page.path(), page) != null)
-                throw new IllegalArgumentException("Duplicate precompiled page: " + page.path());
+        var listenerTypes = new LinkedHashMap<Class<?>, ListenerDescriptor>();
+        for (var index : indexes) {
+            for (var page : Objects.requireNonNull(index.pages(), "Page index returned null"))
+                if (collected.putIfAbsent(page.path(), page) != null)
+                    throw new IllegalArgumentException("Duplicate precompiled page: " + page.path());
+            for (var listener : Objects.requireNonNull(index.listeners(), "Listener index returned null"))
+                listenerTypes.putIfAbsent(listener.type(), listener);
+        }
         pages = Map.copyOf(collected);
+        listeners = List.copyOf(listenerTypes.values());
     }
     static PrecompiledPages discover(ModuleLayer layer) {
         Objects.requireNonNull(layer);
@@ -41,4 +49,5 @@ final class PrecompiledPages {
         return new PrecompiledPages(indexes);
     }
     PageDescriptor find(String path) { return pages.get(path); }
+    List<ListenerDescriptor> listeners() { return listeners; }
 }

@@ -29,6 +29,26 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PrecompiledPagesTest {
     @Test
+    void listenerMetadataIsImmutableAndDeduplicatedWithoutConstruction() {
+        int[] created = {0};
+        var listener = new io.vidocq.ibarra.spi.ListenerDescriptor(TestListener.class, () -> { created[0]++; return new TestListener(); });
+        PageIndex index = new PageIndex() {
+            public List<PageDescriptor> pages() { return List.of(); }
+            public List<io.vidocq.ibarra.spi.ListenerDescriptor> listeners() { return List.of(listener, listener); }
+        };
+        var catalogue = new PrecompiledPages(List.of(index));
+        assertEquals(List.of(listener), catalogue.listeners());
+        assertEquals(0, created[0]);
+        assertThrows(UnsupportedOperationException.class, () -> catalogue.listeners().clear());
+        assertNotSame(listener.createListener(), listener.createListener());
+        assertThrows(IllegalArgumentException.class, () -> new io.vidocq.ibarra.spi.ListenerDescriptor(
+                jakarta.servlet.ServletContextListener.class, TestListener::new).createListener());
+        assertTrue(((PageIndex) List::of).listeners().isEmpty());
+    }
+
+    public static final class TestListener implements jakarta.servlet.ServletContextListener { }
+
+    @Test
     void pageFactoriesCreateFreshServletsAndLookupDoesNotInstantiateThem() {
         int[] created = {0};
         var descriptor = new PageDescriptor("/index.jsp", () -> { created[0]++; return new TestPage(); });

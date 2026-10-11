@@ -20,6 +20,7 @@
 /** Foy page-engine provider; no implementation package is exported. */
 module io.vidocq.ibarra.foy {
     requires io.vidocq.ibarra.core;
+    requires io.vidocq.ibarra.api;
     requires io.vidocq.foy.api;
     provides io.vidocq.foy.spi.jsp.JspEngine with io.vidocq.ibarra.foy.internal.IbarraJspEngine;
 }

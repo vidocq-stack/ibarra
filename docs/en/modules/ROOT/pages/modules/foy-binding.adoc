@@ -3,7 +3,7 @@
 
 == Runtime modules
 
-`ibarra-foy` requires `ibarra-core` and `foy-api`. It provides
+`ibarra-foy` requires its own `ibarra-api`/`ibarra-core` and `foy-api`. It provides
 `io.vidocq.foy.spi.jsp.JspEngine`, exports no packages and opens none.
 Core exposes its binding API only to this module. Foy itself has no Jakarta
 Pages dependency and continues to run without an engine.
@@ -39,8 +39,37 @@ runs after servlet and listener destruction; it does not drain active requests.
 Foy exposes immutable standard `JspConfigDescriptor` views from root and
 ordered fragment descriptors. Translation still happens at build time using
 the Maven plugin's root descriptor settings; automatic fragment translation
-configuration and TLD listeners remain pending. Build-time EL also awaits
+configuration remains pending. Build-time EL also awaits
 Peano, and production generation keeps EL disabled.
+
+== Build-generated TLD listeners
+
+The precompiler scans loose TLDs recursively under `WEB-INF`, excluding the
+`classes` and `lib` directories, and `META-INF` resources of the application and
+reachable named library modules. Static and unrelated dependency modules are
+excluded. Explicit root `web.xml` mappings can reference TLD files elsewhere
+or a JAR's `META-INF/taglib.tld`. Relative locations resolve from
+`/WEB-INF/web.xml` as required by Pages 4.0 section 7.3.6.1.
+
+`TldParser` retains URI and listener-class metadata in an immutable
+`TagLibraryDescriptor`. It accepts modern/legacy namespaces and legacy DOCTYPE
+declarations without external entity/DTD resolution. Full tag-handler metadata,
+URI resolution for custom tag calls, validators and tag files remain I6/I7 work.
+
+Class-File inspection verifies public concrete listener classes, public
+no-argument constructors and supported Servlet listener interfaces. Generated
+factories use class literals and direct constructors, preserve runtime errors
+and wrap checked constructor failures. Discovery never initializes a listener
+class. Public nested classes use canonical constructor source names while
+retaining their binary runtime identity. Library listener packages must be
+accessible to the application's module; no reflective fallback or opens are added.
+
+`PageIndex.listeners()` defaults to an empty list for existing providers. The
+generated index also exists for a listener-only application without JSP pages.
+Foy deduplicates classes before construction, preserves descriptor-declared
+listeners, and registers TLD-only listeners with restricted dynamic
+configuration during context initialization. Context/request/session callbacks
+use the normal container registry; destruction precedes engine close.
 
 == Container verification and test dependencies
 
@@ -57,5 +86,9 @@ Test compilation and the Arquillian control process use a classpath because
 those tooling JARs have incompatible automatic module descriptors. The deployed
 application and server use explicit named modules only.
 
-Foy's published development snapshot contains the JSP-engine SPI. PR validation
-uses the managed `foy.version` directly; no Foy source bootstrap is required.
+The base JSP-engine SPI is published. The TLD listener extension depends on
+Foy PR #29. Until it is published, PR validation builds the immutable Foy revision
+in `.forgejo/foy-spi.ref` at a release-style local version and persists that
+override in installed POMs. This prerequisite publishes no artifacts. Runtime
+builds retain the managed `foy.version`; merge/publish Foy before Ibarra and
+retire the temporary bootstrap afterwards.

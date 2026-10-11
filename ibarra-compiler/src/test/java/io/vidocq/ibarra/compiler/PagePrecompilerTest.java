@@ -34,6 +34,139 @@ class PagePrecompilerTest {
     @TempDir Path directory;
     private Path classes;
     private Path web;
+    private final List<Path> extraModules = new ArrayList<>();
+
+    @Test
+    void relativeTaglibLocationsResolveAgainstWebInfWebXml() throws Exception {
+        prepare(false); listenerClass();
+        Files.createDirectories(web.resolve("WEB-INF/tlds")); Files.createDirectories(web.resolve("tlds"));
+        Files.writeString(web.resolve("WEB-INF/tlds/relative.tld"), "<taglib><listener><listener-class>demo.Listener$Nested</listener-class></listener></taglib>");
+        Files.writeString(web.resolve("tlds/relative.tld"), "<taglib><listener><listener-class>demo.Bean</listener-class></listener></taglib>");
+        Files.writeString(web.resolve("WEB-INF/web.xml"), "<web-app><jsp-config><taglib><taglib-uri>urn:relative</taglib-uri><taglib-location>tlds/relative.tld</taglib-location></taglib></jsp-config></web-app>");
+        precompile(); assertEquals("demo.Listener$Nested", listenerNames());
+    }
+
+    @Test
+    void explicitTaglibLocationsDiscoverTldsOutsideWebInf() throws Exception {
+        prepare(false); listenerClass();
+        Files.createDirectories(web.resolve("WEB-INF"));
+        Files.writeString(web.resolve("startup.tld"), "<taglib><listener><listener-class>demo.Listener</listener-class></listener></taglib>");
+        Files.writeString(web.resolve("WEB-INF/web.xml"), "<web-app><jsp-config><taglib><taglib-uri>urn:startup</taglib-uri><taglib-location>/startup.tld</taglib-location></taglib></jsp-config></web-app>");
+        assertNotNull(precompile().indexClass()); assertEquals("demo.Listener", listenerNames());
+    }
+
+    @Test
+    void explicitJarLocationsUseMetaInfTaglibAndMissingLocationsFailTranslation() throws Exception {
+        prepare(false); listenerClass();
+        Files.createDirectories(web.resolve("WEB-INF"));
+        Path jar = web.resolve("WEB-INF/metadata.jar");
+        try (var out = new JarOutputStream(Files.newOutputStream(jar))) {
+            out.putNextEntry(new JarEntry("META-INF/taglib.tld"));
+            out.write("<taglib><listener><listener-class>demo.Listener</listener-class></listener></taglib>".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            out.closeEntry();
+        }
+        Files.writeString(web.resolve("WEB-INF/web.xml"), "<web-app><jsp-config><taglib><taglib-uri>urn:startup</taglib-uri><taglib-location>metadata.jar</taglib-location></taglib></jsp-config></web-app>");
+        assertNotNull(precompile().indexClass()); assertEquals("demo.Listener", listenerNames());
+        Files.delete(jar);
+        assertThrows(PageParseException.class, this::precompile);
+    }
+
+    @Test
+    void nestedListenerClassesRetainBinaryIdentityAndUseLegalConstructorSourceNames() throws Exception {
+        prepare(false); listenerClass();
+        Files.createDirectories(web.resolve("WEB-INF"));
+        Files.writeString(web.resolve("WEB-INF/nested.tld"), "<taglib><listener><listener-class>demo.Listener$Nested</listener-class></listener></taglib>");
+        precompile(); assertEquals("demo.Listener$Nested", listenerNames());
+    }
+
+    @Test
+    void namedLibraryTldsAreDiscoveredOnlyInsideTheApplicationDependencyGraph() throws Exception {
+        prepare(false);
+        Path source = directory.resolve("library-source"); Path library = directory.resolve("library");
+        Files.createDirectories(source.resolve("library")); Files.createDirectories(library.resolve("META-INF/tags"));
+        Files.writeString(source.resolve("module-info.java"), "module tag.library { requires jakarta.servlet; exports library; }");
+        Files.writeString(source.resolve("library/Startup.java"), "package library; public class Startup implements jakarta.servlet.ServletContextListener { public Startup() throws java.lang.Throwable { } }");
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, "--release", "25", "--module-path", modulePath(),
+                "-d", library.toString(), source.resolve("module-info.java").toString(), source.resolve("library/Startup.java").toString()));
+        Files.writeString(library.resolve("META-INF/tags/library.tld"), "<taglib><uri>urn:library</uri><listener><listener-class>library.Startup</listener-class></listener></taglib>");
+        Path jar = directory.resolve("tag-library.jar");
+        try (var out = new JarOutputStream(Files.newOutputStream(jar)); var files = Files.walk(library)) {
+            for (Path file : files.filter(Files::isRegularFile).toList()) {
+                out.putNextEntry(new JarEntry(library.relativize(file).toString().replace('\\', '/'))); Files.copy(file, out); out.closeEntry();
+            }
+        }
+        extraModules.add(jar);
+        Path info = directory.resolve("original/module-info.java");
+        Files.writeString(info, "module demo.web { requires io.vidocq.ibarra.api; requires tag.library; }");
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, "--release", "25", "--module-path", modulePath(), "-d", classes.toString(), info.toString()));
+        precompile(); assertEquals("library.Startup", listenerNames());
+        Files.writeString(info, "module demo.web { requires io.vidocq.ibarra.api; }");
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, "--release", "25", "--module-path", modulePath(), "-d", classes.toString(), info.toString()));
+        assertNull(precompile().indexClass());
+    }
+
+    @Test
+    void applicationMetaInfTldsProvideListenersWithoutWebSourcePages() throws Exception {
+        prepare(false); listenerClass();
+        Files.createDirectories(classes.resolve("META-INF/tags"));
+        Files.writeString(classes.resolve("META-INF/tags/local.tld"), "<taglib><listener><listener-class>demo.Listener</listener-class></listener></taglib>");
+        assertNotNull(precompile().indexClass()); assertEquals("demo.Listener", listenerNames());
+    }
+
+    @Test
+    void listenerOnlyApplicationsGenerateAnIndexWithoutRunningListenerInitialization() throws Exception {
+        prepare(false);
+        listenerClass();
+        Files.createDirectories(web.resolve("WEB-INF"));
+        Files.writeString(web.resolve("WEB-INF/one.tld"), "<taglib><listener><listener-class>demo.Listener</listener-class></listener></taglib>");
+        Files.writeString(web.resolve("WEB-INF/two.tld"), "<taglib><listener><listener-class>demo.Listener</listener-class></listener></taglib>");
+        Files.createDirectories(web.resolve("WEB-INF/classes")); Files.createDirectories(web.resolve("WEB-INF/lib"));
+        Files.writeString(web.resolve("WEB-INF/classes/ignored.tld"), "invalid XML excluded from TLD scanning");
+        Files.writeString(web.resolve("WEB-INF/lib/ignored.tld"), "invalid XML excluded from loose TLD scanning");
+        var original = classFiles();
+        var result = precompile();
+        assertNotNull(result.indexClass());
+        assertTrue(result.pagePaths().isEmpty());
+        assertEquals("demo.Listener", listenerNames());
+        Files.delete(web.resolve("WEB-INF/one.tld")); Files.delete(web.resolve("WEB-INF/two.tld"));
+        assertNull(precompile().indexClass());
+        assertEquals(original, classFiles());
+    }
+
+    @Test
+    void unsupportedListenerTypesFailBeforeReplacingAnExistingGeneratedCatalogue() throws Exception {
+        prepare(false); Files.writeString(web.resolve("index.jsp"), "original");
+        precompile();
+        byte[] module = Files.readAllBytes(classes.resolve("module-info.class"));
+        Files.createDirectories(web.resolve("WEB-INF"));
+        Files.writeString(web.resolve("WEB-INF/wrong.tld"), "<taglib><listener><listener-class>demo.Bean</listener-class></listener></taglib>");
+        var failure = assertThrows(PageParseException.class, this::precompile);
+        assertTrue(failure.getMessage().contains("wrong.tld"));
+        assertArrayEquals(module, Files.readAllBytes(classes.resolve("module-info.class")));
+    }
+
+    private void listenerClass() throws Exception {
+        Path source = directory.resolve("listener-source/demo/Listener.java"); Files.createDirectories(source.getParent());
+        Files.writeString(source, "package demo; public class Listener implements jakarta.servlet.ServletContextListener { static { if (Boolean.parseBoolean(\"true\")) throw new AssertionError(\"Listener initialized during metadata discovery\"); } public static class Nested implements jakarta.servlet.ServletContextListener { } }");
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, "--release", "25", "--module-path",
+                modulePath() + File.pathSeparator + classes, "--patch-module", "demo.web=" + source.getParent().getParent(),
+                "-d", classes.toString(), source.toString()));
+    }
+
+    private String listenerNames() throws Exception {
+        Path harness = directory.resolve("listener-harness");
+        String main = "package io.vidocq.ibarra.core.internal; public class ListenerMain { public static void main(String[] args) { var indexes = java.util.ServiceLoader.load(ModuleLayer.boot(), io.vidocq.ibarra.spi.PageIndex.class); for (var index : indexes) for (var listener : index.listeners()) System.out.print(listener.type().getName()); } }";
+        new PageCompiler().compile(List.of(new GeneratedPage("io.vidocq.ibarra.core.internal.ListenerMain", main, Map.of())), harness,
+                List.of("--module-path", modulePath(), "--add-modules", "io.vidocq.ibarra.core", "--patch-module", "io.vidocq.ibarra.core=" + harness.resolve(".ibarra-sources")));
+        var process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin/java").toString(),
+                "--limit-modules", "io.vidocq.ibarra.core,demo.web", "--module-path", modulePath() + File.pathSeparator + classes,
+                "--add-modules", "demo.web", "--patch-module", "io.vidocq.ibarra.core=" + harness,
+                "-m", "io.vidocq.ibarra.core/io.vidocq.ibarra.core.internal.ListenerMain")
+                .redirectErrorStream(true).redirectOutput(directory.resolve("listener.log").toFile()).start();
+        assertTrue(process.waitFor(30, TimeUnit.SECONDS));
+        var output = Files.readString(directory.resolve("listener.log")); assertEquals(0, process.exitValue(), output);
+        return output;
+    }
 
     @Test
     void packagedApplicationIsDiscoveredAndRendersWithoutCompilerAtRuntime() throws Exception {
@@ -204,8 +337,10 @@ class PagePrecompilerTest {
                 .filter(path -> !path.isEmpty()).map(Path::of)
                 .filter(path -> path.toString().endsWith(".jar") || Files.isRegularFile(path.resolve("module-info.class")))
                 .distinct().toArray(Path[]::new);
-        return ModuleFinder.of(paths).findAll().stream().filter(module -> names.contains(module.descriptor().name()))
+        String base = ModuleFinder.of(paths).findAll().stream().filter(module -> names.contains(module.descriptor().name()))
                 .map(module -> Path.of(module.location().orElseThrow()).toString()).collect(java.util.stream.Collectors.joining(File.pathSeparator));
+        return java.util.stream.Stream.concat(java.util.stream.Stream.of(base), extraModules.stream().map(Path::toString))
+                .collect(java.util.stream.Collectors.joining(File.pathSeparator));
     }
 
     private String render(Path jar) throws Exception {

@@ -31,6 +31,8 @@ public interface PageApplication extends AutoCloseable {
     HttpJspPage createPage(String path);
     /** Checks the finite precompiled catalogue without constructing a servlet. */
     boolean containsPage(String path);
+    /** Immutable TLD metadata; the container owns listener construction and lifecycle. */
+    default java.util.List<io.vidocq.ibarra.spi.ListenerDescriptor> listeners() { return java.util.List.of(); }
     /** Releases application state after the container has drained all requests. */
     @Override void close();
 }

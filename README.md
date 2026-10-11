@@ -25,8 +25,8 @@ The Maven `precompile` goal emits pages and an index into an application module;
 a packaged application JAR is discovered and rendered without compiler modules.
 EL startup interpretation is an explicit preview option; build-time EL awaits
 Peano's compiler. Precompiled pages now run over HTTP on Foy/Chappe with extension
-mappings, named JSP registrations and includes. TLD listeners, tag handlers and
-official TCK certification remain planned.
+mappings, named JSP registrations, includes and build-generated TLD listeners.
+Tag handlers and official TCK certification remain planned.
 The design of record is [PLAN.md](PLAN.md) (spec scope, build-time page
 compilation, Java Modules layout, Foy JSP-engine SPI, TCK plan, milestones I0–I9).
 
@@ -51,11 +51,11 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 
 | Module | Role | State |
 |---|---|---|
-| `ibarra-api` | Immutable page options, descriptors and constructor-based index SPI | I3/I4 SPI implemented |
+| `ibarra-api` | Immutable page/listener factories and constructor-based index SPI | I3/I4/I5 SPI implemented |
 | `ibarra-core` | Page runtime: factory, context, scopes, output, dispatch and application EL context; tags planned | I1 runtime implemented |
 | `ibarra-compiler` | JSP/JSPX parser, page model, initial Java generator and build-time compiler | I2 implemented; I3 in progress |
 | `ibarra-maven-plugin` | `precompile` goal at process-classes; module service registration | Initial I4 implemented |
-| `ibarra-foy` | Optional Foy engine provider; application layer, routing and lifecycle | Initial I5 implemented |
+| `ibarra-foy` | Optional Foy engine provider; application layer, routing and TLD listener lifecycle | Initial I5 implemented |
 | `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | skeleton |
 
 Planned modules (`ibarra-bench`) are described in [PLAN.md](PLAN.md) and created by

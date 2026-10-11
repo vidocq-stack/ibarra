@@ -33,12 +33,43 @@ public final class BeanClasses {
     public BeanClasses(List<Path> paths) { this.paths = List.copyOf(paths); }
 
     public void constructor(String type, SourceLocation at) {
+        constructor(type, at, "Bean");
+    }
+    private void constructor(String type, SourceLocation at, String role) {
         var model = read(type, at);
         if ((model.flags().flagsMask() & (ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT | ClassFile.ACC_INTERFACE)) != ClassFile.ACC_PUBLIC)
-            throw new PageParseException(at, "Bean must be a public concrete class: " + type);
+            throw new PageParseException(at, role + " must be a public concrete class: " + type);
         boolean constructor = model.methods().stream().anyMatch(method -> method.methodName().stringValue().equals("<init>")
                 && method.methodType().stringValue().equals("()V") && (method.flags().flagsMask() & ClassFile.ACC_PUBLIC) != 0);
-        if (!constructor) throw new PageParseException(at, "Bean needs a public no-argument constructor: " + type);
+        if (!constructor) throw new PageParseException(at, role + " needs a public no-argument constructor: " + type);
+    }
+
+    /** Validates without loading classes and returns the source name of a listener constructor. */
+    public String listener(String type, SourceLocation at) {
+        constructor(type, at, "TLD listener");
+        if (!listenerType(type, at, new HashSet<>())) throw new PageParseException(at, "Unsupported Servlet listener type: " + type);
+        return sourceName(type, at);
+    }
+    private boolean listenerType(String type, SourceLocation at, Set<String> visited) {
+        if (Set.of("jakarta.servlet.ServletContextListener", "jakarta.servlet.ServletContextAttributeListener",
+                "jakarta.servlet.ServletRequestListener", "jakarta.servlet.ServletRequestAttributeListener",
+                "jakarta.servlet.http.HttpSessionListener", "jakarta.servlet.http.HttpSessionAttributeListener",
+                "jakarta.servlet.http.HttpSessionIdListener").contains(type)) return true;
+        if (type.equals("java.lang.Object") || !visited.add(type)) return false;
+        var model = read(type, at);
+        for (var parent : model.interfaces()) if (listenerType(parent.asInternalName().replace('/', '.'), at, visited)) return true;
+        return model.superclass().isPresent() && listenerType(model.superclass().orElseThrow().asInternalName().replace('/', '.'), at, visited);
+    }
+    private String sourceName(String type, SourceLocation at) {
+        var model = read(type, at);
+        var innerClasses = model.findAttribute(java.lang.classfile.Attributes.innerClasses());
+        if (innerClasses.isPresent()) for (var inner : innerClasses.orElseThrow().classes()) {
+            if (inner.innerClass().asInternalName().replace('/', '.').equals(type)
+                    && inner.outerClass().isPresent() && inner.innerName().isPresent())
+                return sourceName(inner.outerClass().orElseThrow().asInternalName().replace('/', '.'), at)
+                        + "." + inner.innerName().orElseThrow().stringValue();
+        }
+        return type;
     }
 
     public Accessor getter(String type, String property, SourceLocation at) {
@@ -143,4 +174,3 @@ public final class BeanClasses {
         };
     }
 }
-

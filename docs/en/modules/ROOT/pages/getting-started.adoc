@@ -4,7 +4,7 @@
 [.lead]
 Ibarra compiles JSP/JSPX into application modules during the build. The initial
 Foy binding serves those pages over HTTP without a runtime compiler. Build-time
-EL, tag handlers and TLD listeners remain pending.
+EL and tag handlers remain pending; TLD listeners are generated at build time.
 
 == Prerequisites
 

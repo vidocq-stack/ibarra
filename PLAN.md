@@ -5,7 +5,8 @@
 > ecosystem. The scaffold (I0) and initial runtime (I1) are implemented.
 > JSP/JSPX parsing and an immutable page model are implemented (I2). Initial Java
 > generation and compiled fixtures exist (I3); static EL, remaining translation
-> semantics, tags and container binding remain planned.
+> semantics and tags remain planned. Initial packaging/Foy binding and TLD
+> listener discovery are implemented.
 > Decisions marked **(to validate)** need the maintainer's sign-off before
 > the milestone that depends on them starts.
 
@@ -123,11 +124,11 @@ reflective fallback and Vauban's runtime fallbacks.
 
 | Module (artefact) | Java module | Kind | Requires | Exports |
 |---|---|---|---|---|
-| `ibarra-api` | `io.vidocq.ibarra.api` | runtime | `transitive jakarta.servlet.jsp` | `io.vidocq.ibarra.spi` (`PageOptions`, `PageDescriptor`, `PageIndex`) |
+| `ibarra-api` | `io.vidocq.ibarra.api` | runtime | `transitive jakarta.servlet.jsp` | `io.vidocq.ibarra.spi` (`PageOptions`, `PageDescriptor`, `ListenerDescriptor`, `PageIndex`) |
 | `ibarra-core` | `io.vidocq.ibarra.core` | runtime | `transitive jakarta.servlet.jsp`, `io.vidocq.ibarra.api` | qualified binding API to `ibarra-foy` only; installs its container `JspFactory`, `uses PageIndex` |
 | `ibarra-compiler` | `io.vidocq.ibarra.compiler` | build (+ dev mode planned) | `io.vidocq.ibarra.api`, `java.xml`, `static java.compiler`; Peano compiler integration pending | `io.vidocq.ibarra.compiler` |
 | `ibarra-maven-plugin` | (Maven plugin, class path) | build | `ibarra-compiler` | — |
-| `ibarra-foy` | `io.vidocq.ibarra.foy` | runtime | `io.vidocq.ibarra.core`, Foy's SPI module | nothing — `provides` Foy's JSP-engine SPI |
+| `ibarra-foy` | `io.vidocq.ibarra.foy` | runtime | `io.vidocq.ibarra.api`, `io.vidocq.ibarra.core`, Foy's SPI module | nothing — `provides` Foy's JSP-engine SPI |
 | `ibarra-tck` | — | test, `-Ptck` | `ibarra-core` (+ Foy, Arquillian adapter later) | — |
 | `ibarra-bench` | — | JMH, not deployed | — | — |
 
@@ -154,6 +155,7 @@ public interface JspEngine {
     interface Application extends AutoCloseable {
         Servlet servlet();
         Servlet servletFor(String jspFile);
+        default List<JspEngine.Listener> listeners() { return List.of(); }
         void close();
     }
 }
@@ -169,7 +171,10 @@ public interface JspEngine {
 - Page indexes belong to the supplied application layer, with parent providers
   excluded before instantiation. Extension pages initialize once; named JSP
   registrations receive fresh instances. Stop/drain HTTP before undeployment.
-- TLD listener discovery and tag handlers remain pending. See the Antora
+- TLD listener metadata is discovered/validated at build time; generated indexes
+  expose direct constructor factories. Foy deduplicates classes and applies the
+  restricted initialization context to TLD listeners. Tag handlers remain pending.
+  See the Antora
   `modules/foy-binding` reference for bootstrap ownership and test tooling.
 
 ### Peano (Jakarta Expression Language 6.0)
@@ -224,7 +229,7 @@ the runtime's packaging goal, after I8.
 | I2 | `ibarra-compiler` parser: standard + XML syntax, directives, scripting, template text, page model | implemented: 36 parser corpus tests, clean install green |
 | I3 | Generator: Java source for pages, standard actions, EL via `jakarta.el` (Peano in tests), `jsp-config` property groups | in progress: generated fixtures render; static EL and remaining semantics pending |
 | I4 | `ibarra-maven-plugin` precompile goal + page index; extend `ibarra-api` SPI | initial implementation: independent application JAR precompiled and rendered; web fragments and broader configuration pending |
-| I5 | `ibarra-foy` + Foy's JSP-engine SPI (Foy-side PR), `*.jsp` mapping, `addJspFile`, `getJspConfigDescriptor`, TLD listeners | initial HTTP implementation: JSP/JSPX, named registrations, includes, lifecycle; TLD listeners pending |
+| I5 | `ibarra-foy` + Foy's JSP-engine SPI (Foy-side PR), `*.jsp` mapping, `addJspFile`, `getJspConfigDescriptor`, TLD listeners | initial HTTP implementation with build-generated TLD listeners; broader deployment/TCK coverage pending |
 | I6 | Custom tags: TLD parsing, classic + simple handlers, scripting variables, validators | |
 | I7 | Tag files, fragments, `jsp:invoke` / `jsp:doBody`; Peano compiled expressions in pages | |
 | I8 | Official TCK through `ibarra-tck` (Arquillian adapter on Foy) | 100 % PASS recorded in docs `tck` page |
@@ -356,7 +361,7 @@ Antora Maven plugin reference; none enter application/runtime artifacts.
    adapter (see "TCK plan").
 3. **Foy SPI shape and module** — resolved for initial I5: Foy API exports the
    application-scoped service above, Foy parses `jsp-config`, Ibarra owns page
-   catalogues. TLD listener integration remains open.
+   catalogues and direct TLD listener factories; Foy owns listener lifecycle.
 4. **Peano coupling** — `requires static io.vidocq.peano.*` soft integration in
    `ibarra-core`, or keep the core strictly on `jakarta.el` and put the Peano
    accelerations in a separate `ibarra-peano` module?
