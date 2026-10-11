@@ -75,8 +75,9 @@ attribute semantics remain follow-up work. Unsupported invoked metadata fails
 translation; no reflective fallback or handler pooling is enabled.
 
 Java-expression request values must match the declared runtime attribute type.
-Production packaging still rejects EL generation until Peano integration is
-available. The official Pages TCK has not been run.
+Production packaging compiles immediate EL with Peano; runtime parsing is not
+enabled. EL function bindings and deferred attributes remain unsupported.
+The official Pages TCK has not been run.
 
 == Verification
 

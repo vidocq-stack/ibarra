@@ -66,6 +66,8 @@ class FoyHttpPagesTest {
                 assertEquals("one:1:BODYBODY!", get(client, base + "/tags.jsp?label=one").body());
                 assertEquals("two:1:BODYBODY!", get(client, base + "/tags.jsp?label=two").body());
                 assertEquals("xml:1:BODYBODY!", get(client, base + "/tags.jspx").body());
+                assertEquals("A:Direct:4", get(client, base + "/compiled-el.jspx?who=A").body(), Files.readString(directory.resolve("server.log")));
+                assertEquals("B:Direct:4", get(client, base + "/compiled-el.jspx?who=B").body());
                 assertEquals("<fragment>fragmentBODYBODY", get(client, base + "/named-tags.jspx").body());
                 assertEquals("<b title=\"&quot;&amp;\">label</b>:1:BB!", get(client, base + "/static-named-tags.jspx").body());
                 assertEquals(404, get(client, base + "/missing.jsp").statusCode());
@@ -83,7 +85,28 @@ class FoyHttpPagesTest {
         Path output = directory.resolve("application"); Path source = directory.resolve("source"); Path web = directory.resolve("web");
         Files.createDirectories(output); Files.createDirectories(source); Files.createDirectories(web.resolve("WEB-INF"));
         Path info = source.resolve("module-info.java");
-        Files.writeString(info, "module integration.pages { requires io.vidocq.ibarra.api; }");
+        Files.writeString(info, "module integration.pages { requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; provides io.vidocq.peano.spi.AccessorProvider with app.Accessors; }");
+        Path profile = source.resolve("app/Profile.java"), accessors = source.resolve("app/Accessors.java");
+        Files.createDirectories(profile.getParent());
+        Files.writeString(profile, "package app; public class Profile { public String getName() { return \"Direct\"; } }");
+        Files.writeString(accessors, """
+                package app;
+                public class Accessors implements io.vidocq.peano.spi.AccessorProvider {
+                    public java.util.Collection<io.vidocq.peano.spi.AccessorTable> accessors() {
+                        return java.util.List.of(new io.vidocq.peano.spi.AccessorTable() {
+                            public Class<?> targetType() { return Profile.class; }
+                            public Object getValue(jakarta.el.ELContext context, Object base, Object property) {
+                                if (base instanceof Profile profile && "name".equals(property)) { context.setPropertyResolved(base, property); return profile.getName(); }
+                                return null;
+                            }
+                            public Class<?> getType(jakarta.el.ELContext context, Object base, Object property) { return null; }
+                            public void setValue(jakarta.el.ELContext context, Object base, Object property, Object value) { }
+                            public boolean isReadOnly(jakarta.el.ELContext context, Object base, Object property) { return true; }
+                            public Class<?> getCommonPropertyType(jakarta.el.ELContext context, Object base) { return String.class; }
+                        });
+                    }
+                }
+                """);
         Path listener = source.resolve("app/Startup.java"); Files.createDirectories(listener.getParent());
         Files.writeString(listener, """
                 package app;
@@ -135,7 +158,7 @@ class FoyHttpPagesTest {
                 }
                 """);
         assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, "--release", "25", "--module-path",
-                modulePath(true), "-d", output.toString(), info.toString(), listener.toString(), wrap.toString(), upper.toString(), fragment.toString()));
+                modulePath(true), "-d", output.toString(), info.toString(), listener.toString(), wrap.toString(), upper.toString(), fragment.toString(), profile.toString(), accessors.toString()));
         Files.writeString(web.resolve("WEB-INF/handlers.tld"), """
                 <taglib><uri>urn:tags</uri>
                 <tag><name>wrap</name><tag-class>app.Wrap</tag-class><body-content>scriptless</body-content>
@@ -147,7 +170,8 @@ class FoyHttpPagesTest {
                   <attribute><name>label</name><required>true</required></attribute></tag>
                 </taglib>
                 """);
-        Files.writeString(web.resolve("tags.jsp"), "<%@ page session='false' %><%@ taglib prefix='t' uri='urn:tags' %><t:wrap label='<%=request.getParameter(\"label\")%>'><t:upper>body</t:upper></t:wrap>");
+        Files.writeString(web.resolve("tags.jsp"), "<%@ page session='false' %><%@ taglib prefix='t' uri='urn:tags' %><t:wrap label='${param.label}'><t:upper>body</t:upper></t:wrap>");
+        Files.writeString(web.resolve("compiled-el.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page session='false'/><jsp:useBean id='profile' class='app.Profile'/><jsp:text>${param.who}:${profile.name}:${[1,2,3].stream().map(x->x*2).toList()[1]}</jsp:text></jsp:root>");
         Files.writeString(web.resolve("tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false'/><t:wrap label='xml'><t:upper>body</t:upper></t:wrap></jsp:root>");
         Files.writeString(web.resolve("named-tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false'/><t:fragment><jsp:attribute name='piece'> fragment </jsp:attribute><jsp:body><t:upper><jsp:body>body</jsp:body></t:upper></jsp:body></t:fragment></jsp:root>");
         Files.writeString(web.resolve("static-named-tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false'/><t:staticWrap><jsp:attribute name='label'><b title='&quot;&amp;'><jsp:text>label</jsp:text></b></jsp:attribute><jsp:body>B</jsp:body></t:staticWrap></jsp:root>");
@@ -180,7 +204,7 @@ class FoyHttpPagesTest {
     private void prepareHost() throws Exception {
         Path source = directory.resolve("host-source"); Path output = directory.resolve("host");
         Files.createDirectories(source.resolve("host")); Files.createDirectories(output);
-        Files.writeString(source.resolve("module-info.java"), "module integration.host { requires io.vidocq.foy.core; requires io.vidocq.chappe.api; requires io.vidocq.ibarra.foy; requires io.vidocq.ibarra.api; provides io.vidocq.ibarra.spi.PageIndex with host.Main.ParentIndex; }");
+        Files.writeString(source.resolve("module-info.java"), "module integration.host { requires io.vidocq.foy.core; requires io.vidocq.chappe.api; requires io.vidocq.ibarra.foy; requires io.vidocq.ibarra.api; requires io.vidocq.peano.core; provides io.vidocq.ibarra.spi.PageIndex with host.Main.ParentIndex; }");
         Files.writeString(source.resolve("host/Main.java"), """
                 package host;
                 import java.nio.file.*;
@@ -195,6 +219,7 @@ class FoyHttpPagesTest {
                     }
                     public static void main(String[] args) throws Exception {
                         if (ModuleLayer.boot().findModule("java.compiler").isPresent()
+                                || ModuleLayer.boot().findModule("io.vidocq.peano.compiler").isPresent()
                                 || ModuleLayer.boot().findModule("io.vidocq.ibarra.compiler").isPresent()) throw new AssertionError("Compiler present at runtime");
                         var finder = ModuleFinder.of(Path.of(args[0]));
                         var configuration = ModuleLayer.boot().configuration().resolveAndBind(finder, ModuleFinder.of(), java.util.Set.of("integration.pages"));
@@ -227,7 +252,7 @@ class FoyHttpPagesTest {
     private String modulePath(boolean compiler) {
         var names = new HashSet<>(Set.of("io.vidocq.ibarra.api", "io.vidocq.ibarra.core", "io.vidocq.ibarra.foy",
                 "io.vidocq.foy.api", "io.vidocq.foy.core", "io.vidocq.chappe.api", "io.vidocq.chappe.core",
-                "jakarta.servlet", "jakarta.servlet.jsp", "jakarta.el"));
+                "jakarta.servlet", "jakarta.servlet.jsp", "jakarta.el", "io.vidocq.peano.api", "io.vidocq.peano.core"));
         if (compiler) names.add("io.vidocq.ibarra.compiler");
         String available = System.getProperty("jdk.module.path", "") + File.pathSeparator + System.getProperty("surefire.test.class.path", "");
         var paths = Arrays.stream(available.split(java.util.regex.Pattern.quote(File.pathSeparator))).filter(s -> !s.isEmpty())
@@ -261,6 +286,7 @@ class FoyHttpPagesTest {
                 Path jar = configuration.directory.resolve("deployed.jar"); archive.as(ZipExporter.class).exportTo(jar.toFile(), true);
                 Path log = configuration.directory.resolve("server.log");
                 process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin/java").toString(),
+                        "-Dpeano.reflection=deny",
                         "--module-path", configuration.modulePath + File.pathSeparator + configuration.directory.resolve("host"),
                         "--limit-modules", "integration.host,io.vidocq.chappe.core",
                         "--add-modules", "io.vidocq.chappe.core", "-m", "integration.host/host.Main", jar.toString(),

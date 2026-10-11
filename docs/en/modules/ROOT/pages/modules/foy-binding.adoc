@@ -40,7 +40,9 @@ Foy exposes immutable standard `JspConfigDescriptor` views from root and
 ordered fragment descriptors. Translation still happens at build time using
 the Maven plugin's root descriptor settings; automatic fragment translation
 configuration remains pending. Build-time EL also awaits
-Peano, and production generation keeps EL disabled.
+Peano. Production pages compile EL at build time and require Peano's API module;
+their runtime graph excludes both compiler modules. HTTP tests prove private
+application accessor-table dispatch with Peano's reflection fallback denied.
 
 == Build-generated TLD listeners
 

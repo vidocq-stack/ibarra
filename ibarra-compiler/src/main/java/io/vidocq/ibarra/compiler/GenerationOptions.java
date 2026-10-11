@@ -60,7 +60,7 @@ public record GenerationOptions(List<JspPropertyGroup> propertyGroups, Map<Strin
     public byte[] byteSource(String path) { var bytes = byteSources.get(path); return bytes == null ? null : bytes.clone(); }
     /** Supplies byte resources; each file's encoding is detected independently. */
     public GenerationOptions withByteSources(Map<String, byte[]> values) { return new GenerationOptions(propertyGroups, sources, allowStartupEl, values, tagLibraries); }
-    /** Explicit preview fallback until Peano's build-time compiler is available. */
+    /** Explicit interpreter preview; production packaging always compiles EL at build time. */
     public GenerationOptions withStartupEl(boolean allowed) { return new GenerationOptions(propertyGroups, sources, allowed, byteSources, tagLibraries); }
     /** Supplies an immutable build-time URI/resource map; runtime parsing is never needed. */
     public GenerationOptions withTagLibraries(Map<String, TagLibraryDescriptor> values) { return new GenerationOptions(propertyGroups, sources, allowStartupEl, byteSources, values); }

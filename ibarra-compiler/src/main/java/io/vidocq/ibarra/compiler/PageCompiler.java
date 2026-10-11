@@ -31,7 +31,22 @@ public final class PageCompiler {
         Objects.requireNonNull(output);
         var compiler = ToolProvider.getSystemJavaCompiler();
         if (compiler == null) throw new IllegalStateException("Page compilation requires a full JDK");
+        var names = new HashSet<String>();
+        for (var source : sources) {
+            if (!javax.lang.model.SourceVersion.isName(source.className()) || !names.add(source.className()))
+                throw new IllegalArgumentException("Invalid or duplicate generated class name: " + source.className());
+        }
+        var auxiliary = new LinkedHashMap<String, GeneratedClass>();
+        for (var source : sources) for (var generated : source.auxiliaryClasses()) {
+            var previous = auxiliary.putIfAbsent(generated.className(), generated);
+            if (names.contains(generated.className()) || previous != null && !previous.equals(generated))
+                throw new IllegalArgumentException("Conflicting generated class: " + generated.className());
+        }
         Files.createDirectories(output);
+        for (var generated : auxiliary.values()) {
+            Path file = output.resolve(generated.className().replace('.', '/') + ".class");
+            Files.createDirectories(file.getParent()); Files.write(file, generated.bytes());
+        }
         var diagnostics = new DiagnosticCollector<JavaFileObject>();
         try (var manager = compiler.getStandardFileManager(diagnostics, Locale.ROOT, java.nio.charset.StandardCharsets.UTF_8)) {
             manager.setLocationFromPaths(StandardLocation.CLASS_OUTPUT, List.of(output));
@@ -60,6 +75,11 @@ public final class PageCompiler {
                     messages.add(where + ": " + diagnostic.getMessage(Locale.ROOT));
                 }
                 throw new PageCompilationException(messages);
+            }
+            for (var generated : auxiliary.values()) {
+                Path file = output.resolve(generated.className().replace('.', '/') + ".class");
+                if (!Files.isRegularFile(file) || !Arrays.equals(generated.bytes(), Files.readAllBytes(file)))
+                    throw new IllegalArgumentException("Java compilation replaced an auxiliary class: " + generated.className());
             }
         }
     }

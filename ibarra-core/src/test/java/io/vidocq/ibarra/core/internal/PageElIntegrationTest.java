@@ -24,6 +24,53 @@ import jakarta.el.ExpressionFactory;
 import org.junit.jupiter.api.Test;
 
 class PageElIntegrationTest {
+    @Test void providerResolversParticipateBeforeBeanFallback() throws Exception {
+        var delegate = ExpressionFactory.newInstance();
+        var web = new PageRuntimeTest.Web();
+        var observed = new java.util.concurrent.atomic.AtomicReference<ClassLoader>();
+        var fail = new java.util.concurrent.atomic.AtomicBoolean(true);
+        var resolver = new jakarta.el.ELResolver() {
+            public Object getValue(jakarta.el.ELContext context, Object base, Object property) {
+                if (base == null && "provider".equals(property)) { context.setPropertyResolved(true); return "direct"; }
+                return null;
+            }
+            public Class<?> getType(jakarta.el.ELContext context, Object base, Object property) { return null; }
+            public void setValue(jakarta.el.ELContext context, Object base, Object property, Object value) { }
+            public boolean isReadOnly(jakarta.el.ELContext context, Object base, Object property) { return true; }
+            public Class<?> getCommonPropertyType(jakarta.el.ELContext context, Object base) { return null; }
+        };
+        var factory = new ExpressionFactory() {
+            public jakarta.el.ELResolver getStreamELResolver() {
+                observed.set(Thread.currentThread().getContextClassLoader());
+                if (fail.getAndSet(false)) throw new jakarta.el.ELException("provider failed");
+                return resolver;
+            }
+            public jakarta.el.ValueExpression createValueExpression(jakarta.el.ELContext context, String text, Class<?> type) { return delegate.createValueExpression(context, text, type); }
+            public jakarta.el.ValueExpression createValueExpression(Object value, Class<?> type) { return delegate.createValueExpression(value, type); }
+            public jakarta.el.MethodExpression createMethodExpression(jakarta.el.ELContext context, String text, Class<?> type, Class<?>[] parameters) { return delegate.createMethodExpression(context, text, type, parameters); }
+            public <T> T coerceToType(Object value, Class<T> type) { return delegate.coerceToType(value, type); }
+        };
+        var page = new IbarraPageContext(new IbarraApplicationContext(factory));
+        page.initialize(web.page, web.request, web.response, null, false, 64, true);
+        var thread = Thread.currentThread(); var previous = thread.getContextClassLoader();
+        var caller = new ClassLoader(previous) {};
+        try {
+            thread.setContextClassLoader(caller);
+            assertThrows(jakarta.el.ELException.class, page::getELContext);
+            assertSame(web.page.getClass().getClassLoader(), observed.get());
+            assertSame(caller, thread.getContextClassLoader());
+            var context = page.getELContext();
+            assertEquals("direct", context.getELResolver().getValue(context, null, "provider"));
+            assertSame(web.page.getClass().getClassLoader(), observed.get());
+            assertSame(caller, thread.getContextClassLoader());
+        } finally { thread.setContextClassLoader(previous); }
+    }
+    @Test void pagesRetainTheProvidersCollectionResolver() throws Exception {
+        var page = new PageRuntimeTest.Web().open(false, null);
+        var context = page.getELContext();
+        assertEquals((Object) 4L, ExpressionFactory.newInstance().createValueExpression(context,
+                "${[1,2,3].stream().map(x->x*2).toList()[1]}", Object.class).getValue(context));
+    }
     @Test
     void peanoResolvesScopeAndParameterImplicitObjects() throws Exception {
         var web = new PageRuntimeTest.Web();

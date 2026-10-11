@@ -555,12 +555,16 @@ class PageGeneratorTest {
     }
 
     @Test
-    void startupElIsAnExplicitFallbackWhileTheBuildTimeCompilerIsUnavailable() {
-        var rejected = assertThrows(PageParseException.class, () -> generator().generate("/el.jsp", "${name}",
+    void defaultElUsesBuildTimeClassesWhileStartupInterpretationRemainsAnExplicitPreview() {
+        var compiled = generator().generate("/el.jsp", "${name}", PAGE_CLASS, GenerationOptions.DEFAULT);
+        assertFalse(compiled.source().contains("createValueExpression"));
+        var preview = generator().generate("/el.jsp", "${name}", PAGE_CLASS, GenerationOptions.DEFAULT.withStartupEl(true));
+        assertTrue(preview.source().contains("createValueExpression"));
+    }
+    @Test void invalidCompiledElKeepsTheOriginalPageLocation() {
+        var failure = assertThrows(PageParseException.class, () -> generator().generate("/bad-el.jsp", "before\n${1 + }",
                 PAGE_CLASS, GenerationOptions.DEFAULT));
-        assertTrue(rejected.getMessage().contains("Build-time EL"));
-        assertDoesNotThrow(() -> generator().generate("/el.jsp", "${name}", PAGE_CLASS,
-                GenerationOptions.DEFAULT.withStartupEl(true)));
+        assertTrue(failure.getMessage().contains("/bad-el.jsp:2:"));
     }
 
     private PageGenerator generator() { return new PageGenerator(List.of(directory)); }

@@ -104,10 +104,11 @@ ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
 8. **Language** — code, Javadoc, comments, commit messages and every `.md` file are in
    **English**.
 
-9. **I3 boundary** — `GenerationOptions.DEFAULT` rejects EL generation until
-   Peano's build-time compiler is available. Tests/previews explicitly use
-   `withStartupEl(true)`; do not silently enable startup interpretation in
-   packaging or mark I3 complete while that dependency remains missing.
+9. **I3 boundary** — `GenerationOptions.DEFAULT` compiles EL through Peano at
+   build time. Application modules with EL require `io.vidocq.peano.api` explicitly.
+   `withStartupEl(true)` remains an interpreter preview; packaging rejects it.
+   Never add an automatic runtime parsing fallback. EL imports/function bindings,
+   deferred attributes and other remaining Pages semantics keep I3 in progress.
 
 10. **I4 boundary** — application modules must require `io.vidocq.ibarra.api`;
     their generated packages need no exports/opens. Register page indexes with

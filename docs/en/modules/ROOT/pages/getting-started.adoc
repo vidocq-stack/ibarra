@@ -40,8 +40,9 @@ See xref:modules/maven-plugin.adoc[the plugin reference] and the repository's
 `examples/precompiled-pages` for a complete buildable example.
 
 Deploy with `ibarra-foy` and the explicit application layer as described in
-xref:modules/foy-binding.adoc[the binding reference]. Default packaging rejects EL
-until build-time EL integration is available; it never enables startup preview.
+xref:modules/foy-binding.adoc[the binding reference]. Default packaging compiles EL
+through Peano; applications using EL add `peano-api` and require its Java module.
+Packaging never enables startup preview.
 
 == A first page (initial I5)
 
@@ -80,10 +81,12 @@ var javaSource = generated.source();
 
 `PageCompiler.compile` accepts generated sources, an output directory and javac
 options for the target application's module path. It emits classes and retains
-`.ibarra-sources` for inspection; it does not load pages. Peano's build-time EL
-compiler is not available yet, so EL generation fails by default. Tests/previews
-can explicitly select `GenerationOptions.DEFAULT.withStartupEl(true)`, which
-initializes interpreter expressions once per servlet instance at startup.
+`.ibarra-sources` for inspection; it does not load pages. Default EL generation
+emits Peano class files alongside the servlet. Both the source and bytecode roots
+must be in the target application's module patch when using PageCompiler directly;
+the Maven goal configures this automatically. Tests/previews can explicitly select
+`GenerationOptions.DEFAULT.withStartupEl(true)` for interpreter initialization.
+See xref:modules/compiled-el.adoc[compiled EL] for module and resolver requirements.
 
 The Maven goal, page-index discovery and runtime factory installation are
 implemented in initial I4/I5. See xref:internals.adoc[Internals] for the current action boundaries.

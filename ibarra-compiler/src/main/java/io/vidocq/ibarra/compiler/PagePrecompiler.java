@@ -83,6 +83,10 @@ public final class PagePrecompiler {
         }
         var listeners = catalog.listeners();
         String provider = pages.isEmpty() && listeners.isEmpty() ? null : packageName + ".GeneratedPageIndex";
+        if (sources.stream().anyMatch(source -> !source.auxiliaryClasses().isEmpty())
+                && descriptor.requires().stream().noneMatch(value -> value.name().equals("io.vidocq.peano.api")
+                && !value.modifiers().contains(ModuleDescriptor.Requires.Modifier.STATIC)))
+            throw new IllegalArgumentException("Compiled EL pages require io.vidocq.peano.api in the application module");
         if (provider != null) sources.add(index(provider, pages, listeners));
         var originalPackages = new TreeSet<String>();
         try (var files = Files.walk(output)) {
@@ -105,7 +109,7 @@ public final class PagePrecompiler {
                 var compilePath = new ArrayList<>(modulePath); compilePath.add(application);
                 String path = compilePath.stream().map(Path::toString).collect(java.util.stream.Collectors.joining(File.pathSeparator));
                 new PageCompiler().compile(sources, compiledOutput, List.of("--module-path", path, "--add-modules", descriptor.name(),
-                        "--patch-module", descriptor.name() + "=" + output + File.pathSeparator + compiledOutput.resolve(".ibarra-sources")));
+                        "--patch-module", descriptor.name() + "=" + output + File.pathSeparator + compiledOutput + File.pathSeparator + compiledOutput.resolve(".ibarra-sources")));
             }
             var compiled = new TreeSet<String>();
             try (var files = Files.walk(compiledOutput)) {

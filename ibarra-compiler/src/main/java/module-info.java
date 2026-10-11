@@ -20,6 +20,7 @@
 /** Build-time page parsing and generation; java.compiler must be resolved when generation is used. */
 module io.vidocq.ibarra.compiler {
     requires io.vidocq.ibarra.api;
+    requires io.vidocq.peano.compiler;
     requires java.xml;
     requires static java.compiler;
     exports io.vidocq.ibarra.compiler;

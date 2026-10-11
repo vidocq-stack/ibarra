@@ -24,14 +24,17 @@ The core depends on the internal `ibarra-api` SPI and `jakarta.servlet.jsp:jakar
 Build-only Maven dependencies are named and justified in xref:modules/maven-plugin.adoc[the Maven plugin reference]. They do not ship in application runtime artifacts.
 
 `ibarra-compiler` depends on the internal API for shared page-path validation. Its parser requires the
-JDK `java.xml` module; generation/compilation also needs the optional
-`java.compiler` module resolved in a full Java 25 JDK. JUnit, Peano and Ibarra
-core are test-scoped in the compiler; Peano is test-scoped in the core.
-Peano compiler integration remains deferred; the page-index SPI is implemented.
+JDK `java.xml` module; generation/compilation needs a full Java 25 JDK.
+The compiler's build-only `io.vidocq.peano:peano-compiler` dependency emits EL bytecode
+through the Class-File API, avoiding runtime parsing. Its core/API transitives stay
+on the build machine. Generated applications with EL explicitly depend on Peano API;
+Ibarra core/binding dependencies remain unchanged. JUnit and Ibarra core are
+test-scoped in the compiler; Peano core remains test-scoped in Ibarra core.
+See xref:modules/compiled-el.adoc[the compiler integration reference].
 
 `GenerationOptions.DEFAULT` disables startup EL. `withStartupEl(true)` explicitly
-enables the initial preview interpreter path; build-time EL compilation remains
-unfinished. `PageGenerator`, `GeneratedPage`, `PageCompiler`, `JspPropertyGroup`
+enables the preview interpreter path; production packaging rejects that option.
+`PageGenerator`, `GeneratedPage`, `GeneratedClass`, `PageCompiler`, `JspPropertyGroup`
 and `GenerationOptions` are in `io.vidocq.ibarra.compiler`.
 
 `PagePrecompiler` stages page compilation and constructor-based index generation,

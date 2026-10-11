@@ -36,6 +36,32 @@ class PagePrecompilerTest {
     private Path web;
     private final List<Path> extraModules = new ArrayList<>();
 
+    @Test void compiledElRendersFromAnApplicationJarWithoutRuntimeCompilers() throws Exception {
+        prepare(false, true);
+        Files.writeString(web.resolve("index.jsp"), "<%@ page session='false' %>${1+2}|${requestScope.answer}|${[1,2,3][1]}|${((x)->x+1)(4)}");
+        precompile();
+        Path jar = directory.resolve("compiled-el.jar"); jar(classes, jar);
+        assertEquals("3|42|2|5", render(jar, true));
+    }
+
+    @Test void removedElClassesAreCleanedUpWithoutDeletingApplicationClasses() throws Exception {
+        prepare(false, true);
+        Files.writeString(web.resolve("index.jsp"), "${1+2}"); precompile();
+        Set<String> first = classFiles();
+        assertTrue(first.stream().anyMatch(name -> name.contains("$Expression")));
+        Files.writeString(web.resolve("index.jsp"), "plain"); precompile();
+        assertTrue(classFiles().stream().noneMatch(name -> name.contains("$Expression")));
+        assertTrue(Files.exists(classes.resolve("demo/Bean.class")));
+    }
+    @Test void compiledElRequiresAnExplicitRuntimeApiReadBeforePublishing() throws Exception {
+        prepare(false);
+        byte[] original = Files.readAllBytes(classes.resolve("module-info.class"));
+        Files.writeString(web.resolve("index.jsp"), "${1+2}");
+        var failure = assertThrows(IllegalArgumentException.class, this::precompile);
+        assertTrue(failure.getMessage().contains("io.vidocq.peano.api"));
+        assertArrayEquals(original, Files.readAllBytes(classes.resolve("module-info.class")));
+    }
+
     @Test
     void relativeTaglibLocationsResolveAgainstWebInfWebXml() throws Exception {
         prepare(false); listenerClass();
@@ -211,7 +237,7 @@ class PagePrecompilerTest {
         prepare(false); Files.writeString(web.resolve("index.jsp"), "good"); precompile();
         byte[] module = Files.readAllBytes(classes.resolve("module-info.class"));
         var before = classFiles();
-        Files.writeString(web.resolve("index.jsp"), "$" + "{missing}");
+        Files.writeString(web.resolve("index.jsp"), "${1 + }");
         assertThrows(PageParseException.class, this::precompile);
         assertArrayEquals(module, Files.readAllBytes(classes.resolve("module-info.class")));
         assertEquals(before, classFiles());
@@ -307,10 +333,14 @@ class PagePrecompilerTest {
     }
 
     private void prepare(boolean manual) throws Exception {
+        prepare(manual, false);
+    }
+    private void prepare(boolean manual, boolean el) throws Exception {
         classes = directory.resolve("classes"); web = directory.resolve("web");
         Files.createDirectories(classes); Files.createDirectories(web);
         Path sources = directory.resolve("original"); Files.createDirectories(sources.resolve("demo"));
         Files.writeString(sources.resolve("module-info.java"), "module demo.web { requires io.vidocq.ibarra.api;"
+                + (el ? " requires io.vidocq.peano.api;" : "")
                 + (manual ? " provides io.vidocq.ibarra.spi.PageIndex with demo.ManualIndex;" : "") + " }");
         Files.writeString(sources.resolve("demo/Bean.java"), "package demo; public class Bean { public String getValue() { return \"B\"; } }");
         var inputs = new ArrayList<String>(List.of("--release", "25", "-proc:none", "--module-path", modulePath(), "-d", classes.toString(),
@@ -328,10 +358,18 @@ class PagePrecompilerTest {
             return files.filter(Files::isRegularFile).map(classes::relativize).map(Path::toString).collect(java.util.stream.Collectors.toSet());
         }
     }
+    private void jar(Path output, Path target) throws Exception {
+        try (var stream = new JarOutputStream(Files.newOutputStream(target)); var files = Files.walk(output)) {
+            for (var file : files.filter(Files::isRegularFile).sorted().toList()) {
+                stream.putNextEntry(new JarEntry(output.relativize(file).toString().replace('\\', '/')));
+                Files.copy(file, stream); stream.closeEntry();
+            }
+        }
+    }
 
     private List<Path> modulePaths() { return Arrays.stream(modulePath().split(java.util.regex.Pattern.quote(File.pathSeparator))).map(Path::of).toList(); }
     private String modulePath() {
-        var names = Set.of("io.vidocq.ibarra.api", "io.vidocq.ibarra.core", "jakarta.servlet", "jakarta.servlet.jsp", "jakarta.el");
+        var names = Set.of("io.vidocq.ibarra.api", "io.vidocq.ibarra.core", "jakarta.servlet", "jakarta.servlet.jsp", "jakarta.el", "io.vidocq.peano.api", "io.vidocq.peano.core");
         String available = System.getProperty("jdk.module.path", "") + File.pathSeparator + System.getProperty("surefire.test.class.path", "");
         var paths = Arrays.stream(available.split(java.util.regex.Pattern.quote(File.pathSeparator)))
                 .filter(path -> !path.isEmpty()).map(Path::of)
@@ -344,6 +382,9 @@ class PagePrecompilerTest {
     }
 
     private String render(Path jar) throws Exception {
+        return render(jar, false);
+    }
+    private String render(Path jar, boolean el) throws Exception {
         Path root = Path.of(System.getProperty("user.dir")).toAbsolutePath();
         if (!Files.isDirectory(root.resolve("ibarra-core"))) root = root.getParent();
         String doubles = Files.readString(root.resolve("ibarra-core/src/test/java/io/vidocq/ibarra/core/internal/ServletDoubles.java"));
@@ -354,8 +395,9 @@ class PagePrecompilerTest {
                 public class PackagedMain {
                     public static void main(String[] args) throws Exception {
                         if (ModuleLayer.boot().findModule("io.vidocq.ibarra.compiler").isPresent()
+                                || ModuleLayer.boot().findModule("io.vidocq.peano.compiler").isPresent()
                                 || ModuleLayer.boot().findModule("java.compiler").isPresent()) throw new AssertionError("Compiler resolved at runtime");
-                        JspFactory.setDefaultFactory(new IbarraJspFactory());
+                        %s
                         var catalogue = PrecompiledPages.discover(ModuleLayer.boot());
                         var descriptor = catalogue.find("/index.jsp");
                         if (descriptor == null) throw new AssertionError("No precompiled page");
@@ -369,19 +411,20 @@ class PagePrecompilerTest {
                         };
                         page.init(config);
                         var response = new ServletDoubles.Response();
-                        page.service(new ServletDoubles.Request(), response);
+                        var request = new ServletDoubles.Request(); request.setAttribute("answer", 42);
+                        page.service(request, response);
                         System.out.print("RESULT=" + java.util.Base64.getEncoder().encodeToString(response.output.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                     }
                 }
-                """;
+                """.formatted(el ? noParsingFactory() : "JspFactory.setDefaultFactory(new IbarraJspFactory());");
         Path harness = directory.resolve("harness");
         new PageCompiler().compile(List.of(new GeneratedPage("io.vidocq.ibarra.core.internal.PackagedMain", main, Map.of()),
                 new GeneratedPage("io.vidocq.ibarra.core.internal.ServletDoubles", doubles, Map.of())), harness,
                 List.of("--module-path", modulePath(), "--add-modules", "io.vidocq.ibarra.core",
                         "--patch-module", "io.vidocq.ibarra.core=" + harness.resolve(".ibarra-sources")));
         var process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin/java").toString(),
-                "--limit-modules", "io.vidocq.ibarra.core,demo.web",
-                "--module-path", modulePath() + File.pathSeparator + jar, "--add-modules", "demo.web",
+                "--limit-modules", "io.vidocq.ibarra.core,demo.web" + (el ? ",io.vidocq.peano.core" : ""),
+                "--module-path", modulePath() + File.pathSeparator + jar, "--add-modules", "demo.web" + (el ? ",io.vidocq.peano.core" : ""),
                 "--patch-module", "io.vidocq.ibarra.core=" + harness,
                 "-m", "io.vidocq.ibarra.core/io.vidocq.ibarra.core.internal.PackagedMain")
                 .redirectErrorStream(true).redirectOutput(directory.resolve("render.log").toFile()).start();
@@ -389,5 +432,28 @@ class PagePrecompilerTest {
         String output = Files.readString(directory.resolve("render.log"));
         assertEquals(0, process.exitValue(), output);
         return new String(Base64.getDecoder().decode(output.substring(output.indexOf("RESULT=") + 7).trim()), java.nio.charset.StandardCharsets.UTF_8);
+    }
+    private String noParsingFactory() {
+        return """
+                var delegate = jakarta.el.ExpressionFactory.newInstance();
+                var application = new IbarraApplicationContext(new jakarta.el.ExpressionFactory() {
+                    public jakarta.el.ValueExpression createValueExpression(jakarta.el.ELContext context, String text, Class<?> type) { throw new AssertionError("Runtime parsing: " + text); }
+                    public jakarta.el.ValueExpression createValueExpression(Object value, Class<?> type) { throw new AssertionError("Runtime expression creation"); }
+                    public jakarta.el.MethodExpression createMethodExpression(jakarta.el.ELContext context, String text, Class<?> type, Class<?>[] parameters) { throw new AssertionError("Runtime method parsing"); }
+                    public jakarta.el.ELResolver getStreamELResolver() { return delegate.getStreamELResolver(); }
+                    public <T> T coerceToType(Object value, Class<T> type) { return delegate.coerceToType(value, type); }
+                });
+                JspFactory.setDefaultFactory(new JspFactory() {
+                    public PageContext getPageContext(Servlet servlet, ServletRequest request, ServletResponse response, String error, boolean session, int buffer, boolean autoFlush) {
+                        var context = new IbarraPageContext(application);
+                        try { context.initialize(servlet, request, response, error, session, buffer, autoFlush); }
+                        catch(java.io.IOException failure) { throw new IllegalStateException(failure); }
+                        return context;
+                    }
+                    public void releasePageContext(PageContext context) { context.release(); }
+                    public jakarta.servlet.jsp.JspApplicationContext getJspApplicationContext(ServletContext context) { return application; }
+                    public jakarta.servlet.jsp.JspEngineInfo getEngineInfo() { return new IbarraJspFactory().getEngineInfo(); }
+                });
+                """;
     }
 }

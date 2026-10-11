@@ -9,7 +9,7 @@ Ibarra is the Jakarta Pages 4.0 (formerly JavaServer Pages) implementation of th
 
 [IMPORTANT]
 ====
-Ibarra's **I3/I6 generation is in progress**. Runtime/parser, Maven packaging, Foy HTTP binding, TLD listeners and initial classic/simple tag handlers are implemented. Static EL still awaits Peano's compiler; startup interpretation requires an explicit preview option. Full tag semantics and certification remain pending. This documentation describes the `{project-version}` development line.
+Ibarra's **I3/I6 generation is in progress**. Runtime/parser, Maven packaging, Foy HTTP binding, TLD listeners, initial classic/simple tags and build-time Peano EL compilation are implemented. Startup interpretation requires an explicit preview option. Full tag semantics, EL imports/functions and certification remain pending. This documentation describes the `{project-version}` development line.
 ====
 
 == Origin of the name

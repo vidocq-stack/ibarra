@@ -20,5 +20,6 @@ jar --describe-module --file examples/precompiled-pages/target/ibarra-precompile
 The generator's application-JAR test proves discovery and rendering against
 servlet doubles with compiler modules excluded. Deploying this example through
 Foy uses the application module layer through the binding described in the
-Antora Foy reference. EL build-time compilation still awaits Peano; packaging
-does not enable the startup interpretation preview.
+Antora Foy reference. Immediate EL compiles through Peano into the application
+JAR. The application explicitly requires peano-api; runtime deployment supplies
+an ExpressionFactory provider. Packaging never enables interpreter preview.

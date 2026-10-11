@@ -1,5 +1,45 @@
 # BUG.md — Ibarra
 
+## IBARRA-062 · 2026-10-11 · Java compilation can replace auxiliary expression classes
+
+- Symptom: a nested Java declaration overwrites an auxiliary EL class with the
+  same binary name, leaving inconsistent generated output.
+- Minimal repro: `GeneratedClassTest.javacNestedClassesCannotReplaceAuxiliaryBytecode`.
+- Cause: collision checks compare only top-level page names before javac emits
+  additional nested or package-level classes.
+- Status: FIXED; compare all auxiliary output bytes after javac and reject
+  replacement/missing classes before staged publication.
+
+## IBARRA-061 · 2026-10-11 · Child application accessor providers are invisible to EL setup
+
+- Symptom: compiled HTTP EL cannot read a private application bean property;
+  the Pages chain falls through to BeanELResolver instead of its direct table.
+- Minimal repro: `FoyHttpPagesTest` compiled-el.jspx using app.Profile in a closed
+  child module with an AccessorProvider service.
+- Cause: provider resolver construction uses the request thread's parent loader.
+- Status: FIXED; create the EL context under the page's defining loader and
+  restore the caller loader in finally. HTTP passes with peano.reflection=deny;
+  the unit test also proves restoration after provider failure.
+
+## IBARRA-059 · 2026-10-11 · Pages EL chain discards provider resolvers
+
+- Symptom: the ExpressionFactory provider's resolver is absent from the Pages
+  chain, preventing generated accessor dispatch before BeanELResolver fallback.
+- Minimal repro: `PageElIntegrationTest.providerResolversParticipateBeforeBeanFallback`
+  returns null instead of the provider's direct value.
+- Cause: overriding StandardELContext.getELResolver replaces its provider chain.
+- Status: FIXED; retain the standard getStreamELResolver hook after application
+  resolvers and before standard property resolvers, without a Peano core dependency.
+
+## IBARRA-060 · 2026-10-11 · Build-time EL failures lose page origins
+
+- Symptom: invalid compiled EL escapes as ELException without the original page
+  source line in the translation diagnostic.
+- Minimal repro: `PageGeneratorTest.invalidCompiledElKeepsTheOriginalPageLocation`.
+- Cause: expression bytecode emission runs after the page traversal without origins.
+- Status: FIXED; retain each expression's source location and report compiler
+  failures as PageParseException before publishing outputs.
+
 ## IBARRA-058 · 2026-10-11 · Static XML named markup rejects nested jsp:text
 
 - Symptom: static named attributes accept literal XML markup but reject jsp:text

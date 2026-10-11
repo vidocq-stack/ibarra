@@ -13,6 +13,10 @@
     <name>Ibarra :: Precompiled application example</name>
     <dependencies>
         <dependency>
+            <groupId>io.vidocq.peano</groupId>
+            <artifactId>peano-api</artifactId>
+        </dependency>
+        <dependency>
             <groupId>io.vidocq.ibarra</groupId>
             <artifactId>ibarra-api</artifactId>
         </dependency>

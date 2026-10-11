@@ -64,6 +64,7 @@ public final class PageGenerator {
         private String parentTag = "null";
         private int fragmentDepth;
         private final List<String> expressions = new ArrayList<>();
+        private final List<SourceLocation> expressionLocations = new ArrayList<>();
         private final Map<String, String> beans = new LinkedHashMap<>();
         private boolean needsFactory;
         private int serial;
@@ -102,11 +103,23 @@ public final class PageGenerator {
             result.add("import jakarta.servlet.*;\nimport jakarta.servlet.http.*;\nimport jakarta.servlet.jsp.*;\n");
             for (String name : imports) result.add("import " + name + ";\n");
             result.add("public final class " + simple + " extends " + simple + "$Lifecycle {\n");
-            for (int i = 0; i < expressions.size(); i++) result.add("private jakarta.el.ValueExpression _jspxExpression" + i + ";\n");
+            var compiled = new ArrayList<GeneratedClass>();
+            for (int i = 0; i < expressions.size(); i++) {
+                if (startupElAllowed) result.add("private jakarta.el.ValueExpression _jspxExpression" + i + ";\n");
+                else {
+                    String name = className + "$Expression" + i;
+                    try {
+                        compiled.add(new GeneratedClass(name, io.vidocq.peano.compiler.ExpressionCompiler.compile(name, expressions.get(i))));
+                    } catch (jakarta.el.ELException invalid) {
+                        throw error(expressionLocations.get(i), "Cannot compile EL: " + invalid.getMessage());
+                    }
+                    result.add("private static final jakarta.el.ValueExpression _jspxExpression" + i + " = new " + name + "(Object.class);\n");
+                }
+            }
             result.add(declarations);
             result.add(fragments);
             result.add("@Override protected final void _jspxInitialize() {\n");
-            if (!expressions.isEmpty()) {
+            if (startupElAllowed && !expressions.isEmpty()) {
                 result.add("var factory = jakarta.servlet.jsp.JspFactory.getDefaultFactory().getJspApplicationContext(getServletContext()).getExpressionFactory();\n");
                 result.add("var context = new jakarta.el.StandardELContext(factory);\n");
                 for (int i = 0; i < expressions.size(); i++)
@@ -144,7 +157,7 @@ public final class PageGenerator {
             result.add("@Override public final void service(jakarta.servlet.ServletRequest request, jakarta.servlet.ServletResponse response) throws jakarta.servlet.ServletException, java.io.IOException { super.service(request, response); }\n");
             if (settings.containsKey("info")) result.add("@Override public String getServletInfo() { return " + JavaSource.quote(settings.get("info")) + "; }\n");
             result.add("}\n");
-            return new GeneratedPage(className, result.text(), result.locations());
+            return new GeneratedPage(className, result.text(), result.locations(), compiled);
         }
 
         private void directives(List<PageNode> nodes) {
@@ -652,7 +665,6 @@ public final class PageGenerator {
         }
 
         private String expression(String code, SourceLocation at) {
-            if (!startupElAllowed) throw error(at, "Build-time EL compilation requires peano-compiler; startup EL must be enabled explicitly for preview");
             var unquoted = new StringBuilder();
             char quote = 0;
             for (int i = 0; i < code.length(); i++) {
@@ -666,7 +678,7 @@ public final class PageGenerator {
             }
             if (unquoted.toString().matches("(?s).*\\b[\\p{L}_][\\p{L}\\p{N}_]*:[\\p{L}_][\\p{L}\\p{N}_]*\\s*\\(.*"))
                 throw error(at, "Tag-library function bindings are not supported yet");
-            int index = expressions.size(); expressions.add(code);
+            int index = expressions.size(); expressions.add(code); expressionLocations.add(at);
             return "_jspxExpression" + index + ".getValue(pageContext.getELContext())";
         }
         private String value(String raw, SourceLocation at, boolean xmlLiteral) {

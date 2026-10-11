@@ -4,7 +4,7 @@
 > Jakarta Pages 4.0 (formerly JavaServer Pages) implementation of the Vidocq
 > ecosystem. The scaffold (I0) and initial runtime (I1) are implemented.
 > JSP/JSPX parsing and an immutable page model are implemented (I2). Initial Java
-> generation and compiled fixtures exist (I3); static EL, remaining translation
+> generation, compiled fixtures and build-time Peano EL exist (I3); remaining translation
 > semantics and tags remain planned. Initial packaging/Foy binding and TLD
 > listener discovery are implemented.
 > Decisions marked **(to validate)** need the maintainer's sign-off before
@@ -126,7 +126,7 @@ reflective fallback and Vauban's runtime fallbacks.
 |---|---|---|---|---|
 | `ibarra-api` | `io.vidocq.ibarra.api` | runtime | `transitive jakarta.servlet.jsp` | `io.vidocq.ibarra.spi` (`PageOptions`, `PageDescriptor`, `ListenerDescriptor`, `PageIndex`) |
 | `ibarra-core` | `io.vidocq.ibarra.core` | runtime | `transitive jakarta.servlet.jsp`, `io.vidocq.ibarra.api` | qualified binding API to `ibarra-foy` only; installs its container `JspFactory`, `uses PageIndex` |
-| `ibarra-compiler` | `io.vidocq.ibarra.compiler` | build (+ dev mode planned) | `io.vidocq.ibarra.api`, `java.xml`, `static java.compiler`; Peano compiler integration pending | `io.vidocq.ibarra.compiler` |
+| `ibarra-compiler` | `io.vidocq.ibarra.compiler` | build (+ dev mode planned) | `io.vidocq.ibarra.api`, `java.xml`, `static java.compiler`, `io.vidocq.peano.compiler` | `io.vidocq.ibarra.compiler` |
 | `ibarra-maven-plugin` | (Maven plugin, class path) | build | `ibarra-compiler` | — |
 | `ibarra-foy` | `io.vidocq.ibarra.foy` | runtime | `io.vidocq.ibarra.api`, `io.vidocq.ibarra.core`, Foy's SPI module | nothing — `provides` Foy's JSP-engine SPI |
 | `ibarra-tck` | — | test, `-Ptck` | `ibarra-core` (+ Foy, Arquillian adapter later) | — |
@@ -140,8 +140,10 @@ application pages and the runtime remain strict named Java modules.
 `ibarra-core` does **not** depend on Peano: it gets its `ExpressionFactory`
 through `ExpressionFactory.newInstance()`, so any compliant EL implementation
 works and Peano is simply the default one shipped by the Vidocq runtime. The
-generated-accessor resolver and compiled expressions are added when Peano is
-present (soft integration, `requires static`, to validate).
+provider's generated-accessor resolver participates through the standard
+`ExpressionFactory.getStreamELResolver` hook. Compiled expression classes belong
+to the application module, which explicitly requires `io.vidocq.peano.api`.
+Core and binding acquire no Peano dependency.
 
 ## Integration points
 
@@ -228,7 +230,7 @@ the runtime's packaging goal, after I8.
 | I0 | Scaffold: reactor, `ibarra-core` module, `ibarra-tck` skeleton, docs, this plan | `./mvnw -ntp install` green (this commit) |
 | I1 | Runtime API: `JspFactory`, `PageContext`, `JspWriter` / `BodyContent` buffering, scopes, error pages — driven by hand-written `HttpJspPage` fixtures | implemented: unit tests against Foy-free servlet doubles, clean install green |
 | I2 | `ibarra-compiler` parser: standard + XML syntax, directives, scripting, template text, page model | implemented: 36 parser corpus tests, clean install green |
-| I3 | Generator: Java source for pages, standard actions, EL via `jakarta.el` (Peano in tests), `jsp-config` property groups | in progress: generated fixtures render; static EL and remaining semantics pending |
+| I3 | Generator: Java source for pages, standard actions, compiled EL and `jsp-config` property groups | in progress: build-time Peano EL and generated-accessor dispatch render; imports/functions/deferred attributes and remaining semantics pending |
 | I4 | `ibarra-maven-plugin` precompile goal + page index; extend `ibarra-api` SPI | initial implementation: independent application JAR precompiled and rendered; web fragments and broader configuration pending |
 | I5 | `ibarra-foy` + Foy's JSP-engine SPI (Foy-side PR), `*.jsp` mapping, `addJspFile`, `getJspConfigDescriptor`, TLD listeners | initial HTTP implementation with build-generated TLD listeners; broader deployment/TCK coverage pending |
 | I6 | Custom tags: TLD parsing, classic + simple handlers, scripting variables, validators | initial rendering: Tag/IterationTag/BodyTag/TryCatchFinally, SimpleTag bodies, named scalar/fragment attributes, explicit bodies and unqualified dynamic attributes; variables/validators/full metadata pending |
@@ -296,13 +298,16 @@ Javac enforces target-module access; inspection paths must supply non-base JDK
 class metadata when inheritance needs it.
 
 The runtime adds Pages scope, parameter, header, cookie and initialization-parameter
-implicit objects. Peano is test-scoped only. Generated expression fields are
-created against a dedicated initialization context before user `jspInit`, then
-evaluated with each request's context. This interpreter path is an explicit
-`withStartupEl(true)` preview option. The default rejects EL generation: Peano's
-P7 `peano-compiler` does not exist yet, so planned build-time expression compilation
-is unfinished. Generic EL bean access still uses the API's reflective fallback;
-generated standard bean actions themselves contain no reflection.
+implicit objects. Peano compiler is now a build dependency of ibarra-compiler.
+Default expression fields are static final and directly construct compiled,
+application-owned classes. Evaluation uses each request's EL context; there is
+no runtime expression creation or parsing fallback. The old interpreter remains
+an explicit `withStartupEl(true)` preview, rejected by production packaging.
+The Pages chain retains provider resolvers, discovering application accessor
+tables under the page's defining loader and restoring the caller loader even
+on failure. Private application beans work without exports/opens and with
+Peano's reflection fallback denied. Applications generate/register their tables
+through Peano's processor or the public AccessorProvider contract.
 
 Proof: `./mvnw -o -ntp clean install` under Temurin 25 passes 166 tests:
 48 runtime, 36 parser, 13 byte-decoding, 54 generator, 11 packaging and 4 plugin tests. Fixtures compile and run on
@@ -333,7 +338,7 @@ encoding is distinct from configuration declarations. UTF-8/16/32 BOMs are
 removed, malformed bytes fail without replacement, and named encoding conflicts
 retain resource coordinates. Source snapshots and options equality are by value.
 
-Remaining I3 work: static EL and generated accessors after Peano P6/P7, EL imports
+Remaining I3 work: EL imports
 and function bindings, atomic
 shared-scope bean creation, broader output/attribute/translation validation,
 broader namespace/XML-view validation. Unsupported constructs
@@ -363,9 +368,10 @@ Antora Maven plugin reference; none enter application/runtime artifacts.
 3. **Foy SPI shape and module** — resolved for initial I5: Foy API exports the
    application-scoped service above, Foy parses `jsp-config`, Ibarra owns page
    catalogues and direct TLD listener factories; Foy owns listener lifecycle.
-4. **Peano coupling** — `requires static io.vidocq.peano.*` soft integration in
-   `ibarra-core`, or keep the core strictly on `jakarta.el` and put the Peano
-   accelerations in a separate `ibarra-peano` module?
+4. **Peano coupling** — resolved through standard API hooks: core stays on
+   `jakarta.el`; the build module requires Peano compiler and generated application
+   classes require Peano API. No separate coupling module or optional core read
+   is needed for the implemented resolver/compiled-expression path.
 5. **`jsp:useBean beanName`** (serialized beans via `java.beans.Beans`) — support,
    or document as unsupported (pulls `java.desktop`)?
 6. **SMAP / JSR-045** line mapping for stack traces — needed for 1.0?

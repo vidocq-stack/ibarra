@@ -92,6 +92,16 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>io.vidocq.peano</groupId>
+                <artifactId>peano-compiler</artifactId>
+                <version>${peano.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.vidocq.peano</groupId>
+                <artifactId>peano-api</artifactId>
+                <version>${peano.version}</version>
+            </dependency>
             <!-- Jakarta Pages 4.0 + the specs it builds on -->
             <dependency>
                 <groupId>jakarta.servlet.jsp</groupId>

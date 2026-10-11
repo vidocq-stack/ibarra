@@ -83,10 +83,22 @@ final class IbarraApplicationContext implements JspApplicationContext {
     }
 
     ELContext createELContext(PageContext page) {
+        var thread = Thread.currentThread();
+        var previous = thread.getContextClassLoader();
+        var loader = page.getPage().getClass().getClassLoader();
+        try {
+            if (loader != null) thread.setContextClassLoader(loader);
+            return createContext(page);
+        } finally { thread.setContextClassLoader(previous); }
+    }
+
+    private ELContext createContext(PageContext page) {
         var current = registration.getAndUpdate(value -> new Registration(value.resolvers(), value.listeners(), true));
         var resolvers = new CompositeELResolver();
         resolvers.add(new PagesImplicitObjectResolver(page));
         for (var resolver : current.resolvers()) resolvers.add(resolver);
+        var providerResolver = getExpressionFactory().getStreamELResolver();
+        if (providerResolver != null) resolvers.add(providerResolver);
         resolvers.add(new MapELResolver());
         resolvers.add(new ResourceBundleELResolver());
         resolvers.add(new ListELResolver());

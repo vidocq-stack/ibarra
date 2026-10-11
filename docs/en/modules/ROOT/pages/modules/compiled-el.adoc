@@ -1,0 +1,73 @@
+= Compiled EL
+:description: Build-time Peano expressions in application-owned Java modules.
+
+== Build and runtime contracts
+
+`ibarra-compiler` uses the build-only dependency `io.vidocq.peano:peano-compiler`
+at `peano.version`, plus its Peano core/API transitives. This dependency emits
+EL class files through the Java 25 Class-File API and avoids duplicating Peano's
+compiler or introducing runtime parsing. The Maven plugin receives it through
+Ibarra compiler. Neither compiler module belongs in the runtime graph.
+
+Applications whose pages use EL add `io.vidocq.peano:peano-api` and an explicit,
+non-static module read:
+
+[source,java]
+----
+module example.pages {
+    requires io.vidocq.ibarra.api;
+    requires io.vidocq.peano.api;
+}
+----
+
+Core and Foy binding keep their existing dependencies. Runtime evaluation obtains
+an ExpressionFactory through the standard Jakarta EL API; Peano core is the
+default provider in Vidocq. Application packages require no exports or opens.
+
+== Generation and packaging
+
+Default generation compiles immediate expressions into classes beside their
+page and directly constructs immutable static-final ValueExpression fields.
+Evaluation receives the request's EL context; generated classes retain metadata
+without request or creation-context capture. Invalid EL retains its page origin.
+
+`GeneratedPage.auxiliaryClasses` carries immutable `GeneratedClass` values with
+defensive byte arrays and content equality. PageCompiler validates binary names
+and source/auxiliary collisions, writes bytecode before javac, and verifies javac
+has not replaced those classes. Direct callers include source and bytecode roots
+in their target module patch. PagePrecompiler configures that patch, publishes
+from staging, and tracks expression classes in its ownership manifest and module
+package metadata. Removing EL removes obsolete expression classes without
+claiming application-owned files.
+
+`withStartupEl(true)` remains an explicit interpreter preview. Production
+packaging rejects it; compilation failures never select runtime parsing.
+
+== Resolvers and private application types
+
+The Pages chain retains the provider's standard `getStreamELResolver` hook after
+application resolvers and before standard property resolvers. With Peano this
+includes generated accessor tables and collections. Context creation uses the
+page's defining loader to discover child-layer services, restoring the caller
+loader on success or failure.
+
+Applications generate/register private property and method tables through
+https://codefloe.com/Vidocq/peano[Peano's processor] or its public AccessorProvider
+contract. This permits direct access with `peano.reflection=deny`, without
+exports/opens. Ibarra core introduces no Peano-specific runtime lookup.
+
+== Current boundary and proof
+
+Immediate template/action/tag EL uses the delivered compiler, including scopes,
+map/list navigation, operators, calls and lambdas. Pages EL imports, TLD function
+bindings and deferred attributes remain follow-up work. Prefixed functions fail
+translation before initialization; they require generated creation-time bindings.
+Pages-specific VariableMapper capture is not added by class-only constructors.
+I3 remains in progress; the official Pages TCK has not been run.
+
+A packaged named-module fixture renders with both compilers excluded and a
+factory that rejects every runtime expression-creation call. HTTP JSP/JSPX tests
+render repeated request values and private beans with Peano reflection denied.
+Tests cover bytecode immutability, collisions, diagnostics, required module reads
+and incremental cleanup. The independent Maven example compiles EL through the
+actual precompile goal and explicitly requires Peano API.

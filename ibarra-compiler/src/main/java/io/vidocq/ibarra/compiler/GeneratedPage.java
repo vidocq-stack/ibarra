@@ -19,13 +19,18 @@
  */
 package io.vidocq.ibarra.compiler;
 import java.util.Map;
+import java.util.List;
 import java.util.Objects;
 
-/** Generated Java source and its original-page diagnostic map. */
-public record GeneratedPage(String className, String source, Map<Integer, SourceLocation> locations) {
+/** Generated Java source, diagnostic map and application-owned auxiliary classes. */
+public record GeneratedPage(String className, String source, Map<Integer, SourceLocation> locations, List<GeneratedClass> auxiliaryClasses) {
+    public GeneratedPage(String className, String source, Map<Integer, SourceLocation> locations) {
+        this(className, source, locations, List.of());
+    }
     public GeneratedPage {
         Objects.requireNonNull(className); Objects.requireNonNull(source);
         locations = Map.copyOf(locations);
+        auxiliaryClasses = List.copyOf(auxiliaryClasses);
     }
     public SourceLocation location(long javaLine) {
         int closest = -1;

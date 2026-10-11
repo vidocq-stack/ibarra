@@ -19,4 +19,5 @@
  */
 module io.vidocq.ibarra.example.pages {
     requires io.vidocq.ibarra.api;
+    requires io.vidocq.peano.api;
 }

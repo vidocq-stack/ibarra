@@ -53,8 +53,9 @@ to share path validation; it introduces no third-party runtime implementation.
 
 == Current boundary
 
-This is initial I4 packaging. Default generation rejects EL until compiled EL
-integration is available; startup interpretation cannot be enabled by packaging.
+This is initial I4 packaging. Default generation compiles EL through Peano into
+the application module. Add `peano-api` and `requires io.vidocq.peano.api` when
+pages use EL. Startup interpretation cannot be enabled by packaging.
 Tag files, TLD handlers, `jsp-config/taglib`, web-fragment merging, custom page
 extension mappings, complete deployment-descriptor validation and Foy deployment
 remain pending. DOCTYPE/entity declarations are rejected and external schemas are
