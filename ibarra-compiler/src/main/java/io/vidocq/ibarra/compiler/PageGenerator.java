@@ -402,6 +402,7 @@ public final class PageGenerator {
             var literal = new StringBuilder();
             for (var node : nodes) {
                 if (node instanceof PageNode.Text text) literal.append(text.value());
+                else if (action(node, "text")) literal.append(templateLiteral(((PageNode.Element) node).children()));
                 else if (node instanceof PageNode.Element element && sourceSyntaxes.get(element.location().source()) == Page.Syntax.XML
                         && !element.namespace().equals(PageParser.JSP_NAMESPACE) && !element.namespace().startsWith("urn:jsp")
                         && !element.namespace().startsWith("jakarta.tags.") && !libraries.containsKey(element.namespace())) {

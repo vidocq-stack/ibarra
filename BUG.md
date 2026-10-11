@@ -1,5 +1,15 @@
 # BUG.md — Ibarra
 
+## IBARRA-058 · 2026-10-11 · Static XML named markup rejects nested jsp:text
+
+- Symptom: static named attributes accept literal XML markup but reject jsp:text
+  inside that markup even though its contents are template text.
+- Minimal repro: `FoyHttpPagesTest` static-named-tags.jspx with
+  `<b><jsp:text>label</jsp:text></b>` inside the named label.
+- Cause: the template serializer flattens jsp:text only at the named body root.
+- Status: FIXED; recursively consume jsp:text as template content, continuing
+  to reject active expressions and custom actions.
+
 ## IBARRA-057 · 2026-10-11 · Adjacent jsp:text nodes retain named-attribute boundary spaces
 
 - Symptom: a trimmed named attribute containing several jsp:text nodes and
