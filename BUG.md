@@ -8,9 +8,12 @@
   CI run 36359 fails with the old 0.4.0-SNAPSHOT API despite green PR validation.
 - Cause: PR validation used an immutable local prerequisite; the main build
   resolves published snapshots and ran before the upstream publication completed.
-- Status: recovery in progress; Foy run 36350 published successfully. Ibarra
-  main workflow was dispatched as run 36381 after publication. Cleanup PR #12
-  passes validation against the published snapshot without a source bootstrap.
+- Status: RECOVERED; Foy run 36350 published successfully, then Ibarra main
+  workflow run 36381 passed all 183 tests and published its snapshot. Cleanup
+  PR #12 validates the published dependency without a source bootstrap. The
+  ordering constraint remains: wait for upstream publication before merging
+  a consumer that requires its new API. The workflow dispatch endpoint provides
+  recovery without changing application code.
 
 ## IBARRA-045 · 2026-10-11 · Checked listener constructors cannot use plain suppliers
 
