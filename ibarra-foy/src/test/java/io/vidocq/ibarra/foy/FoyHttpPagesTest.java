@@ -66,6 +66,8 @@ class FoyHttpPagesTest {
                 assertEquals("one:1:BODYBODY!", get(client, base + "/tags.jsp?label=one").body());
                 assertEquals("two:1:BODYBODY!", get(client, base + "/tags.jsp?label=two").body());
                 assertEquals("xml:1:BODYBODY!", get(client, base + "/tags.jspx").body());
+                assertEquals("<fragment>fragmentBODYBODY", get(client, base + "/named-tags.jspx").body());
+                assertEquals("<b title=\"&quot;&amp;\">label</b>:1:BB!", get(client, base + "/static-named-tags.jspx").body());
                 assertEquals(404, get(client, base + "/missing.jsp").statusCode());
                 assertEquals(404, get(client, base + "/WEB-INF/secret.jsp").statusCode());
             }
@@ -98,7 +100,19 @@ class FoyHttpPagesTest {
                     public void contextDestroyed(jakarta.servlet.ServletContextEvent event) { event.getServletContext().setAttribute("tldDestroyed", "1"); }
                 }
                 """);
-        Path wrap = source.resolve("app/Wrap.java"), upper = source.resolve("app/Upper.java");
+        Path wrap = source.resolve("app/Wrap.java"), upper = source.resolve("app/Upper.java"), fragment = source.resolve("app/Fragment.java");
+        Files.writeString(fragment, """
+                package app;
+                public class Fragment extends jakarta.servlet.jsp.tagext.SimpleTagSupport {
+                    private jakarta.servlet.jsp.tagext.JspFragment piece;
+                    public void setPiece(jakarta.servlet.jsp.tagext.JspFragment value) { piece=value; }
+                    public void doTag() throws jakarta.servlet.jsp.JspException, java.io.IOException {
+                        var writer=new java.io.StringWriter(); piece.invoke(writer);
+                        getJspContext().getOut().write("<"+writer+">"); piece.invoke(null);
+                        getJspBody().invoke(null); getJspBody().invoke(null);
+                    }
+                }
+                """);
         Files.writeString(wrap, """
                 package app;
                 public class Wrap extends jakarta.servlet.jsp.tagext.SimpleTagSupport {
@@ -121,16 +135,22 @@ class FoyHttpPagesTest {
                 }
                 """);
         assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, "--release", "25", "--module-path",
-                modulePath(true), "-d", output.toString(), info.toString(), listener.toString(), wrap.toString(), upper.toString()));
+                modulePath(true), "-d", output.toString(), info.toString(), listener.toString(), wrap.toString(), upper.toString(), fragment.toString()));
         Files.writeString(web.resolve("WEB-INF/handlers.tld"), """
                 <taglib><uri>urn:tags</uri>
                 <tag><name>wrap</name><tag-class>app.Wrap</tag-class><body-content>scriptless</body-content>
                   <attribute><name>label</name><type>java.lang.String</type><required>true</required><rtexprvalue>true</rtexprvalue></attribute></tag>
                 <tag><name>upper</name><tag-class>app.Upper</tag-class><body-content>scriptless</body-content></tag>
+                <tag><name>fragment</name><tag-class>app.Fragment</tag-class><body-content>scriptless</body-content>
+                  <attribute><name>piece</name><fragment>true</fragment><required>true</required></attribute></tag>
+                <tag><name>staticWrap</name><tag-class>app.Wrap</tag-class><body-content>scriptless</body-content>
+                  <attribute><name>label</name><required>true</required></attribute></tag>
                 </taglib>
                 """);
         Files.writeString(web.resolve("tags.jsp"), "<%@ page session='false' %><%@ taglib prefix='t' uri='urn:tags' %><t:wrap label='<%=request.getParameter(\"label\")%>'><t:upper>body</t:upper></t:wrap>");
         Files.writeString(web.resolve("tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false'/><t:wrap label='xml'><t:upper>body</t:upper></t:wrap></jsp:root>");
+        Files.writeString(web.resolve("named-tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false'/><t:fragment><jsp:attribute name='piece'> fragment </jsp:attribute><jsp:body><t:upper><jsp:body>body</jsp:body></t:upper></jsp:body></t:fragment></jsp:root>");
+        Files.writeString(web.resolve("static-named-tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false'/><t:staticWrap><jsp:attribute name='label'><b title='&quot;&amp;'>label</b></jsp:attribute><jsp:body>B</jsp:body></t:staticWrap></jsp:root>");
         Files.writeString(web.resolve("WEB-INF/startup.tld"), "<taglib><listener><listener-class>app.Startup</listener-class></listener></taglib>");
         Files.writeString(web.resolve("WEB-INF/duplicate.tld"), "<taglib><listener><listener-class>app.Startup</listener-class></listener></taglib>");
         Files.writeString(web.resolve("listeners.jsp"), "<%@ page session='false' %><%= application.getAttribute(\"tld\") %> <%= request.getAttribute(\"tldRequest\") %> <%= app.Startup.constructed %>");

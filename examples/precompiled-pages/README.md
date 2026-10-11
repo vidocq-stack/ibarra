@@ -6,7 +6,8 @@ The generated page index is registered in the compiled Java module descriptor.
 The application JAR contains compiled pages, not the compiler or generated Java.
 Its private application package also contains a SimpleTag handler described by
 WEB-INF/example.tld. The page invokes it through direct construction/setters and
-a generated scriptless body fragment; no package exports or opens are needed.
+named scalar/fragment attributes and an explicit body; no package exports or opens
+are needed.
 
 Run from the Ibarra checkout root with Java 25:
 

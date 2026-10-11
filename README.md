@@ -27,7 +27,8 @@ EL startup interpretation is an explicit preview option; build-time EL awaits
 Peano's compiler. Precompiled pages now run over HTTP on Foy/Chappe with extension
 mappings, named JSP registrations, includes and build-generated TLD listeners.
 Initial classic/simple tag handlers now render through direct constructors,
-setters and generated scriptless body fragments. Full tag metadata, tag files,
+setters and generated scriptless body/named fragments. Custom-tag named scalar
+attributes and explicit bodies are supported. Full tag metadata, tag files,
 compiled EL and official TCK certification remain pending.
 The design of record is [PLAN.md](PLAN.md) (spec scope, build-time page
 compilation, Java Modules layout, Foy JSP-engine SPI, TCK plan, milestones I0–I9).

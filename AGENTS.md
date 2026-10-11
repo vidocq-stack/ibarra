@@ -120,7 +120,8 @@ ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
     must never initialize listener classes. Runtime TLD parsing/class-name lookup
     is prohibited. Libraries must be reachable named modules with listener
     packages accessible to the generated application module. Initial I6 handlers
-    use fresh instances and direct calls. Named/fragment attributes, tagdependent
+    use fresh instances and direct calls, including custom-tag named/fragment
+    attributes and explicit bodies. Namespaced dynamic attributes, tagdependent
     bodies, variables, TEI/TLV, tag files and deferred attributes remain unsupported
     with translation diagnostics; do not silently ignore their semantics.
 

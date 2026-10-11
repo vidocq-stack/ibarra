@@ -46,10 +46,30 @@ simple parents through the standard TagAdapter for classic handlers.
 Unqualified DynamicAttributes use direct interface calls when advertised by
 the TLD and implemented by the handler.
 
+== Named attributes and explicit bodies
+
+Custom tags accept `jsp:attribute` before an optional `jsp:body`. Named attributes
+alone mean an empty invocation body. Duplicate attributes, mixed implicit/explicit
+body content and misplaced wrappers fail translation. A declared attribute may
+use the recipient tag's prefix in its name. Custom-tag `omit` is accepted and ignored.
+
+Static named attributes accept template text, including literal XML markup in
+JSPX. Runtime scalar attributes capture their body once before the recipient's
+action lifecycle, then apply JSP string conversion to the selected setter type.
+Empty numeric/character strings convert to zero; character strings otherwise
+use the first character. Runtime-generated boundary whitespace is preserved.
+`trim` removes only source boundary space, tab, CR and LF, and defaults to true.
+
+Fragment attributes receive lazy, repeatable JspFragment instances for classic
+and simple handlers. Their bodies must be scriptless. Tags inside named scalar
+or fragment bodies use the recipient handler as parent. Capture failures restore
+the writer and release classic recipients, without calling their own catch/finally
+hooks during setter setup. Enclosing handlers retain their normal failure cleanup.
+
 == Current boundary
 
-This is an initial I6 implementation. Named attributes, fragment attributes,
-explicit jsp:body wrappers, namespaced dynamic attributes, tagdependent bodies,
+This is an initial I6 implementation. Broader standard-action named-attribute
+support, namespaced dynamic attributes, tagdependent bodies,
 scripting variables, TagExtraInfo, TagLibraryValidator, tag files and deferred
 attribute semantics remain follow-up work. Unsupported invoked metadata fails
 translation; no reflective fallback or handler pooling is enabled.
@@ -66,5 +86,6 @@ skip-page propagation and metadata/URI precedence. HTTP tests precompile private
 application handlers and serve JSP/JSPX without exports, opens or compiler
 modules at runtime. Repeated requests prove fresh handler state.
 
-The independent Maven-goal example also compiles a SimpleTag with a generated
-body fragment. No new runtime or build dependency is introduced.
+The independent Maven-goal example also compiles a SimpleTag with named scalar
+and fragment attributes and an explicit body. No new runtime or build dependency
+is introduced.

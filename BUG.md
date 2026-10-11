@@ -1,5 +1,25 @@
 # BUG.md — Ibarra
 
+## IBARRA-057 · 2026-10-11 · Adjacent jsp:text nodes retain named-attribute boundary spaces
+
+- Symptom: a trimmed named attribute containing several jsp:text nodes and
+  surrounding indentation retains spaces before and after its literal value.
+- Minimal repro: `TagGenerationTest.namedStaticAttributesTrimOnlyTemplateWhitespaceAndAllowQualifiedNames`
+  with whitespace-only jsp:text nodes around `hello`.
+- Cause: trimming processes only the first/last text node after wrapper flattening.
+- Status: FIXED; trim across adjacent boundary text nodes while preserving source
+  locations and stopping at actions/expressions so runtime output is untouched.
+
+## IBARRA-056 · 2026-10-11 · Scalar JSP string conversion rejects valid empty values
+
+- Symptom: empty numeric tag attributes fail translation; character attributes
+  reject multi-character strings instead of selecting the first character.
+- Minimal repro: `TagGenerationTest.jspStringConversionsAcceptEmptyNumbersAndCharacterPrefixes`.
+- Cause: Java parsing and an exact-length character check replace the JSP string
+  conversions required by Pages 4.0 Table JSP.1-11.
+- Status: FIXED; empty numeric/character strings convert to zero, nonempty
+  character strings use their first character, for literals and captured bodies.
+
 ## IBARRA-055 · 2026-10-11 · Implicit URI precedence and explicit aliases are mixed
 
 - Symptom: loose WEB-INF TLDs override library META-INF URIs, and an explicit

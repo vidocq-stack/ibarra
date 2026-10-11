@@ -35,6 +35,55 @@ class TagGenerationTest {
     @Test void simpleAttributesAndRepeatedFragmentEvaluationRenderWithoutEl() throws Exception {
         assertEquals("[hello:bodybody]", render("<x:echo label='hello' count='2'>body</x:echo>"));
     }
+    @Test void namedStaticAttributesTrimOnlyTemplateWhitespaceAndAllowQualifiedNames() throws Exception {
+        assertEquals("[hello:body]", render("<x:echo>\n<jsp:attribute name='x:label'> hello </jsp:attribute>\n<jsp:body>body</jsp:body>\n</x:echo>"));
+        assertEquals("[ hello : ]", render("<x:echo><jsp:attribute name='label' trim='false' omit='true'> hello </jsp:attribute><jsp:body> </jsp:body></x:echo>"));
+        assertEquals("[:]|[\u2003: ]", render("<x:echo><jsp:attribute name='label'/></x:echo>|<x:echo><jsp:attribute name='label'>\u2003</jsp:attribute><jsp:body> </jsp:body></x:echo>"));
+        assertEquals("[hello:]", render("<x:echo><jsp:attribute name='label'> <jsp:text> </jsp:text><jsp:text> hello </jsp:text><jsp:text> </jsp:text> </jsp:attribute></x:echo>"));
+    }
+    @Test void runtimeNamedAttributesEvaluateOnceAndPreserveProducedWhitespace() throws Exception {
+        assertEquals("[ space :bodybody]|8|a= space ;", render("<x:runtimeText><jsp:attribute name='label'> <x:spaced/> </jsp:attribute><jsp:body>body</jsp:body></x:runtimeText>|<x:runtimeCount><jsp:attribute name='count'><%=8%></jsp:attribute></x:runtimeCount>|<x:dynamic><jsp:attribute name='a'><x:spaced/></jsp:attribute></x:dynamic>"));
+    }
+    @Test void fragmentAttributesAreLazyRepeatableAndAvailableToClassicAndSimpleHandlers() throws Exception {
+        assertEquals("<P>P!|<classic>classic", render("<x:fragment><jsp:attribute name='piece'> <x:fragmentParent/> </jsp:attribute><jsp:body>!</jsp:body></x:fragment>|<x:classicFragment><jsp:attribute name='piece'>classic</jsp:attribute></x:classicFragment>"));
+    }
+    @Test void explicitBodiesRetainClassicIterationAndBuffering() throws Exception {
+        assertEquals("aaR[ABC]", render("<x:repeat count='2'><jsp:body>a</jsp:body></x:repeat><x:buffer><jsp:body>abc</jsp:body></x:buffer>"));
+    }
+    @Test void namedAttributeFailuresRestoreWritersAndSkipPages() throws Exception {
+        assertEquals("before", render("before<x:fragment><jsp:attribute name='piece'><x:simpleSkip/></jsp:attribute></x:fragment>after"));
+        assertEquals("CFRtail", render("<x:guard><x:runtimeText><jsp:attribute name='label'><x:fail/></jsp:attribute></x:runtimeText></x:guard>tail"));
+        assertEquals("R", render("<x:namedGuard><jsp:attribute name='count'><x:fail/></jsp:attribute></x:namedGuard>", true));
+    }
+    @Test void namedAttributeEnvelopeRejectsDuplicatesOrderingAndInvalidContent() throws Exception {
+        prepare();
+        for (String source : List.of(
+                "<x:echo label='a'><jsp:attribute name='label'>b</jsp:attribute></x:echo>",
+                "<x:echo><jsp:attribute name='label'>a</jsp:attribute><jsp:attribute name='label'>b</jsp:attribute></x:echo>",
+                "<x:echo><jsp:attribute name='label'>a</jsp:attribute>body</x:echo>",
+                "<x:echo label='a'><jsp:body/><jsp:body/></x:echo>",
+                "<x:echo><jsp:body/><jsp:attribute name='label'>a</jsp:attribute></x:echo>",
+                "<x:echo><jsp:attribute name='label'><x:spaced/></jsp:attribute></x:echo>",
+                "<x:echo><jsp:attribute name='y:label'>a</jsp:attribute></x:echo>",
+                "<x:fragment piece='text'/>",
+                "<x:fragment><jsp:attribute name='piece'><%=1%></jsp:attribute></x:fragment>",
+                "<x:fragment><jsp:attribute name='piece' trim='maybe'/></x:fragment>",
+                "<x:fail><jsp:body>body</jsp:body></x:fail>")) {
+            assertThrows(PageParseException.class, () -> generator().generate("/tags.jsp", prefix()+source,
+                    "fixture.GeneratedPage", options()), source);
+        }
+    }
+    @Test void jspStringConversionsAcceptEmptyNumbersAndCharacterPrefixes() throws Exception {
+        assertEquals("0|0|A|A|0", render("<x:countOnly count=''/>|<x:runtimeCount><jsp:attribute name='count'/></x:runtimeCount>|<x:character value='ABC'/>|<x:character><jsp:attribute name='value'>ABC</jsp:attribute></x:character>|<x:character value=''/>").replace("\u0000", "0"));
+    }
+    @Test void staticXmlNamedAttributesRejectActionsAndActiveExpressions() throws Exception {
+        prepare();
+        for (String content : List.of("<x:spaced/>", "<b title='${1}'/>", "${1}")) {
+            String xml = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:x='urn:jsptld:urn:test' version='4.0'><x:echo><jsp:attribute name='label'>" + content + "</jsp:attribute></x:echo></jsp:root>";
+            assertThrows(PageParseException.class, () -> generator().generate("/tags.jspx", xml,
+                    "fixture.GeneratedPage", options()), content);
+        }
+    }
     @Test void classicIterationAndBufferedBodiesRestoreTheEnclosingWriter() throws Exception {
         assertEquals("aaaRZ[ABC]Z", render("<x:repeat count='3'>a</x:repeat>Z<x:buffer>abc</x:buffer>Z"));
         assertEquals("Z", render("<x:buffer/>Z"));
@@ -116,6 +165,20 @@ class TagGenerationTest {
                   <attribute><name>xmlnsLabel</name><required>true</required></attribute></tag>
                 <tag><name>dynamic</name><tag-class>fixture.Tags$Dynamic</tag-class><body-content>empty</body-content><dynamic-attributes>true</dynamic-attributes></tag>
                 <tag><name>bufferedRepeat</name><tag-class>fixture.Tags$BufferedRepeat</tag-class><body-content>scriptless</body-content></tag>
+                <tag><name>runtimeText</name><tag-class>fixture.Tags$RuntimeText</tag-class><body-content>scriptless</body-content>
+                  <attribute><name>label</name><type>java.lang.String</type><rtexprvalue>true</rtexprvalue><required>true</required></attribute></tag>
+                <tag><name>runtimeCount</name><tag-class>fixture.Tags$CountOnly</tag-class><body-content>empty</body-content>
+                  <attribute><name>count</name><type>int</type><rtexprvalue>true</rtexprvalue></attribute></tag>
+                <tag><name>spaced</name><tag-class>fixture.Tags$Spaced</tag-class><body-content>empty</body-content></tag>
+                <tag><name>fragment</name><tag-class>fixture.Tags$Fragment</tag-class><body-content>scriptless</body-content>
+                  <attribute><name>piece</name><fragment>true</fragment><required>true</required></attribute></tag>
+                <tag><name>classicFragment</name><tag-class>fixture.Tags$ClassicFragment</tag-class><body-content>empty</body-content>
+                  <attribute><name>piece</name><fragment>true</fragment><required>true</required></attribute></tag>
+                <tag><name>fragmentParent</name><tag-class>fixture.Tags$FragmentParent</tag-class><body-content>empty</body-content></tag>
+                <tag><name>character</name><tag-class>fixture.Tags$CharacterValue</tag-class><body-content>empty</body-content>
+                  <attribute><name>value</name><type>char</type><rtexprvalue>true</rtexprvalue></attribute></tag>
+                <tag><name>namedGuard</name><tag-class>fixture.Tags$NamedGuard</tag-class><body-content>empty</body-content>
+                  <attribute><name>count</name><type>int</type><rtexprvalue>true</rtexprvalue></attribute></tag>
                 </taglib>
                 """;
         var library = new TldParser().parse("/WEB-INF/tags.tld", tld.getBytes(StandardCharsets.UTF_8));
@@ -198,6 +261,32 @@ class TagGenerationTest {
                             out.write("]");
                         }
                     }
+                    public static class RuntimeText extends Echo {
+                        public void doTag() throws JspException,java.io.IOException {setCount(2);super.doTag();}
+                    }
+                    public static class Spaced extends SimpleTagSupport {
+                        public void doTag() throws java.io.IOException {getJspContext().getOut().write(" space ");}
+                    }
+                    public static class Fragment extends SimpleTagSupport {
+                        private JspFragment piece; public void setPiece(JspFragment value){piece=value;}
+                        public void doTag() throws JspException,java.io.IOException {
+                            var target=new java.io.StringWriter();piece.invoke(target);getJspContext().getOut().write("<"+target+">");
+                            piece.invoke(null);if(getJspBody()!=null)getJspBody().invoke(null);
+                        }
+                    }
+                    public static class ClassicFragment extends TagSupport {
+                        private JspFragment piece; public void setPiece(JspFragment value){piece=value;}
+                        public int doStartTag() throws JspException {
+                            try{var target=new java.io.StringWriter();piece.invoke(target);pageContext.getOut().write("<"+target+">");piece.invoke(null);}
+                            catch(java.io.IOException e){throw new JspException(e);}return SKIP_BODY;
+                        }
+                    }
+                    public static class FragmentParent extends SimpleTagSupport {
+                        public void doTag() throws JspException,java.io.IOException {
+                            if(!(getParent() instanceof Fragment))throw new JspException("wrong fragment parent");
+                            getJspContext().getOut().write("P");
+                        }
+                    }
                     public static class Repeat extends TagSupport {
                         private int count; public void setCount(int value){count=value;}
                         public int doStartTag(){return count>0?EVAL_BODY_INCLUDE:SKIP_BODY;}
@@ -215,6 +304,7 @@ class TagGenerationTest {
                         public void doCatch(Throwable failure){write("C");} public void doFinally(){write("F");} public void release(){write("R");super.release();}
                     }
                     public static class SetterFailure extends Guard { public void setBodyContent(BodyContent body){throw new IllegalStateException("setter failure");} }
+                    public static class NamedGuard extends Guard { public void setCount(int value){} }
                     public static class Fail extends SimpleTagSupport {public void doTag() throws JspException {throw new JspException("failure");}}
                     public static class Capture extends SimpleTagSupport {
                         public void doTag() throws JspException,java.io.IOException {var writer=new java.io.StringWriter();getJspBody().invoke(writer);getJspContext().getOut().write("<"+writer+">");}
@@ -232,6 +322,10 @@ class TagGenerationTest {
                     }
                     public static class CountOnly extends SimpleTagSupport {
                         private int count; public void setCount(int value){count=value;} public void doTag() throws java.io.IOException {getJspContext().getOut().print(count);}
+                    }
+                    public static class CharacterValue extends SimpleTagSupport {
+                        private char value; public void setValue(char character){value=character;}
+                        public void doTag() throws java.io.IOException {getJspContext().getOut().print(value);}
                     }
                     public static class ObjectValue extends SimpleTagSupport {
                         private Object value; public void setValue(Object object){value=object;} public void doTag() throws java.io.IOException {getJspContext().getOut().print(value);}

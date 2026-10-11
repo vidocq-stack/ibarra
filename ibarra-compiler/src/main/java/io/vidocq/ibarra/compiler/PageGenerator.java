@@ -255,10 +255,13 @@ public final class PageGenerator {
             var kind = classes.handler(tag.handlerClass(), node.location());
             if (kind.simple() && tag.bodyContent().equals("JSP")) throw error(node.location(), "SimpleTag cannot have JSP body-content");
             if (tag.dynamicAttributes() && !kind.dynamic()) throw error(node.location(), "Handler does not implement DynamicAttributes");
-            if (tag.bodyContent().equals("empty") && !node.children().isEmpty()) throw error(node.location(), "Tag requires an empty body");
-            if (tag.bodyContent().equals("scriptless")) scriptless(node.children());
+            var invocation = tagInvocation(node);
+            var children = invocation.content();
+            if (tag.bodyContent().equals("empty") && !children.isEmpty()) throw error(node.location(), "Tag requires an empty body");
+            if (tag.bodyContent().equals("scriptless")) scriptless(children);
             for (var attribute : tag.attributes().values())
-                if (attribute.required() && !node.attributes().containsKey(attribute.name())) throw error(node.location(), "Required tag attribute: " + attribute.name());
+                if (attribute.required() && !node.attributes().containsKey(attribute.name()) && !invocation.attributes().containsKey(attribute.name()))
+                    throw error(node.location(), "Required tag attribute: " + attribute.name());
             String handler = "_jspxTag" + serial++;
             body.add("{ var " + handler + " = new " + kind.sourceName() + "();\n", node.location());
             if (!kind.simple()) body.add("try {\n");
@@ -280,9 +283,29 @@ public final class PageGenerator {
                     body.add(handler + "." + setter.name() + "((" + setter.type() + ") (" + tagValue(supplied.getValue(), target, node.location()) + "));\n", node.location());
                 }
             }
+            for (var supplied : invocation.attributes().entrySet()) {
+                var named = supplied.getValue();
+                var attribute = tag.attributes().get(supplied.getKey());
+                var content = namedContent(named);
+                if (attribute == null) {
+                    if (!tag.dynamicAttributes() || supplied.getKey().contains(":")) throw error(named.location(), "Unknown or namespaced tag attribute: " + supplied.getKey());
+                    body.add(handler + ".setDynamicAttribute(null, " + JavaSource.quote(supplied.getKey()) + ", " + capture(content, named.location(), handler) + ");\n", named.location());
+                } else {
+                    var setter = attribute.runtimeExpression()
+                            ? classes.tagSetter(tag.handlerClass(), attribute.name(), attribute.type(), named.location())
+                            : classes.setter(tag.handlerClass(), attribute.name(), named.location());
+                    String argument;
+                    if (attribute.fragment()) argument = fragment(content, named.location(), handler);
+                    else if (attribute.runtimeExpression()) argument = stringConversion(capture(content, named.location(), handler), setter.type(), named.location());
+                    else {
+                        argument = literalValue(templateLiteral(content), new TagAttribute(attribute.name(), setter.type(), attribute.required(), false, false), named.location());
+                    }
+                    body.add(handler + "." + setter.name() + "((" + setter.type() + ") (" + argument + "));\n", named.location());
+                }
+            }
             String previousParent = parentTag; parentTag = handler;
             if (kind.simple()) {
-                if (!node.children().isEmpty()) body.add(handler + ".setJspBody(" + fragment(node.children(), node.location(), handler) + ");\n", node.location());
+                if (!children.isEmpty()) body.add(handler + ".setJspBody(" + fragment(children, node.location(), handler) + ");\n", node.location());
                 body.add(handler + ".doTag();\n", node.location());
             } else {
                 if (kind.catchFinally()) body.add("boolean _jspxSetterFailed" + handler + " = false;\n");
@@ -291,8 +314,8 @@ public final class PageGenerator {
                 String start = "_jspxStart" + handler;
                 body.add("if (" + start + " != 0 && " + start + " != 1" + (kind.buffered() ? " && " + start + " != 2" : "")
                         + ") throw new jakarta.servlet.jsp.JspException(\"Invalid doStartTag result\");\n");
-                if (!node.children().isEmpty()) {
-                    var previousBody = body; var content = new JavaSource(); body = content; emit(node.children()); body = previousBody;
+                if (!children.isEmpty()) {
+                    var previousBody = body; var content = new JavaSource(); body = content; emit(children); body = previousBody;
                     body.add("if (" + start + " != jakarta.servlet.jsp.tagext.Tag.SKIP_BODY) {\n");
                     if (kind.buffered()) body.add("boolean _jspxBuffered" + handler + " = " + start + " == jakarta.servlet.jsp.tagext.BodyTag.EVAL_BODY_BUFFERED;\n"
                             + "if (_jspxBuffered" + handler + ") out = pageContext.pushBody();\ntry {\n"
@@ -313,6 +336,99 @@ public final class PageGenerator {
                 body.add("} finally { " + handler + ".release(); }\n");
             }
             parentTag = previousParent; body.add("}\n");
+        }
+
+        private record TagInvocation(Map<String, PageNode.Element> attributes, List<PageNode> content) {}
+        private boolean action(PageNode node, String name) {
+            return node instanceof PageNode.Element element && element.namespace().equals(PageParser.JSP_NAMESPACE)
+                    && element.name().substring(element.name().lastIndexOf(':') + 1).equals(name);
+        }
+        private TagInvocation tagInvocation(PageNode.Element tag) {
+            if (tag.children().stream().noneMatch(child -> action(child, "attribute") || action(child, "body")))
+                return new TagInvocation(Map.of(), tag.children());
+            var named = new LinkedHashMap<String, PageNode.Element>();
+            var content = new ArrayList<PageNode>();
+            boolean bodySeen = false;
+            for (var child : tag.children()) {
+                if (child instanceof PageNode.Text text && text.value().chars().allMatch(c -> xmlSpace((char) c))) continue;
+                if (action(child, "attribute")) {
+                    var attribute = (PageNode.Element) child;
+                    if (bodySeen) throw error(child.location(), "jsp:attribute must precede jsp:body");
+                    allowed(attribute, Set.of("name", "trim", "omit"));
+                    String name = required(attribute, "name");
+                    if (!name.matches("[\\p{L}_][\\p{L}\\p{N}\\p{M}_.-]*(?::[\\p{L}_][\\p{L}\\p{N}\\p{M}_.-]*)?"))
+                        throw error(child.location(), "Invalid named tag attribute: " + name);
+                    int colon = name.indexOf(':');
+                    if (colon >= 0) {
+                        if (!name.substring(0, colon).equals(tag.name().substring(0, tag.name().indexOf(':'))))
+                            throw error(child.location(), "Unknown or namespaced tag attribute: " + name);
+                        name = name.substring(colon + 1);
+                    }
+                    if (tag.attributes().containsKey(name) || named.putIfAbsent(name, attribute) != null)
+                        throw error(child.location(), "Duplicate tag attribute: " + name);
+                    if (attribute.attributes().containsKey("omit")) boolValue(attribute.attributes().get("omit"), attribute.location());
+                } else if (action(child, "body")) {
+                    if (bodySeen) throw error(child.location(), "Duplicate jsp:body");
+                    bodySeen = true;
+                    var wrapper = (PageNode.Element) child;
+                    allowed(wrapper, Set.of()); content.addAll(wrapper.children());
+                } else throw error(child.location(), "Named attributes and explicit bodies require jsp:body around content");
+            }
+            return new TagInvocation(named, content);
+        }
+        private List<PageNode> namedContent(PageNode.Element attribute) {
+            var children = new ArrayList<PageNode>();
+            for (var child : attribute.children()) {
+                if (action(child, "text")) children.addAll(((PageNode.Element) child).children());
+                else children.add(child);
+            }
+            if (boolValue(attribute.attributes().getOrDefault("trim", "true"), attribute.location()) && !children.isEmpty()) {
+                for (int index = 0; index < children.size() && children.get(index) instanceof PageNode.Text text; index++) {
+                    int start = 0;
+                    while (start < text.value().length() && xmlSpace(text.value().charAt(start))) start++;
+                    children.set(index, new PageNode.Text(text.value().substring(start), text.location().advance(text.value().substring(0, start))));
+                    if (start < text.value().length()) break;
+                }
+                for (int index = children.size() - 1; index >= 0 && children.get(index) instanceof PageNode.Text text; index--) {
+                    int end = text.value().length();
+                    while (end > 0 && xmlSpace(text.value().charAt(end - 1))) end--;
+                    children.set(index, new PageNode.Text(text.value().substring(0, end), text.location()));
+                    if (end > 0) break;
+                }
+            }
+            return children;
+        }
+        private String templateLiteral(List<PageNode> nodes) {
+            var literal = new StringBuilder();
+            for (var node : nodes) {
+                if (node instanceof PageNode.Text text) literal.append(text.value());
+                else if (node instanceof PageNode.Element element && sourceSyntaxes.get(element.location().source()) == Page.Syntax.XML
+                        && !element.namespace().equals(PageParser.JSP_NAMESPACE) && !element.namespace().startsWith("urn:jsp")
+                        && !element.namespace().startsWith("jakarta.tags.") && !libraries.containsKey(element.namespace())) {
+                    literal.append('<').append(element.name());
+                    for (var entry : element.attributes().entrySet()) {
+                        var normalized = new PageNormalizer(Page.Syntax.XML,
+                                new ParserOptions(bool("isELIgnored", false), bool("deferredSyntaxAllowedAsLiteral", false)), Map.of())
+                                .normalizeStructured(List.of(new PageNode.Text(entry.getValue(), element.location())));
+                        String value = templateLiteral(normalized);
+                        literal.append(' ').append(entry.getKey()).append("=\"")
+                                .append(value.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;"))
+                                .append('"');
+                    }
+                    literal.append(element.selfClosing() ? "/>" : ">");
+                    if (!element.selfClosing()) literal.append(templateLiteral(element.children())).append("</").append(element.name()).append('>');
+                } else throw error(node.location(), "Static named attributes accept only template text");
+            }
+            return literal.toString();
+        }
+        private String capture(List<PageNode> nodes, SourceLocation at, String parent) {
+            String captured = "_jspxAttribute" + serial++;
+            String writer = "_jspxBody" + serial++;
+            body.add("String " + captured + ";\nvar " + writer + " = pageContext.pushBody();\ntry { out = " + writer + ";\n", at);
+            String previousParent = parentTag; parentTag = parent;
+            emit(nodes); parentTag = previousParent;
+            body.add(captured + " = " + writer + ".getString();\n} finally { out = pageContext.popBody(); }\n", at);
+            return captured;
         }
 
         private String classicParent(String parent) {
@@ -371,28 +487,33 @@ public final class PageGenerator {
                 return "_jspxExpressionFactory.coerceToType(" + value(raw, at, false) + ", " + attribute.type().replace('$', '.') + ".class)";
             }
             String literal = normalized.stream().map(node -> ((PageNode.Text) node).value()).collect(java.util.stream.Collectors.joining());
+            return literalValue(literal, attribute, at);
+        }
+        private String literalValue(String literal, TagAttribute attribute, SourceLocation at) {
             String type = attribute.type();
             try {
-                switch (type) {
+                if (!literal.isEmpty()) switch (type) {
                     case "byte", "java.lang.Byte" -> Byte.valueOf(literal);
                     case "short", "java.lang.Short" -> Short.valueOf(literal);
                     case "int", "java.lang.Integer" -> Integer.valueOf(literal);
                     case "long", "java.lang.Long" -> Long.valueOf(literal);
                     case "float", "java.lang.Float" -> Float.valueOf(literal);
                     case "double", "java.lang.Double" -> Double.valueOf(literal);
-                    case "char", "java.lang.Character" -> { if (literal.length()!=1) throw new IllegalArgumentException("Expected one character"); }
                 }
             } catch (IllegalArgumentException invalid) { throw error(at, "Invalid literal for " + type + " attribute " + attribute.name()); }
+            return stringConversion(JavaSource.quote(literal), type, at);
+        }
+        private String stringConversion(String expression, String type, SourceLocation at) {
             String boxed = switch (type) {
                 case "byte" -> "java.lang.Byte"; case "short" -> "java.lang.Short"; case "int" -> "java.lang.Integer";
                 case "long" -> "java.lang.Long"; case "float" -> "java.lang.Float"; case "double" -> "java.lang.Double"; case "boolean" -> "java.lang.Boolean";
                 default -> type;
             };
-            if (type.equals("java.lang.String") || type.equals("java.lang.Object")) return JavaSource.quote(literal);
-            if (type.equals("char") || type.equals("java.lang.Character")) return JavaSource.quote(literal) + ".charAt(0)";
+            if (type.equals("java.lang.String") || type.equals("java.lang.Object")) return expression;
+            if (type.equals("char") || type.equals("java.lang.Character")) return "(" + expression + ".isEmpty() ? '\\0' : " + expression + ".charAt(0))";
             if (!Set.of("java.lang.Byte","java.lang.Short","java.lang.Integer","java.lang.Long","java.lang.Float","java.lang.Double","java.lang.Boolean").contains(boxed))
                 throw error(at, "Literal coercion is not supported for tag attribute type " + type);
-            return boxed + ".valueOf(" + JavaSource.quote(literal) + ")";
+            return boxed + ".valueOf(" + (boxed.equals("java.lang.Boolean") ? expression : expression + ".isEmpty() ? \"0\" : " + expression) + ")";
         }
         private boolean namespaceAttribute(String name) { return name.equals("xmlns") || name.startsWith("xmlns:"); }
 

@@ -22,15 +22,20 @@ package io.vidocq.ibarra.example;
 
 import jakarta.servlet.jsp.JspException;
 import jakarta.servlet.jsp.tagext.SimpleTagSupport;
+import jakarta.servlet.jsp.tagext.JspFragment;
 import java.io.IOException;
 
 /** Application-local tag compiled through a TLD without exports or reflective access. */
 public final class Frame extends SimpleTagSupport {
     private String label;
+    private JspFragment heading;
     public void setLabel(String value) { label = value; }
+    public void setHeading(JspFragment value) { heading = value; }
     @Override public void doTag() throws JspException, IOException {
         var out = getJspContext().getOut();
-        out.write("<section><h2>" + label + "</h2>");
+        out.write("<section><h2>" + label);
+        if (heading != null) heading.invoke(null);
+        out.write("</h2>");
         if (getJspBody() != null) getJspBody().invoke(null);
         out.write("</section>");
     }
