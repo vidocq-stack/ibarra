@@ -65,7 +65,8 @@ Strict namespace checking applies to standard pages; XML already requires bound
 prefixes. Translation expands includes/preludes before validating declaration
 order, preserving the offending resource's source coordinates. A taglib must
 precede uses of its prefix, regardless of the strict namespace flag. Declared
-custom tags still require the pending tag-handler generator.
+custom tags use the initial xref:modules/tag-handlers.adoc[handler generator] when
+their TLD metadata is available during the build.
 
 Boolean group properties and page attributes accept only `true` or `false`;
 invalid values fail translation with `PageParseException` source diagnostics.

@@ -64,7 +64,14 @@ public final class PagePrecompiler {
         for (var entry : resources.entrySet())
             if (options.sources().containsKey(entry.getKey()) || bytes.putIfAbsent(entry.getKey(), entry.getValue()) != null)
                 throw new IllegalArgumentException("Resource supplied more than once: " + entry.getKey());
-        var configured = new GenerationOptions(options.propertyGroups(), options.sources(), false, bytes);
+        var catalog = TldListeners.catalog(resources, modulePath, output, descriptor);
+        var libraries = new LinkedHashMap<>(catalog.libraries());
+        for (var entry : options.tagLibraries().entrySet()) {
+            var previousLibrary = libraries.putIfAbsent(entry.getKey(), entry.getValue());
+            if (previousLibrary != null && !previousLibrary.equals(entry.getValue()))
+                throw new IllegalArgumentException("Conflicting supplied tag library: " + entry.getKey());
+        }
+        var configured = new GenerationOptions(options.propertyGroups(), options.sources(), false, bytes, libraries);
         var generator = new PageGenerator(paths);
         var sources = new ArrayList<GeneratedPage>();
         var pages = new TreeMap<String, String>();
@@ -74,7 +81,7 @@ public final class PagePrecompiler {
             pages.put(entry.getKey(), name);
             sources.add(generator.generate(entry.getKey(), entry.getValue(), name, configured));
         }
-        var listeners = TldListeners.discover(resources, modulePath, output, descriptor);
+        var listeners = catalog.listeners();
         String provider = pages.isEmpty() && listeners.isEmpty() ? null : packageName + ".GeneratedPageIndex";
         if (provider != null) sources.add(index(provider, pages, listeners));
         var originalPackages = new TreeSet<String>();

@@ -4,6 +4,9 @@ This independent application module requires only `ibarra-api`, exports no
 packages, and uses the `ibarra-maven-plugin:precompile` goal at `process-classes`.
 The generated page index is registered in the compiled Java module descriptor.
 The application JAR contains compiled pages, not the compiler or generated Java.
+Its private application package also contains a SimpleTag handler described by
+WEB-INF/example.tld. The page invokes it through direct construction/setters and
+a generated scriptless body fragment; no package exports or opens are needed.
 
 Run from the Ibarra checkout root with Java 25:
 
@@ -15,5 +18,6 @@ jar --describe-module --file examples/precompiled-pages/target/ibarra-precompile
 
 The generator's application-JAR test proves discovery and rendering against
 servlet doubles with compiler modules excluded. Deploying this example through
-Foy remains milestone I5. EL build-time compilation still awaits Peano; packaging
+Foy uses the application module layer through the binding described in the
+Antora Foy reference. EL build-time compilation still awaits Peano; packaging
 does not enable the startup interpretation preview.

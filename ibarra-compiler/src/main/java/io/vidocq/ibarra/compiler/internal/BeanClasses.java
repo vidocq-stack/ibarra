@@ -29,6 +29,8 @@ import java.util.jar.JarFile;
 /** Build-time property lookup using class files, never loaded classes or reflection. */
 public final class BeanClasses {
     public record Accessor(String name, String type) { }
+    public record Handler(String sourceName, boolean simple, boolean iteration, boolean buffered,
+            boolean catchFinally, boolean dynamic) { }
     private final List<Path> paths;
     public BeanClasses(List<Path> paths) { this.paths = List.copyOf(paths); }
 
@@ -84,6 +86,37 @@ public final class BeanClasses {
                     return new Accessor(name, javaType(descriptor.returnType().descriptorString()));
             }
         throw new PageParseException(at, "No readable property " + property + " on " + type);
+    }
+
+    public Handler handler(String type, SourceLocation at) {
+        constructor(type, at, "Tag handler");
+        boolean simple = subtype(type, "jakarta.servlet.jsp.tagext.SimpleTag", at, new HashSet<>());
+        boolean classic = subtype(type, "jakarta.servlet.jsp.tagext.Tag", at, new HashSet<>());
+        if (simple == classic) throw new PageParseException(at, "Handler must implement exactly one of Tag or SimpleTag: " + type);
+        return new Handler(sourceName(type, at), simple,
+                subtype(type, "jakarta.servlet.jsp.tagext.IterationTag", at, new HashSet<>()),
+                subtype(type, "jakarta.servlet.jsp.tagext.BodyTag", at, new HashSet<>()),
+                subtype(type, "jakarta.servlet.jsp.tagext.TryCatchFinally", at, new HashSet<>()),
+                subtype(type, "jakarta.servlet.jsp.tagext.DynamicAttributes", at, new HashSet<>()));
+    }
+    private boolean subtype(String type, String target, SourceLocation at, Set<String> visited) {
+        if (type.equals(target)) return true;
+        if (type.equals("java.lang.Object") || !visited.add(type)) return false;
+        var model = read(type, at);
+        for (var parent : model.interfaces()) if (subtype(parent.asInternalName().replace('/', '.'), target, at, visited)) return true;
+        return model.superclass().isPresent() && subtype(model.superclass().orElseThrow().asInternalName().replace('/', '.'), target, at, visited);
+    }
+    public Accessor tagSetter(String type, String property, String expected, SourceLocation at) {
+        String name = "set" + suffix(property, at);
+        for (var method : methods(type, at)) {
+            var descriptor = method.methodTypeSymbol();
+            if (method.methodName().stringValue().equals(name) && descriptor.parameterCount() == 1
+                    && descriptor.returnType().descriptorString().equals("V")) {
+                String parameter = javaType(descriptor.parameterType(0).descriptorString());
+                if (parameter.equals(expected.replace('$', '.'))) return new Accessor(name, parameter);
+            }
+        }
+        throw new PageParseException(at, "No setter matching TLD type " + expected + " for " + property + " on " + type);
     }
 
     public Accessor setter(String type, String property, SourceLocation at) {

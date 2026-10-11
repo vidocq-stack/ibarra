@@ -173,7 +173,8 @@ public interface JspEngine {
   registrations receive fresh instances. Stop/drain HTTP before undeployment.
 - TLD listener metadata is discovered/validated at build time; generated indexes
   expose direct constructor factories. Foy deduplicates classes and applies the
-  restricted initialization context to TLD listeners. Tag handlers remain pending.
+  restricted initialization context to TLD listeners. Initial I6 classic/simple
+  handlers use direct construction/setters and generated body fragments.
   See the Antora
   `modules/foy-binding` reference for bootstrap ownership and test tooling.
 
@@ -230,7 +231,7 @@ the runtime's packaging goal, after I8.
 | I3 | Generator: Java source for pages, standard actions, EL via `jakarta.el` (Peano in tests), `jsp-config` property groups | in progress: generated fixtures render; static EL and remaining semantics pending |
 | I4 | `ibarra-maven-plugin` precompile goal + page index; extend `ibarra-api` SPI | initial implementation: independent application JAR precompiled and rendered; web fragments and broader configuration pending |
 | I5 | `ibarra-foy` + Foy's JSP-engine SPI (Foy-side PR), `*.jsp` mapping, `addJspFile`, `getJspConfigDescriptor`, TLD listeners | initial HTTP implementation with build-generated TLD listeners; broader deployment/TCK coverage pending |
-| I6 | Custom tags: TLD parsing, classic + simple handlers, scripting variables, validators | |
+| I6 | Custom tags: TLD parsing, classic + simple handlers, scripting variables, validators | initial rendering: Tag/IterationTag/BodyTag/TryCatchFinally, SimpleTag body fragments, scalar attributes and unqualified dynamic attributes; variables/validators/full metadata pending |
 | I7 | Tag files, fragments, `jsp:invoke` / `jsp:doBody`; Peano compiled expressions in pages | |
 | I8 | Official TCK through `ibarra-tck` (Arquillian adapter on Foy) | 100 % PASS recorded in docs `tck` page |
 | I9 | Degraded runtime translation polish, Class-File API path for scriptless pages, `ibarra-bench` (vs Jasper), Vidocq Runtime extension | numbers in `BENCH.md` only |

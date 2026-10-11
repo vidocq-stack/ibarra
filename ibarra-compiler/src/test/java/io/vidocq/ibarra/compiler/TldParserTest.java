@@ -35,7 +35,9 @@ class TldParserTest {
                   <uri>urn:test</uri>
                   <listener><description>Context setup</description><listener-class>example.Startup</listener-class></listener>
                   <listener><listener-class>example.Outer$Listener</listener-class></listener>
-                  <tag><name>ignored-for-now</name><listener><listener-class>example.Nested</listener-class></listener></tag>
+                  <tag><name>metadata</name><tag-class>example.Handler</tag-class><body-content>empty</body-content>
+                    <tag-extension><listener><listener-class>example.Nested</listener-class></listener></tag-extension>
+                  </tag>
                 </taglib>
                 """);
         assertEquals("/WEB-INF/test.tld", library.resourcePath());

@@ -8,7 +8,7 @@ coding agent). `CLAUDE.md` only imports this file (`@AGENTS.md`): edit the rules
 > MicroProfile JWT brick. The Ibarra project implements **Jakarta Pages 4.0**: pages are
 > composed (translated and compiled) during the build, then rendered on each request.
 
-**Status: I1/I2 implemented; initial I3 generation, I4 packaging and I5 Foy binding available; full I3/I5 pending.** Read [PLAN.md](PLAN.md) before any change — it is the design of
+**Status: I1/I2 implemented; initial I3/I4/I5 and I6 handler generation available; full semantics/TCK pending.** Read [PLAN.md](PLAN.md) before any change — it is the design of
 record (spec scope, build-time page compilation, Java Modules layout, Foy JSP-engine SPI,
 Peano integration, TCK plan, milestones I0–I9, open questions). Structural decisions
 marked "to validate" there need the maintainer's sign-off first.
@@ -119,8 +119,10 @@ ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
     Generated listener factories call constructors directly; metadata discovery
     must never initialize listener classes. Runtime TLD parsing/class-name lookup
     is prohibited. Libraries must be reachable named modules with listener
-    packages accessible to the generated application module. Tag-handler
-    translation remains I6.
+    packages accessible to the generated application module. Initial I6 handlers
+    use fresh instances and direct calls. Named/fragment attributes, tagdependent
+    bodies, variables, TEI/TLV, tag files and deferred attributes remain unsupported
+    with translation diagnostics; do not silently ignore their semantics.
 
 ## Conventions
 

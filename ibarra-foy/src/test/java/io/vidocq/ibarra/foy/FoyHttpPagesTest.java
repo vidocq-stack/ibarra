@@ -63,6 +63,9 @@ class FoyHttpPagesTest {
                 assertEquals("beforepieceafter", get(client, base + "/include.jsp").body());
                 assertEquals("XML", get(client, base + "/document.jspx").body());
                 assertEquals("ready ready 1", get(client, base + "/listeners.jsp").body());
+                assertEquals("one:1:BODYBODY!", get(client, base + "/tags.jsp?label=one").body());
+                assertEquals("two:1:BODYBODY!", get(client, base + "/tags.jsp?label=two").body());
+                assertEquals("xml:1:BODYBODY!", get(client, base + "/tags.jspx").body());
                 assertEquals(404, get(client, base + "/missing.jsp").statusCode());
                 assertEquals(404, get(client, base + "/WEB-INF/secret.jsp").statusCode());
             }
@@ -95,8 +98,39 @@ class FoyHttpPagesTest {
                     public void contextDestroyed(jakarta.servlet.ServletContextEvent event) { event.getServletContext().setAttribute("tldDestroyed", "1"); }
                 }
                 """);
+        Path wrap = source.resolve("app/Wrap.java"), upper = source.resolve("app/Upper.java");
+        Files.writeString(wrap, """
+                package app;
+                public class Wrap extends jakarta.servlet.jsp.tagext.SimpleTagSupport {
+                    private String label; private int calls;
+                    public void setLabel(String value) { label=value; }
+                    public void doTag() throws jakarta.servlet.jsp.JspException, java.io.IOException {
+                        var out=getJspContext().getOut(); out.write(label+":"+(++calls)+":");
+                        getJspBody().invoke(null); getJspBody().invoke(null); out.write("!");
+                    }
+                }
+                """);
+        Files.writeString(upper, """
+                package app;
+                public class Upper extends jakarta.servlet.jsp.tagext.BodyTagSupport {
+                    public int doAfterBody() throws jakarta.servlet.jsp.JspException {
+                        try { bodyContent.getEnclosingWriter().write(bodyContent.getString().toUpperCase(java.util.Locale.ROOT)); }
+                        catch(java.io.IOException failure) { throw new jakarta.servlet.jsp.JspException(failure); }
+                        return SKIP_BODY;
+                    }
+                }
+                """);
         assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, "--release", "25", "--module-path",
-                modulePath(true), "-d", output.toString(), info.toString(), listener.toString()));
+                modulePath(true), "-d", output.toString(), info.toString(), listener.toString(), wrap.toString(), upper.toString()));
+        Files.writeString(web.resolve("WEB-INF/handlers.tld"), """
+                <taglib><uri>urn:tags</uri>
+                <tag><name>wrap</name><tag-class>app.Wrap</tag-class><body-content>scriptless</body-content>
+                  <attribute><name>label</name><type>java.lang.String</type><required>true</required><rtexprvalue>true</rtexprvalue></attribute></tag>
+                <tag><name>upper</name><tag-class>app.Upper</tag-class><body-content>scriptless</body-content></tag>
+                </taglib>
+                """);
+        Files.writeString(web.resolve("tags.jsp"), "<%@ page session='false' %><%@ taglib prefix='t' uri='urn:tags' %><t:wrap label='<%=request.getParameter(\"label\")%>'><t:upper>body</t:upper></t:wrap>");
+        Files.writeString(web.resolve("tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false'/><t:wrap label='xml'><t:upper>body</t:upper></t:wrap></jsp:root>");
         Files.writeString(web.resolve("WEB-INF/startup.tld"), "<taglib><listener><listener-class>app.Startup</listener-class></listener></taglib>");
         Files.writeString(web.resolve("WEB-INF/duplicate.tld"), "<taglib><listener><listener-class>app.Startup</listener-class></listener></taglib>");
         Files.writeString(web.resolve("listeners.jsp"), "<%@ page session='false' %><%= application.getAttribute(\"tld\") %> <%= request.getAttribute(\"tldRequest\") %> <%= app.Startup.constructed %>");

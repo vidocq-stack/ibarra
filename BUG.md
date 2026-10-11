@@ -1,5 +1,80 @@
 # BUG.md — Ibarra
 
+## IBARRA-055 · 2026-10-11 · Implicit URI precedence and explicit aliases are mixed
+
+- Symptom: loose WEB-INF TLDs override library META-INF URIs, and an explicit
+  external resource unexpectedly contributes its internal URI to the implicit map.
+- Minimal repro: `TagCatalogTest.libraryImplicitUrisPrecedeLooseTldsButExplicitAliasesRemainAuthoritative`.
+- Cause: one discovery list supplies both explicit and implicit entries in the
+  wrong precedence order.
+- Status: FIXED; keep explicit aliases separate, prefer library entries over
+  loose TLDs, and retain the union for listener discovery.
+
+## IBARRA-054 · 2026-10-11 · Later relative taglib declarations redirect earlier actions
+
+- Symptom: equal relative URI strings declared in different included directories
+  use the last declaration's TLD for earlier actions.
+- Minimal repro: `TagGenerationTest.relativeTaglibBindingsRetainTheirDeclarationOriginAcrossIncludes`.
+- Cause: a directive pre-pass overwrites origin metadata before any action emits.
+- Status: FIXED; bind taglib origins in expanded source order and resolve each
+  action against its active declaration.
+
+## IBARRA-051 · 2026-10-11 · Tag attribute defaults and static setter coercion are wrong
+
+- Symptom: runtime attributes default to String instead of Object, and literal
+  attributes use the TLD type instead of the actual setter property type.
+- Minimal repro: `TagMetadataTest.handlerAndAttributeMetadataAreImmutableAndHaveSpecificationDefaults`
+  and `TagGenerationTest.staticValuesUseSetterTypesAndRuntimeValuesUseObjectDefaults`.
+- Cause: one fixed type policy is applied to static and request-time contracts;
+  choosing by invocation value also mis-selects overloaded dynamic setters.
+- Status: FIXED; follow Pages 4.0 section 2.3 defaults and use class-file setter
+  metadata for static-contract coercion. Dynamic contracts select their declared
+  setter even when the supplied invocation value is literal.
+
+## IBARRA-052 · 2026-10-11 · Attribute names beginning with xmlns disappear
+
+- Symptom: a valid xmlnsLabel attribute passes required checks but its setter
+  is never invoked.
+- Minimal repro: `TagGenerationTest.ordinaryAttributesBeginningWithXmlnsAreNotNamespaceDeclarations`.
+- Cause: broad startsWith("xmlns") filtering.
+- Status: FIXED; filter only xmlns and xmlns: namespace declarations.
+
+## IBARRA-053 · 2026-10-11 · Normal SKIP_PAGE triggers the returning handler's catch
+
+- Symptom: a normal doEndTag return of SKIP_PAGE invokes that handler's own
+  doCatch, potentially turning page termination into an error.
+- Minimal repro: `TagGenerationTest.aNormalSkipPageReturnDoesNotInvokeTheReturningTagsOwnCatch`.
+- Cause: synthetic SkipPageException is thrown inside its own action try block.
+- Status: FIXED; run the handler's finally, then propagate skip-page to enclosing
+  tags while retaining release cleanup.
+
+## IBARRA-049 · 2026-10-11 · Setter failures enter TryCatchFinally callbacks
+
+- Symptom: setBodyContent failure is swallowed by doCatch and invokes doFinally.
+- Minimal repro: `TagGenerationTest.bodyContentSetterFailuresBypassCatchFinallyButStillRelease`.
+- Cause: the buffered-body setter is inside the action exception scope.
+- Status: FIXED; track setter failure separately, restore the writer, bypass
+  doCatch/doFinally for that failure and still release the classic handler.
+
+## IBARRA-050 · 2026-10-11 · Nested skip-page omits catch callbacks or resumes rendering
+
+- Symptom: a classic SKIP_PAGE bypasses enclosing doCatch; a simple skip can
+  be swallowed by doCatch and render the remainder of the page.
+- Minimal repro: `TagGenerationTest.skipPageStopsRenderingWithoutInvokingErrorHandling`.
+- Cause: direct service return for classic tags and swallowed SkipPageException.
+- Status: FIXED; propagate skip-page through enclosing catch/finally/release,
+  then handle it as normal termination at the service boundary.
+
+## IBARRA-048 · 2026-10-11 · Typed skip-page catches reject valid generated methods
+
+- Symptom: javac rejects a generated service method when a TryCatchFinally
+  handler consumes all checked tag exceptions, or the page contains literals only.
+- Minimal repro: `TagGenerationTest.catchFinallyAndReleaseRunWithTheRestoredWriter`.
+- Cause: a standalone checked SkipPageException catch requires a reachable
+  throwing statement in the generated try scope.
+- Status: FIXED; distinguish normal skip-page termination inside the existing
+  Throwable handler, preserving literal-only page compilation.
+
 ## IBARRA-047 · 2026-10-11 · Consumer merge can precede prerequisite snapshot publication
 
 - Symptom: the post-merge build cannot compile `IbarraJspEngine` because the

@@ -34,7 +34,7 @@ public final class PageGenerator {
         if (!SourceVersion.isName(className) || !className.contains("."))
             throw new IllegalArgumentException("Generated class needs a qualified Java name: " + className);
         var unit = new TranslationUnit(options).read(path, source);
-        return new Generator(unit.page(), className, unit.properties(), unit.sourceSyntaxes(), unit.responseEncoding(), options.allowStartupEl()).generate();
+        return new Generator(unit.page(), className, unit.properties(), unit.sourceSyntaxes(), unit.responseEncoding(), options).generate();
     }
 
     /** Detects and strictly decodes the requested file's byte encoding before translation. */
@@ -42,7 +42,7 @@ public final class PageGenerator {
         if (!SourceVersion.isName(className) || !className.contains("."))
             throw new IllegalArgumentException("Generated class needs a qualified Java name: " + className);
         var unit = new TranslationUnit(options).read(path, source);
-        return new Generator(unit.page(), className, unit.properties(), unit.sourceSyntaxes(), unit.responseEncoding(), options.allowStartupEl()).generate();
+        return new Generator(unit.page(), className, unit.properties(), unit.sourceSyntaxes(), unit.responseEncoding(), options).generate();
     }
 
     private final class Generator {
@@ -57,18 +57,24 @@ public final class PageGenerator {
         private final String responseEncoding;
         private final List<String> imports = new ArrayList<>();
         private final JavaSource declarations = new JavaSource();
-        private final JavaSource body = new JavaSource();
+        private JavaSource body = new JavaSource();
+        private final JavaSource fragments = new JavaSource();
+        private final Map<String, TagLibraryDescriptor> libraries;
+        private final Map<String, PageNode.Directive> taglibBindings = new HashMap<>();
+        private String parentTag = "null";
+        private int fragmentDepth;
         private final List<String> expressions = new ArrayList<>();
         private final Map<String, String> beans = new LinkedHashMap<>();
         private boolean needsFactory;
         private int serial;
         private final boolean startupElAllowed;
 
-        Generator(Page page, String className, Map<String, String> properties, Map<String, Page.Syntax> sourceSyntaxes, String responseEncoding, boolean startupElAllowed) {
+        Generator(Page page, String className, Map<String, String> properties, Map<String, Page.Syntax> sourceSyntaxes, String responseEncoding, GenerationOptions options) {
             this.page = page; this.className = className;
             this.sourceSyntaxes = sourceSyntaxes;
             this.responseEncoding = responseEncoding;
-            this.startupElAllowed = startupElAllowed;
+            this.startupElAllowed = options.allowStartupEl();
+            this.libraries = options.tagLibraries();
             copy(properties, "default-content-type", "contentType");
             copy(properties, "buffer", "buffer");
             copy(properties, "page-encoding", "pageEncoding");
@@ -98,6 +104,7 @@ public final class PageGenerator {
             result.add("public final class " + simple + " extends " + simple + "$Lifecycle {\n");
             for (int i = 0; i < expressions.size(); i++) result.add("private jakarta.el.ValueExpression _jspxExpression" + i + ";\n");
             result.add(declarations);
+            result.add(fragments);
             result.add("@Override protected final void _jspxInitialize() {\n");
             if (!expressions.isEmpty()) {
                 result.add("var factory = jakarta.servlet.jsp.JspFactory.getDefaultFactory().getJspApplicationContext(getServletContext()).getExpressionFactory();\n");
@@ -117,11 +124,11 @@ public final class PageGenerator {
             result.add("var out = pageContext.getOut();\nvar application = getServletContext();\nvar config = getServletConfig();\nObject page = this;\n");
             if (bool("session", true)) result.add("var session = pageContext.getSession();\n");
             if (bool("isErrorPage", false)) result.add("Throwable exception = pageContext.getErrorData().getThrowable();\n");
-            result.add("boolean _jspxFailed = false, _jspxHandled = false, _jspxForwarded = false;\ntry {\n");
+            result.add("boolean _jspxFailed = false, _jspxHandled = false; boolean[] _jspxForwarded = {false};\ntry {\n");
             if (needsFactory) result.add("var _jspxExpressionFactory = _jspxFactory.getJspApplicationContext(application).getExpressionFactory();\n");
             result.add(body);
-            result.add("} catch (Throwable failure) { _jspxFailed = true; pageContext.handlePageException(failure); _jspxHandled = true; } finally {\n");
-            result.add("try { if (!_jspxForwarded && (!_jspxFailed || (_jspxHandled && out.getRemaining() < out.getBufferSize()))) out.flush(); } finally { _jspxFactory.releasePageContext(pageContext); }\n}\n}\n");
+            result.add("} catch (Throwable failure) { if (!(failure instanceof jakarta.servlet.jsp.SkipPageException)) { _jspxFailed = true; pageContext.handlePageException(failure); _jspxHandled = true; } } finally {\n");
+            result.add("try { if (!_jspxForwarded[0] && (!_jspxFailed || (_jspxHandled && out.getRemaining() < out.getBufferSize()))) out.flush(); } finally { _jspxFactory.releasePageContext(pageContext); }\n}\n}\n");
             result.add("private static String _jspxText(Object value) { return value == null ? \"\" : String.valueOf(value); }\n");
             result.add("private static Object _jspxBean(jakarta.servlet.jsp.PageContext context, String name) throws jakarta.servlet.ServletException { Object bean = context.findAttribute(name); if (bean == null) throw new jakarta.servlet.ServletException(\"No bean named \" + name); return bean; }\n");
             result.add("private static String _jspxAttribute(String value) { return value.replace(\"&\", \"&amp;\").replace(\"\\\"\", \"&quot;\").replace(\"<\", \"&lt;\"); }\n");
@@ -153,7 +160,7 @@ public final class PageGenerator {
                     if (directive.name().equals("taglib")) continue;
                     if (!directive.name().equals("page")) throw error(directive.location(), "Unsupported directive: " + directive.name());
                     for (var entry : directive.attributes().entrySet()) {
-                        if (entry.getKey().startsWith("xmlns")) continue;
+                        if (namespaceAttribute(entry.getKey())) continue;
                         if (!PAGE_ATTRIBUTES.contains(entry.getKey())) throw error(directive.location(), "Unsupported page attribute: " + entry.getKey());
                         if (entry.getKey().equals("pageEncoding") && !directive.location().source().equals(page.source())) continue;
                         if (Set.of("session", "autoFlush", "isErrorPage", "isELIgnored",
@@ -193,18 +200,26 @@ public final class PageGenerator {
                     else if (script.kind() == PageNode.ScriptKind.EXPRESSION) body.add("out.print(" + script.code() + ");\n", script.location());
                     else body.add(script.code() + "\n", script.location());
                 } else if (node instanceof PageNode.Element element) element(element);
+                else if (node instanceof PageNode.Directive directive && directive.name().equals("taglib"))
+                    taglibBindings.put(directive.attributes().get("prefix"), directive);
             }
         }
 
         private void element(PageNode.Element node) {
             String local = node.name().substring(node.name().lastIndexOf(':') + 1);
             if (!node.namespace().equals(PageParser.JSP_NAMESPACE)) {
+                String uri = node.namespace().startsWith("urn:jsptld:") ? node.namespace().substring("urn:jsptld:".length()) : node.namespace();
+                var library = libraries.get(uri);
+                var binding = taglibBindings.get(node.name().substring(0, Math.max(0, node.name().indexOf(':'))));
+                String origin = binding != null && uri.equals(binding.attributes().get("uri")) ? binding.location().source() : node.location().source();
+                if (library == null && !uri.contains(":")) library = libraries.get(TranslationUnit.resolve(origin, uri));
+                if (library != null) { customTag(node, library); return; }
                 if (sourceSyntaxes.get(node.location().source()) == Page.Syntax.STANDARD || node.namespace().startsWith("urn:jsptag")
                         || node.namespace().startsWith("urn:jsptld") || node.namespace().startsWith("jakarta.tags."))
-                    throw error(node.location(), "Custom tags require the later tag-handler milestone: " + node.name());
+                    throw error(node.location(), "No build-time tag library for " + node.namespace() + ": " + node.name());
                 write("<" + node.name(), node.location());
                 for (var entry : node.attributes().entrySet()) {
-                    if (entry.getKey().startsWith("xmlns") && entry.getValue().equals(PageParser.JSP_NAMESPACE)) continue;
+                    if (namespaceAttribute(entry.getKey()) && entry.getValue().equals(PageParser.JSP_NAMESPACE)) continue;
                     write(" " + entry.getKey() + "=\"", node.location());
                     body.add("out.write(_jspxText(" + value(entry.getValue(), node.location(), true) + "));\n", node.location());
                     write("\"", node.location());
@@ -228,6 +243,158 @@ public final class PageGenerator {
                 default -> throw error(node.location(), "Unsupported standard action: " + node.name());
             }
         }
+
+
+        private void customTag(PageNode.Element node, TagLibraryDescriptor library) {
+            String local = node.name().substring(node.name().lastIndexOf(':') + 1);
+            var tag = library.tags().get(local);
+            if (tag == null) throw error(node.location(), "Unknown tag " + local + " in " + library.resourcePath());
+            if (library.validationRequired() || tag.unsupportedMetadata())
+                throw error(node.location(), "Tag validators, scripting variables, deferred metadata and tag files are not supported yet");
+            if (tag.bodyContent().equals("tagdependent")) throw error(node.location(), "Tag-dependent bodies require raw-source translation support");
+            var kind = classes.handler(tag.handlerClass(), node.location());
+            if (kind.simple() && tag.bodyContent().equals("JSP")) throw error(node.location(), "SimpleTag cannot have JSP body-content");
+            if (tag.dynamicAttributes() && !kind.dynamic()) throw error(node.location(), "Handler does not implement DynamicAttributes");
+            if (tag.bodyContent().equals("empty") && !node.children().isEmpty()) throw error(node.location(), "Tag requires an empty body");
+            if (tag.bodyContent().equals("scriptless")) scriptless(node.children());
+            for (var attribute : tag.attributes().values())
+                if (attribute.required() && !node.attributes().containsKey(attribute.name())) throw error(node.location(), "Required tag attribute: " + attribute.name());
+            String handler = "_jspxTag" + serial++;
+            body.add("{ var " + handler + " = new " + kind.sourceName() + "();\n", node.location());
+            if (!kind.simple()) body.add("try {\n");
+            body.add(handler + (kind.simple() ? ".setJspContext(pageContext);\n" : ".setPageContext(pageContext);\n"), node.location());
+            if (!kind.simple()) body.add(handler + ".setParent(" + classicParent(parentTag) + ");\n");
+            else if (!parentTag.equals("null")) body.add(handler + ".setParent(" + parentTag + ");\n");
+            for (var supplied : node.attributes().entrySet()) {
+                if (namespaceAttribute(supplied.getKey())) continue;
+                var attribute = tag.attributes().get(supplied.getKey());
+                if (attribute == null) {
+                    if (!tag.dynamicAttributes() || supplied.getKey().contains(":")) throw error(node.location(), "Unknown or namespaced tag attribute: " + supplied.getKey());
+                    body.add(handler + ".setDynamicAttribute(null, " + JavaSource.quote(supplied.getKey()) + ", " + value(supplied.getValue(), node.location(), false) + ");\n", node.location());
+                } else {
+                    if (attribute.fragment()) throw error(node.location(), "Fragment attributes require jsp:attribute");
+                    var setter = attribute.runtimeExpression()
+                            ? classes.tagSetter(tag.handlerClass(), attribute.name(), attribute.type(), node.location())
+                            : classes.setter(tag.handlerClass(), attribute.name(), node.location());
+                    var target = new TagAttribute(attribute.name(), setter.type(), attribute.required(), attribute.runtimeExpression(), false);
+                    body.add(handler + "." + setter.name() + "((" + setter.type() + ") (" + tagValue(supplied.getValue(), target, node.location()) + "));\n", node.location());
+                }
+            }
+            String previousParent = parentTag; parentTag = handler;
+            if (kind.simple()) {
+                if (!node.children().isEmpty()) body.add(handler + ".setJspBody(" + fragment(node.children(), node.location(), handler) + ");\n", node.location());
+                body.add(handler + ".doTag();\n", node.location());
+            } else {
+                if (kind.catchFinally()) body.add("boolean _jspxSetterFailed" + handler + " = false;\n");
+                body.add("int _jspxEnd" + handler + " = jakarta.servlet.jsp.tagext.Tag.EVAL_PAGE;\n");
+                body.add("try {\nint _jspxStart" + handler + " = " + handler + ".doStartTag();\n", node.location());
+                String start = "_jspxStart" + handler;
+                body.add("if (" + start + " != 0 && " + start + " != 1" + (kind.buffered() ? " && " + start + " != 2" : "")
+                        + ") throw new jakarta.servlet.jsp.JspException(\"Invalid doStartTag result\");\n");
+                if (!node.children().isEmpty()) {
+                    var previousBody = body; var content = new JavaSource(); body = content; emit(node.children()); body = previousBody;
+                    body.add("if (" + start + " != jakarta.servlet.jsp.tagext.Tag.SKIP_BODY) {\n");
+                    if (kind.buffered()) body.add("boolean _jspxBuffered" + handler + " = " + start + " == jakarta.servlet.jsp.tagext.BodyTag.EVAL_BODY_BUFFERED;\n"
+                            + "if (_jspxBuffered" + handler + ") out = pageContext.pushBody();\ntry {\n"
+                            + "if (_jspxBuffered" + handler + ") { " + (kind.catchFinally() ? "_jspxSetterFailed" + handler + " = true; " : "")
+                            + handler + ".setBodyContent((jakarta.servlet.jsp.tagext.BodyContent) out); "
+                            + (kind.catchFinally() ? "_jspxSetterFailed" + handler + " = false; " : "") + handler + ".doInitBody(); }\n");
+                    body.add("do {\n"); body.add(content);
+                    body.add("} while (" + (kind.iteration() ? handler + ".doAfterBody() == jakarta.servlet.jsp.tagext.IterationTag.EVAL_BODY_AGAIN" : "false") + ");\n");
+                    if (kind.buffered()) body.add("} finally { if (_jspxBuffered" + handler + ") out = pageContext.popBody(); }\n");
+                    body.add("}\n");
+                }
+                body.add("_jspxEnd" + handler + " = " + handler + ".doEndTag();\n", node.location());
+                if (kind.catchFinally()) body.add("} catch (Throwable _jspxFailure" + handler + ") { if (_jspxSetterFailed" + handler + ") throw _jspxFailure" + handler + "; "
+                        + handler + ".doCatch(_jspxFailure" + handler + "); if (_jspxFailure" + handler + " instanceof jakarta.servlet.jsp.SkipPageException) throw _jspxFailure" + handler + ";"
+                        + " } finally { if (!_jspxSetterFailed" + handler + ") " + handler + ".doFinally(); }\n");
+                else body.add("} finally { /* Handler action scope. */ }\n");
+                body.add("if (_jspxEnd" + handler + " == jakarta.servlet.jsp.tagext.Tag.SKIP_PAGE) throw new jakarta.servlet.jsp.SkipPageException();\n", node.location());
+                body.add("} finally { " + handler + ".release(); }\n");
+            }
+            parentTag = previousParent; body.add("}\n");
+        }
+
+        private String classicParent(String parent) {
+            if (parent.equals("null")) return "null";
+            return "(" + parent + " instanceof jakarta.servlet.jsp.tagext.Tag ? (jakarta.servlet.jsp.tagext.Tag) (jakarta.servlet.jsp.tagext.JspTag) "
+                    + parent + " : new jakarta.servlet.jsp.tagext.TagAdapter((jakarta.servlet.jsp.tagext.SimpleTag) (jakarta.servlet.jsp.tagext.JspTag) " + parent + "))";
+        }
+        private void scriptless(List<PageNode> nodes) {
+            for (var node : nodes) {
+                if (node instanceof PageNode.Script) throw error(node.location(), "Scripting is forbidden in a scriptless tag body");
+                if (node instanceof PageNode.Element element) {
+                    for (String value : element.attributes().values()) if (value.startsWith("<%=")) throw error(node.location(), "Scripting attributes are forbidden in a scriptless body");
+                    scriptless(element.children());
+                }
+            }
+        }
+        private String fragment(List<PageNode> nodes, SourceLocation at, String parent) {
+            scriptless(nodes);
+            String name = "_jspxFragment" + serial++;
+            var previousBody = body; String previousParent = parentTag; boolean previousFactory = needsFactory;
+            body = new JavaSource(); parentTag = "_jspxParent"; needsFactory = false; fragmentDepth++;
+            emit(nodes);
+            var content = body; boolean factory = needsFactory;
+            fragmentDepth--; body = previousBody; parentTag = previousParent; needsFactory = previousFactory || factory;
+            var definition = new JavaSource();
+            definition.add("private final class " + name + " extends jakarta.servlet.jsp.tagext.JspFragment {\n"
+                    + "private final jakarta.servlet.jsp.PageContext _context; private final jakarta.servlet.jsp.tagext.JspTag _jspxParent; private final boolean[] _forwarded;\n"
+                    + name + "(jakarta.servlet.jsp.PageContext context, jakarta.servlet.jsp.tagext.JspTag parent, boolean[] forwarded) { _context=context; _jspxParent=parent; _forwarded=forwarded; }\n"
+                    + "public jakarta.servlet.jsp.JspContext getJspContext() { return _context; }\n"
+                    + "public void invoke(java.io.Writer writer) throws jakarta.servlet.jsp.JspException, java.io.IOException {\n"
+                    + "var pageContext=_context; var out=pageContext.getOut(); var _jspxForwarded=_forwarded;\n"
+                    + "var request=(jakarta.servlet.http.HttpServletRequest) pageContext.getRequest(); var response=(jakarta.servlet.http.HttpServletResponse) pageContext.getResponse();\n"
+                    + "var application=pageContext.getServletContext(); var config=pageContext.getServletConfig(); Object page=pageContext.getPage();\n");
+            if (bool("session", true)) definition.add("var session=pageContext.getSession();\n");
+            if (bool("isErrorPage", false)) definition.add("Throwable exception=pageContext.getErrorData().getThrowable();\n");
+            if (factory) definition.add("var _jspxExpressionFactory=jakarta.servlet.jsp.JspFactory.getDefaultFactory().getJspApplicationContext(application).getExpressionFactory();\n");
+            definition.add("if (writer != null) out=pageContext.pushBody(writer);\ntry {\n"); definition.add(content);
+            definition.add("} catch (Throwable failure) { if (failure instanceof jakarta.servlet.jsp.JspException jsp) throw jsp;"
+                    + " if (failure instanceof java.io.IOException io) throw io; if (failure instanceof RuntimeException runtime) throw runtime; if (failure instanceof Error error) throw error;"
+                    + " throw new jakarta.servlet.jsp.JspException(failure); } finally { if (writer != null) pageContext.popBody(); }\n}\n}\n");
+            fragments.add(definition);
+            return "new " + name + "(pageContext, " + parent + ", _jspxForwarded)";
+        }
+        private String tagValue(String raw, TagAttribute attribute, SourceLocation at) {
+            if (raw.startsWith("<%=") && raw.endsWith("%>")) {
+                if (!attribute.runtimeExpression()) throw error(at, "Attribute does not accept runtime expressions: " + attribute.name());
+                return value(raw, at, false);
+            }
+            var normalized = new PageNormalizer(sourceSyntaxes.getOrDefault(at.source(), Page.Syntax.STANDARD),
+                    new ParserOptions(bool("isELIgnored", false), bool("deferredSyntaxAllowedAsLiteral", false)), Map.of())
+                    .normalizeStructured(List.of(new PageNode.Text(raw, at)));
+            boolean dynamic = normalized.stream().anyMatch(node -> node instanceof PageNode.Expression);
+            if (dynamic) {
+                if (!attribute.runtimeExpression()) throw error(at, "Attribute does not accept runtime expressions: " + attribute.name());
+                needsFactory = true;
+                return "_jspxExpressionFactory.coerceToType(" + value(raw, at, false) + ", " + attribute.type().replace('$', '.') + ".class)";
+            }
+            String literal = normalized.stream().map(node -> ((PageNode.Text) node).value()).collect(java.util.stream.Collectors.joining());
+            String type = attribute.type();
+            try {
+                switch (type) {
+                    case "byte", "java.lang.Byte" -> Byte.valueOf(literal);
+                    case "short", "java.lang.Short" -> Short.valueOf(literal);
+                    case "int", "java.lang.Integer" -> Integer.valueOf(literal);
+                    case "long", "java.lang.Long" -> Long.valueOf(literal);
+                    case "float", "java.lang.Float" -> Float.valueOf(literal);
+                    case "double", "java.lang.Double" -> Double.valueOf(literal);
+                    case "char", "java.lang.Character" -> { if (literal.length()!=1) throw new IllegalArgumentException("Expected one character"); }
+                }
+            } catch (IllegalArgumentException invalid) { throw error(at, "Invalid literal for " + type + " attribute " + attribute.name()); }
+            String boxed = switch (type) {
+                case "byte" -> "java.lang.Byte"; case "short" -> "java.lang.Short"; case "int" -> "java.lang.Integer";
+                case "long" -> "java.lang.Long"; case "float" -> "java.lang.Float"; case "double" -> "java.lang.Double"; case "boolean" -> "java.lang.Boolean";
+                default -> type;
+            };
+            if (type.equals("java.lang.String") || type.equals("java.lang.Object")) return JavaSource.quote(literal);
+            if (type.equals("char") || type.equals("java.lang.Character")) return JavaSource.quote(literal) + ".charAt(0)";
+            if (!Set.of("java.lang.Byte","java.lang.Short","java.lang.Integer","java.lang.Long","java.lang.Float","java.lang.Double","java.lang.Boolean").contains(boxed))
+                throw error(at, "Literal coercion is not supported for tag attribute type " + type);
+            return boxed + ".valueOf(" + JavaSource.quote(literal) + ")";
+        }
+        private boolean namespaceAttribute(String name) { return name.equals("xmlns") || name.startsWith("xmlns:"); }
 
         private void dynamicElement(PageNode.Element node) {
             allowed(node, Set.of("name"));
@@ -295,7 +462,8 @@ public final class PageGenerator {
                 body.add(variable + " = _jspxParameter(" + variable + ", " + JavaSource.quote(name) + ", "
                         + value(required(param, "value"), param.location(), false) + ");\n", param.location());
             }
-            if (forward) body.add("pageContext.forward(" + variable + "); _jspxForwarded = true; if (true) return;\n", node.location());
+            if (forward) body.add("pageContext.forward(" + variable + "); _jspxForwarded[0] = true; if (true) "
+                    + (fragmentDepth > 0 ? "throw new jakarta.servlet.jsp.SkipPageException();" : "return;") + "\n", node.location());
             else body.add("pageContext.include(" + variable + ", " + boolValue(node.attributes().getOrDefault("flush", "false"), node.location()) + ");\n", node.location());
         }
 
@@ -453,7 +621,7 @@ public final class PageGenerator {
         }
         private void allowed(PageNode.Element node, Set<String> attributes) {
             for (String name : node.attributes().keySet())
-                if (!name.startsWith("xmlns") && !attributes.contains(name)) throw error(node.location(), "Unsupported action attribute: " + name);
+                if (!namespaceAttribute(name) && !attributes.contains(name)) throw error(node.location(), "Unsupported action attribute: " + name);
         }
         private String escapeAttribute(String text) { return text.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;"); }
         private boolean xmlSpace(char value) { return value == ' ' || value == '\t' || value == '\r' || value == '\n'; }

@@ -33,17 +33,19 @@ import org.w3c.dom.Element;
 
 /** Build-only TLD discovery in web resources and the named application module graph. */
 public final class TldListeners {
+    public record Catalog(List<String> listeners, Map<String, TagLibraryDescriptor> libraries) {
+        public Catalog { listeners = List.copyOf(listeners); libraries = Map.copyOf(libraries); }
+    }
     private TldListeners() { }
     public static List<String> discover(Map<String, byte[]> web, List<Path> dependencies, Path output, ModuleDescriptor application) throws IOException {
+        return catalog(web, dependencies, output, application).listeners();
+    }
+    public static Catalog catalog(Map<String, byte[]> web, List<Path> dependencies, Path output, ModuleDescriptor application) throws IOException {
         var libraries = new ArrayList<TagLibraryDescriptor>();
+        var configuredLibraries = new ArrayList<TagLibraryDescriptor>();
+        var mappings = new LinkedHashMap<String, TagLibraryDescriptor>();
         var parser = new TldParser();
-        configured(web, parser, libraries);
-        for (var entry : web.entrySet()) {
-            String name = entry.getKey();
-            if (name.startsWith("/WEB-INF/") && !name.startsWith("/WEB-INF/classes/")
-                    && !name.startsWith("/WEB-INF/lib/") && name.endsWith(".tld"))
-                libraries.add(parser.parse(name, entry.getValue()));
-        }
+        configured(web, parser, configuredLibraries, mappings);
         Path applicationPath = output.toAbsolutePath().normalize();
         Path metadata = applicationPath.resolve("META-INF");
         if (Files.isDirectory(metadata)) try (var resources = Files.walk(metadata)) {
@@ -68,14 +70,29 @@ public final class TldListeners {
                 }
             }
         }
+        // Library META-INF entries have precedence over loose WEB-INF entries.
+        for (var entry : web.entrySet()) {
+            String name = entry.getKey();
+            if (name.startsWith("/WEB-INF/") && !name.startsWith("/WEB-INF/classes/")
+                    && !name.startsWith("/WEB-INF/lib/") && name.endsWith(".tld"))
+                libraries.add(parser.parse(name, entry.getValue()));
+        }
         var paths = new ArrayList<Path>(); paths.add(applicationPath); paths.addAll(dependencies);
         var classes = new BeanClasses(paths);
         var listeners = new LinkedHashMap<String, String>();
-        for (var library : libraries) for (String type : library.listenerClasses())
-            if (!listeners.containsKey(type)) listeners.put(type, classes.listener(type, new SourceLocation(library.resourcePath(), 1, 1)));
-        return List.copyOf(listeners.values());
+        for (var library : libraries) {
+            mappings.putIfAbsent(library.resourcePath(), library);
+            if (library.uri() != null) mappings.putIfAbsent(library.uri(), library);
+        }
+        configuredLibraries.addAll(libraries);
+        for (var library : configuredLibraries) {
+            for (String type : library.listenerClasses())
+                if (!listeners.containsKey(type)) listeners.put(type, classes.listener(type, new SourceLocation(library.resourcePath(), 1, 1)));
+        }
+        return new Catalog(List.copyOf(listeners.values()), mappings);
     }
-    private static void configured(Map<String, byte[]> web, TldParser parser, List<TagLibraryDescriptor> libraries) throws IOException {
+    private static void configured(Map<String, byte[]> web, TldParser parser, List<TagLibraryDescriptor> libraries,
+            Map<String, TagLibraryDescriptor> mappings) throws IOException {
         byte[] xml = web.get("/WEB-INF/web.xml");
         if (xml == null) return;
         var at = new SourceLocation("/WEB-INF/web.xml", 1, 1);
@@ -109,12 +126,15 @@ public final class TldListeners {
                     try (var jar = new JarInputStream(new ByteArrayInputStream(resource))) {
                         for (var item = jar.getNextJarEntry(); item != null; item = jar.getNextJarEntry()) {
                             if (item.getName().equals("META-INF/taglib.tld")) {
-                                libraries.add(parser.parse(location + "!/META-INF/taglib.tld", jar.readAllBytes())); found = true; break;
+                                var library = parser.parse(location + "!/META-INF/taglib.tld", jar.readAllBytes());
+                                libraries.add(library); mappings.put(uri, library); mappings.put(location, library); found = true; break;
                             }
                         }
                     }
                     if (!found) throw new PageParseException(at, "Taglib JAR has no META-INF/taglib.tld: " + location);
-                } else libraries.add(parser.parse(location, resource));
+                } else {
+                    var library = parser.parse(location, resource); libraries.add(library); mappings.put(uri, library); mappings.put(location, library);
+                }
             }
         }
     }

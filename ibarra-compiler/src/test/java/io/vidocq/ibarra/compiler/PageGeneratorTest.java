@@ -314,7 +314,7 @@ class PageGeneratorTest {
                 Map.of("/tags.jspf", "<%@ taglib prefix='c' uri='urn:custom' %>"));
         var error = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
                 "<%@ include file='tags.jspf' %><c:item/>", PAGE_CLASS, strict));
-        assertTrue(error.getMessage().contains("Custom tags require"));
+        assertTrue(error.getMessage().contains("No build-time tag library"));
         assertEquals("/main.jsp", error.location().source());
         var later = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
                 "<c:item/><%@ include file='tags.jspf' %>", PAGE_CLASS, strict));
@@ -451,7 +451,7 @@ class PageGeneratorTest {
         assertEquals("<p>text</p>", run(generator().generate("/main.jsp", "<%@ include file='part.jspx' %>", PAGE_CLASS, options), "", ""));
         var error = assertThrows(PageParseException.class, () -> generator().generate("/main.jspx",
                 "<j:root xmlns:j='" + PageParser.JSP_NAMESPACE + "' version='4.0'><j:directive.include file='tags.jspf'/></j:root>", PAGE_CLASS, options));
-        assertTrue(error.getMessage().contains("Custom tags require"));
+        assertTrue(error.getMessage().contains("No build-time tag library"));
     }
 
     @Test

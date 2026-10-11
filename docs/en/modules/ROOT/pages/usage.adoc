@@ -13,14 +13,17 @@ router, which finds pages in that index. Runtime deployment needs neither
 class loading by name nor compiler modules. See
 xref:modules/foy-binding.adoc[the binding reference] for application layers and lifecycle.
 
-== Custom tags and tag files (planned)
+== Custom tags (initial I6)
 
 TLD listener declarations are already discovered at build time and registered
 through Foy's normal listener lifecycle. They do not require any tag calls or
 JSP pages. See xref:modules/foy-binding.adoc[the binding reference]. The tag
-handler/file translation below remains planned.
+handler/file scope is described in xref:modules/tag-handlers.adoc[the tag reference].
 
-TLDs (`WEB-INF/**/*.tld`, `META-INF/**/*.tld` of libraries) are read at translation time: generated code instantiates tag handlers and calls their attribute setters directly. Tag files under `WEB-INF/tags` are compiled like pages.
+TLDs are read at build time. Classic and simple handler invocations use direct
+constructors/setters, with generated scriptless body fragments for SimpleTag.
+The independent precompiled-pages example includes a private application handler.
+Tag files under `WEB-INF/tags` remain planned.
 
 == `jsp-config`
 

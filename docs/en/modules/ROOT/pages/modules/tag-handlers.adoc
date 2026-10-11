@@ -1,0 +1,70 @@
+= Tag handlers
+:description: Initial classic and simple custom-tag generation in strict application modules.
+
+== Build-time contracts
+
+`TldParser` retains immutable `TagDescriptor` and `TagAttribute` metadata.
+The precompiler resolves root descriptor aliases, implicit library URIs and
+context-relative TLD paths. Explicit aliases take precedence; library resources
+precede loose WEB-INF resources. Relative taglib declarations retain their
+source origin across static includes. XML tag namespaces using `urn:jsptld:`
+are resolved through the same build-time catalogue.
+
+Standalone generation can supply the catalogue with
+`GenerationOptions.withTagLibraries`. Its compatible constructors and other
+option helpers retain the immutable map. Runtime artifacts contain generated
+calls and factories, without TLD parsing or class-name lookup.
+
+Class-File inspection validates public concrete handlers, public no-argument
+constructors, implemented interfaces and public instance setters. Static attribute
+contracts ignore the TLD type and use the actual setter type. Request-time attributes
+without a declared type default to Object and select that declared setter even
+for literal invocation values. Literal coercion supports String,
+Object and primitive/boxed numeric, boolean and character setters. Java scripting
+expressions require rtexprvalue; EL stays under the explicit preview boundary.
+
+== Invocation and cleanup
+
+Every invocation constructs a fresh handler. Classic Tag, IterationTag and
+BodyTag calls follow start/body/after-body/end ordering. Buffered body output
+is owned by the handler, including whether to clear it between iterations.
+The generated page restores the enclosing writer before end/catch/finally.
+
+TryCatchFinally action failures invoke catch/finally; setter failures bypass
+those callbacks. Classic release runs even after failure or page termination.
+A normal SKIP_PAGE return runs the returning tag's finally without calling its
+own catch, then propagates through enclosing handlers and stops the page.
+SimpleTag SkipPageException also stops page evaluation without error dispatch.
+
+Simple bodies are generated as member JspFragment classes. Each fragment holds
+its invocation's context, parent and forwarding state. It evaluates on demand,
+supports repeated invocation and restores the writer after an explicit Writer
+target. Scriptlets and scripting expressions are rejected inside scriptless
+bodies. Mixed nesting passes the current JspTag to simple handlers and adapts
+simple parents through the standard TagAdapter for classic handlers.
+
+Unqualified DynamicAttributes use direct interface calls when advertised by
+the TLD and implemented by the handler.
+
+== Current boundary
+
+This is an initial I6 implementation. Named attributes, fragment attributes,
+explicit jsp:body wrappers, namespaced dynamic attributes, tagdependent bodies,
+scripting variables, TagExtraInfo, TagLibraryValidator, tag files and deferred
+attribute semantics remain follow-up work. Unsupported invoked metadata fails
+translation; no reflective fallback or handler pooling is enabled.
+
+Java-expression request values must match the declared runtime attribute type.
+Production packaging still rejects EL generation until Peano integration is
+available. The official Pages TCK has not been run.
+
+== Verification
+
+Named-module fixtures exercise literal/runtime attributes, iteration, buffered
+bodies, writer targets, mixed parents, setter failures, catch/finally/release,
+skip-page propagation and metadata/URI precedence. HTTP tests precompile private
+application handlers and serve JSP/JSPX without exports, opens or compiler
+modules at runtime. Repeated requests prove fresh handler state.
+
+The independent Maven-goal example also compiles a SimpleTag with a generated
+body fragment. No new runtime or build dependency is introduced.

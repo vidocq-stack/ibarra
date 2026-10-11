@@ -53,8 +53,9 @@ or a JAR's `META-INF/taglib.tld`. Relative locations resolve from
 
 `TldParser` retains URI and listener-class metadata in an immutable
 `TagLibraryDescriptor`. It accepts modern/legacy namespaces and legacy DOCTYPE
-declarations without external entity/DTD resolution. Full tag-handler metadata,
-URI resolution for custom tag calls, validators and tag files remain I6/I7 work.
+declarations without external entity/DTD resolution. Initial tag/attribute contracts
+and build-time URI/resource mapping support xref:modules/tag-handlers.adoc[handler generation].
+Validators, scripting variables and tag files remain I6/I7 work.
 
 Class-File inspection verifies public concrete listener classes, public
 no-argument constructors and supported Servlet listener interfaces. Generated
