@@ -72,7 +72,7 @@ public final class PagePrecompiler {
                 throw new IllegalArgumentException("Conflicting supplied tag library: " + entry.getKey());
         }
         var configured = new GenerationOptions(options.propertyGroups(), options.sources(), false, bytes, libraries);
-        var generator = new PageGenerator(paths);
+        var generator = new PageGenerator(paths, descriptor);
         var sources = new ArrayList<GeneratedPage>();
         var pages = new TreeMap<String, String>();
         for (var entry : resources.entrySet()) if (entry.getKey().endsWith(".jsp") || entry.getKey().endsWith(".jspx")) {

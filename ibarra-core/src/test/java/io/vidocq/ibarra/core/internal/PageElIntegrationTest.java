@@ -24,6 +24,11 @@ import jakarta.el.ExpressionFactory;
 import org.junit.jupiter.api.Test;
 
 class PageElIntegrationTest {
+    @Test void handwrittenPagesRetainTheStandardDefaultImports() throws Exception {
+        var page = new PageRuntimeTest.Web().open(false, null);
+        assertEquals(jakarta.servlet.http.Cookie.class, page.getELContext().getImportHandler().resolveClass("Cookie"));
+        assertEquals(jakarta.servlet.jsp.ErrorData.class, page.getELContext().getImportHandler().resolveClass("ErrorData"));
+    }
     @Test void providerResolversParticipateBeforeBeanFallback() throws Exception {
         var delegate = ExpressionFactory.newInstance();
         var web = new PageRuntimeTest.Web();

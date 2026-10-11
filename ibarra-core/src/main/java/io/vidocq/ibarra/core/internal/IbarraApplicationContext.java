@@ -99,6 +99,7 @@ final class IbarraApplicationContext implements JspApplicationContext {
         for (var resolver : current.resolvers()) resolvers.add(resolver);
         var providerResolver = getExpressionFactory().getStreamELResolver();
         if (providerResolver != null) resolvers.add(providerResolver);
+        resolvers.add(new StaticFieldELResolver());
         resolvers.add(new MapELResolver());
         resolvers.add(new ResourceBundleELResolver());
         resolvers.add(new ListELResolver());
@@ -107,14 +108,32 @@ final class IbarraApplicationContext implements JspApplicationContext {
         resolvers.add(new OptionalELResolver());
         resolvers.add(new BeanELResolver());
         resolvers.add(new ScopedAttributeResolver(page));
+        resolvers.add(new jakarta.servlet.jsp.el.ImportELResolver());
         boolean strict = page.getPage() instanceof io.vidocq.ibarra.spi.PageOptions options && options.errorOnELNotFound();
         resolvers.add(new NotFoundELResolver(strict));
+        var imports = page.getPage() instanceof io.vidocq.ibarra.spi.PageOptions options && options.usesStaticELImports()
+                ? new StaticImports(options) : null;
         var context = new StandardELContext(getExpressionFactory()) {
             @Override public ELResolver getELResolver() { return resolvers; }
+            @Override public ImportHandler getImportHandler() { return imports == null ? super.getImportHandler() : imports; }
         };
+        if (imports == null) for (String name : java.util.List.of("jakarta.servlet", "jakarta.servlet.http", "jakarta.servlet.jsp"))
+            context.getImportHandler().importPackage(name);
         context.putContext(JspContext.class, page);
         context.putContext(PageContext.class, page);
         return context;
+    }
+    private static final class StaticImports extends ImportHandler {
+        private final io.vidocq.ibarra.spi.PageOptions page;
+        StaticImports(io.vidocq.ibarra.spi.PageOptions page) { this.page = page; }
+        @Override public Class<?> resolveClass(String name) { return page.resolveELClass(name); }
+        @Override public Class<?> resolveStatic(String name) { return null; }
+        @Override public void importClass(String name) { throw new ELException("Runtime import changes are unsupported for precompiled pages"); }
+        @Override public void importStatic(String name) { throw new ELException("Runtime import changes are unsupported for precompiled pages"); }
+        @Override public void importPackage(String name) {
+            if (page == null) super.importPackage(name);
+            else throw new ELException("Runtime import changes are unsupported for precompiled pages");
+        }
     }
 
     void notifyListeners(ELContext context) {

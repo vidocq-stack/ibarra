@@ -28,7 +28,14 @@ import javax.lang.model.SourceVersion;
 /** Generates build-time servlet source. No generated class is loaded by this API. */
 public final class PageGenerator {
     private final BeanClasses classes;
-    public PageGenerator(List<Path> beanModulePath) { classes = new BeanClasses(beanModulePath); }
+    private final List<Path> importModulePath;
+    private final java.lang.module.ModuleDescriptor applicationModule;
+    public PageGenerator(List<Path> beanModulePath) { this(beanModulePath, null); }
+    /** Uses the application descriptor to filter imports by readability and exports. */
+    public PageGenerator(List<Path> beanModulePath, java.lang.module.ModuleDescriptor applicationModule) {
+        classes = new BeanClasses(beanModulePath);
+        importModulePath = List.copyOf(beanModulePath); this.applicationModule = applicationModule;
+    }
 
     public GeneratedPage generate(String path, String source, String className, GenerationOptions options) {
         if (!SourceVersion.isName(className) || !className.contains("."))
@@ -56,6 +63,7 @@ public final class PageGenerator {
         private final Map<String, Page.Syntax> sourceSyntaxes;
         private final String responseEncoding;
         private final List<String> imports = new ArrayList<>();
+        private final Map<String, SourceLocation> importLocations = new HashMap<>();
         private final JavaSource declarations = new JavaSource();
         private JavaSource body = new JavaSource();
         private final JavaSource fragments = new JavaSource();
@@ -149,6 +157,17 @@ public final class PageGenerator {
             result.add("private static String _jspxParameter(String path, String name, Object value) { return path + (path.contains(\"?\") ? \"&\" : \"?\") + java.net.URLEncoder.encode(name, java.nio.charset.StandardCharsets.UTF_8) + \"=\" + java.net.URLEncoder.encode(_jspxText(value), java.nio.charset.StandardCharsets.UTF_8); }\n");
             result.add("}\nabstract class " + simple + "$Lifecycle extends " + settings.getOrDefault("extends", "jakarta.servlet.http.HttpServlet") + " implements jakarta.servlet.jsp.HttpJspPage, io.vidocq.ibarra.spi.PageOptions {\n");
             result.add("@Override public final boolean errorOnELNotFound() { return " + bool("errorOnELNotFound", false) + "; }\n");
+            result.add("@Override public final boolean usesStaticELImports() { return true; }\n"
+                    + "@SuppressWarnings({\"removal\",\"deprecation\"}) @Override public final Class<?> resolveELClass(String name) { if (name == null) return null; return switch(name) {\n");
+            var importClasses = new ImportClasses(importModulePath, applicationModule);
+            for (String name : imports) if (!name.endsWith(".*")) importClasses.bindings(List.of(name), importLocations.get(name));
+            var bindings = importClasses.bindings(imports, new SourceLocation(page.source(), 1, 1));
+            for (var binding : bindings.entrySet()) {
+                result.add("case " + JavaSource.quote(binding.getKey()) + " -> ");
+                if (binding.getValue().size() == 1) result.add(binding.getValue().iterator().next() + ".class;\n");
+                else result.add("throw new jakarta.el.ELException(" + JavaSource.quote("Ambiguous EL import: " + binding.getKey()) + ");\n");
+            }
+            result.add("default -> null; }; }\n");
             result.add("protected abstract void _jspxInitialize();\npublic void jspInit() {}\npublic void jspDestroy() {}\n");
             result.add("@Override public final void init() throws jakarta.servlet.ServletException { super.init(); _jspxInitialize(); jspInit(); }\n");
             result.add("@Override public final void init(jakarta.servlet.ServletConfig config) throws jakarta.servlet.ServletException { super.init(config); }\n");
@@ -183,10 +202,12 @@ public final class PageGenerator {
                         if (entry.getKey().equals("import")) {
                             for (String name : entry.getValue().split(",")) {
                                 name = name.trim();
+                                if (name.startsWith("static ")) throw error(directive.location(), "Page imports accept types or packages, not static members");
                                 String base = name.startsWith("static ") ? name.substring(7) : name;
                                 if (!SourceVersion.isName(base.endsWith(".*") ? base.substring(0, base.length() - 2) : base))
                                     throw error(directive.location(), "Invalid page import: " + name);
                                 imports.add(name);
+                                importLocations.putIfAbsent(name, directive.location());
                             }
                         } else {
                             String previous = explicit.putIfAbsent(entry.getKey(), entry.getValue());

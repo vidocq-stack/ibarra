@@ -29,7 +29,9 @@ mappings, named JSP registrations, includes and build-generated TLD listeners.
 Initial classic/simple tag handlers now render through direct constructors,
 setters and generated scriptless body/named fragments. Custom-tag named scalar
 attributes and explicit bodies are supported. Full tag metadata, tag files,
-EL imports/functions, deferred attributes and official TCK certification remain pending.
+Page type/package imports now resolve through build-generated class references.
+TLD functions, deferred attributes, dynamic import changes and official TCK
+certification remain pending.
 The design of record is [PLAN.md](PLAN.md) (spec scope, build-time page
 compilation, Java Modules layout, Foy JSP-engine SPI, TCK plan, milestones I0–I9).
 

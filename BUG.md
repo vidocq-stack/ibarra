@@ -1,5 +1,45 @@
 # BUG.md — Ibarra
 
+## IBARRA-066 · 2026-10-11 · Standard ImportHandler rejects abstract/interface page types
+
+- Symptom: a handwritten page's standard ImportHandler throws ELException when
+  resolving HttpServletResponse or PageContext from mandatory default packages.
+- Minimal repro: import jakarta.servlet.http with Jakarta EL 6.0.1 ImportHandler,
+  then resolveClass("HttpServletResponse").
+- Cause: the API implementation requires public concrete classes, while Pages
+  default imports cover public types, including interfaces/abstract types.
+- Status: OPEN upstream API limitation for handwritten-page fallback. Generated
+  page imports use direct class literals and are not affected; no API fork is added.
+
+## IBARRA-065 · 2026-10-11 · Handwritten pages omit standard Servlet and Pages EL imports
+
+- Symptom: Cookie and ErrorData resolve to null in a handwritten
+  page's EL ImportHandler, although Pages requires the default packages.
+- Minimal repro: `PageElIntegrationTest.handwrittenPagesRetainTheStandardDefaultImports`.
+- Cause: the fallback StandardELContext imports java.lang only.
+- Status: FIXED; register the three Servlet/Pages packages for handwritten pages;
+  generated pages retain their static build-time binding tables instead.
+
+## IBARRA-064 · 2026-10-11 · Unavailable imported types escape translation diagnostics
+
+- Symptom: an absent explicit type import throws StringIndexOutOfBoundsException
+  instead of a diagnostic at the original directive.
+- Minimal repro: `PageGeneratorTest.unavailableImportedTypesKeepDirectiveOrigins`.
+- Cause: nested-type binary-name fallback removes every package dot, then read
+  assumes a remaining package separator; import origins were not retained.
+- Status: FIXED; stop unavailable-name lookup safely and validate explicit imports
+  at their directive locations before generating the combined binding table.
+
+## IBARRA-063 · 2026-10-11 · Import switches reference unused preview API types
+
+- Symptom: ordinary generated pages fail javac because implicit java.lang package
+  scanning includes StableValue, a preview API unavailable without preview flags.
+- Minimal repro: `PageGeneratorTest.defaultExplicitWildcardAndNestedImportsAreVisibleToEl`.
+- Cause: wildcard candidates include public preview-marked classes even though
+  Ibarra compiles non-preview Java 25 applications.
+- Status: FIXED; filter PreviewFeature-marked wildcard classes at build time;
+  explicit preview references still follow javac's normal access validation.
+
 ## IBARRA-062 · 2026-10-11 · Java compilation can replace auxiliary expression classes
 
 - Symptom: a nested Java declaration overwrites an auxiliary EL class with the

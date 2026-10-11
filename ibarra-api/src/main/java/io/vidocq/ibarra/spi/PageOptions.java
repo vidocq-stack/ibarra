@@ -26,5 +26,9 @@ package io.vidocq.ibarra.spi;
 public interface PageOptions {
     /** Whether an unresolved EL identifier must raise PropertyNotFoundException. */
     default boolean errorOnELNotFound() { return false; }
+    /** Whether this page supplies build-time class imports through resolveELClass. */
+    default boolean usesStaticELImports() { return false; }
+    /** Resolves an imported simple type name lazily, without class-name loading. */
+    default Class<?> resolveELClass(String name) { return null; }
 }
 

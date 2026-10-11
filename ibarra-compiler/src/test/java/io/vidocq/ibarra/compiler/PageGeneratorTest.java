@@ -566,6 +566,30 @@ class PageGeneratorTest {
                 PAGE_CLASS, GenerationOptions.DEFAULT));
         assertTrue(failure.getMessage().contains("/bad-el.jsp:2:"));
     }
+    @Test void defaultExplicitWildcardAndNestedImportsAreVisibleToEl() throws Exception {
+        assertEquals("200|true|true", render("<%@ page session='false' import='java.util.*,java.util.Map.Entry' %>${HttpServletResponse.SC_OK}|${List != null}|${Entry != null}", "", ""));
+    }
+    @Test void scopedValuesShadowImportedClasses() throws Exception {
+        assertEquals("scope", render("<%@ page session='false' import='java.util.Map.Entry' %>${Entry}",
+                "request.setAttribute(\"Entry\", \"scope\");", ""));
+    }
+    @Test void wildcardAmbiguityIsLazyAndExplicitTypesTakePrecedence() throws Exception {
+        compile(List.of(new GeneratedPage("fixture.one.Dup", "package fixture.one; public class Dup {}", Map.of()),
+                new GeneratedPage("fixture.two.Dup", "package fixture.two; public class Dup {}", Map.of()),
+                new GeneratedPage("fixture.one.Unused", "package fixture.one; public class Unused { static { if(true) throw new AssertionError(\"Unused class initialized\"); } }", Map.of())));
+        String imports = "<%@ page session='false' import='fixture.one.*,fixture.two.*' %>";
+        assertEquals("safe", render(imports + "safe", "", ""));
+        assertEquals("true|true", render(imports + "<%@ page import='fixture.one.Dup' %>${Dup != null}|${Unused != null}", "", ""));
+        var failure = assertThrows(AssertionError.class, () -> render(imports + "${Dup != null}", "", ""));
+        assertTrue(failure.getMessage().contains("Ambiguous EL import"));
+    }
+    @Test void staticMemberPageImportsFailTranslation() {
+        assertThrows(PageParseException.class, () -> generator().generate("/bad.jsp", "<%@ page import='static java.lang.Math.PI' %>", PAGE_CLASS, GenerationOptions.DEFAULT));
+    }
+    @Test void unavailableImportedTypesKeepDirectiveOrigins() {
+        var failure = assertThrows(PageParseException.class, () -> generator().generate("/missing-import.jsp", "before\n<%@ page import='java.util.DoesNotExist' %>", PAGE_CLASS, GenerationOptions.DEFAULT));
+        assertTrue(failure.getMessage().contains("/missing-import.jsp:2:"));
+    }
 
     private PageGenerator generator() { return new PageGenerator(List.of(directory)); }
 

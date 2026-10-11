@@ -27,6 +27,25 @@ import org.junit.jupiter.api.Test;
 
 /** Pages 4.0 sections 2.10 and 3.3.4: only unresolved identifiers use this policy. */
 class PagePolicyTest {
+    @Test void generatedImportsAreAvailableToListenersAndRejectRuntimeMutation() throws Exception {
+        var web = new PageRuntimeTest.Web(); var application = new IbarraApplicationContext();
+        application.addELContextListener(event -> assertEquals(java.util.Map.Entry.class, event.getELContext().getImportHandler().resolveClass("Entry")));
+        var servlet = new ImportedPage(); servlet.init(web.config);
+        var page = new IbarraPageContext(application);
+        page.initialize(servlet, web.request, web.response, null, false, 64, true);
+        var imports = page.getELContext().getImportHandler();
+        assertEquals(java.util.Map.Entry.class, imports.resolveClass("Entry"));
+        assertNull(imports.resolveClass("Unknown"));
+        assertThrows(ELException.class, () -> imports.importClass("java.lang.String"));
+        assertThrows(ELException.class, () -> imports.importPackage("java.util"));
+        assertThrows(ELException.class, () -> imports.importStatic("java.lang.Math.PI"));
+    }
+    private static final class ImportedPage extends jakarta.servlet.http.HttpServlet implements jakarta.servlet.jsp.HttpJspPage, PageOptions {
+        public boolean usesStaticELImports() { return true; }
+        public Class<?> resolveELClass(String name) { return "Entry".equals(name) ? java.util.Map.Entry.class : null; }
+        public void jspInit() {} public void jspDestroy() {}
+        public void _jspService(jakarta.servlet.http.HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) {}
+    }
     @Test
     void strictAndPermissivePagesShareTheApplicationWithoutSharingPolicy() throws Exception {
         var web = new PageRuntimeTest.Web();

@@ -56,10 +56,37 @@ https://codefloe.com/Vidocq/peano[Peano's processor] or its public AccessorProvi
 contract. This permits direct access with `peano.reflection=deny`, without
 exports/opens. Ibarra core introduces no Peano-specific runtime lookup.
 
-== Current boundary and proof
+== Page imports
+
+Page directives import explicit types, public nested types or packages. The four
+implicit packages are java.lang, jakarta.servlet, jakarta.servlet.http and
+jakarta.servlet.jsp. Includes contribute their imports to the translation unit;
+fragments retain their originating page's metadata.
+
+Class-File inspection enumerates visible public types without initializing them.
+The precompiler supplies the application descriptor, filtering wildcard candidates
+by module readability and qualified/unqualified exports. Direct PageGenerator
+callers can supply that descriptor through its compatible overload. Public nested
+types are resolved using binary-name metadata; wildcard imports include top-level
+types only. Preview-only wildcard classes are excluded from non-preview builds.
+
+Generated PageOptions methods resolve simple names with lazy direct class literals,
+without runtime class-name loading. Explicit imports take precedence; ambiguous
+wildcard names fail when requested. Scoped attributes precede ImportELResolver,
+which precedes the not-found policy. Static fields/methods retain the provider
+resolver before the standard static-field fallback, so Peano reflection denial
+continues to apply. Handwritten pages retain standard ImportHandler defaults.
+
+Precompiled pages explicitly reject runtime importClass/importPackage/importStatic
+mutations instead of accepting changes their fixed table would ignore. Static
+member syntax is not accepted by the page directive's type/package import grammar.
+The handwritten fallback's abstract/interface restriction in Jakarta ImportHandler
+is tracked separately in BUG.md; generated direct bindings are unaffected.
+
+== Remaining work and proof
 
 Immediate template/action/tag EL uses the delivered compiler, including scopes,
-map/list navigation, operators, calls and lambdas. Pages EL imports, TLD function
+map/list navigation, operators, calls and lambdas. TLD function
 bindings and deferred attributes remain follow-up work. Prefixed functions fail
 translation before initialization; they require generated creation-time bindings.
 Pages-specific VariableMapper capture is not added by class-only constructors.

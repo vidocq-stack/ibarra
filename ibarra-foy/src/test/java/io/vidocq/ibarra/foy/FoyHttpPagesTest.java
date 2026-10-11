@@ -68,6 +68,8 @@ class FoyHttpPagesTest {
                 assertEquals("xml:1:BODYBODY!", get(client, base + "/tags.jspx").body());
                 assertEquals("A:Direct:4", get(client, base + "/compiled-el.jspx?who=A").body(), Files.readString(directory.resolve("server.log")));
                 assertEquals("B:Direct:4", get(client, base + "/compiled-el.jspx?who=B").body());
+                assertEquals("imported:1:method:200method:200!", get(client, base + "/imports.jspx").body());
+                assertEquals("imported", get(client, base + "/imports.jsp").body());
                 assertEquals("<fragment>fragmentBODYBODY", get(client, base + "/named-tags.jspx").body());
                 assertEquals("<b title=\"&quot;&amp;\">label</b>:1:BB!", get(client, base + "/static-named-tags.jspx").body());
                 assertEquals(404, get(client, base + "/missing.jsp").statusCode());
@@ -86,9 +88,10 @@ class FoyHttpPagesTest {
         Files.createDirectories(output); Files.createDirectories(source); Files.createDirectories(web.resolve("WEB-INF"));
         Path info = source.resolve("module-info.java");
         Files.writeString(info, "module integration.pages { requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; provides io.vidocq.peano.spi.AccessorProvider with app.Accessors; }");
-        Path profile = source.resolve("app/Profile.java"), accessors = source.resolve("app/Accessors.java");
+        Path profile = source.resolve("app/Profile.java"), accessors = source.resolve("app/Accessors.java"), constants = source.resolve("app/Constants.java");
         Files.createDirectories(profile.getParent());
         Files.writeString(profile, "package app; public class Profile { public String getName() { return \"Direct\"; } }");
+        Files.writeString(constants, "package app; public class Constants { public static final String TEXT=text(); private static String text(){System.setProperty(\"ibarra.import.initialized\",\"yes\");return \"imported\";} public static String caption(){return \"method\";} }");
         Files.writeString(accessors, """
                 package app;
                 public class Accessors implements io.vidocq.peano.spi.AccessorProvider {
@@ -97,6 +100,20 @@ class FoyHttpPagesTest {
                             public Class<?> targetType() { return Profile.class; }
                             public Object getValue(jakarta.el.ELContext context, Object base, Object property) {
                                 if (base instanceof Profile profile && "name".equals(property)) { context.setPropertyResolved(base, property); return profile.getName(); }
+                                return null;
+                            }
+                            public Class<?> getType(jakarta.el.ELContext context, Object base, Object property) { return null; }
+                            public void setValue(jakarta.el.ELContext context, Object base, Object property, Object value) { }
+                            public boolean isReadOnly(jakarta.el.ELContext context, Object base, Object property) { return true; }
+                            public Class<?> getCommonPropertyType(jakarta.el.ELContext context, Object base) { return String.class; }
+                        }, new io.vidocq.peano.spi.AccessorTable() {
+                            public Class<?> targetType() { return Constants.class; }
+                            public Object getValue(jakarta.el.ELContext context, Object base, Object property) {
+                                if (base instanceof jakarta.el.ELClass type && type.getKlass()==Constants.class && "TEXT".equals(property)) { context.setPropertyResolved(base, property); return Constants.TEXT; }
+                                return null;
+                            }
+                            public Object invoke(jakarta.el.ELContext context, Object base, Object method, Class<?>[] types, Object[] values) {
+                                if (base instanceof jakarta.el.ELClass type && type.getKlass()==Constants.class && "caption".equals(method)) { context.setPropertyResolved(base, method); return Constants.caption(); }
                                 return null;
                             }
                             public Class<?> getType(jakarta.el.ELContext context, Object base, Object property) { return null; }
@@ -158,7 +175,7 @@ class FoyHttpPagesTest {
                 }
                 """);
         assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, "--release", "25", "--module-path",
-                modulePath(true), "-d", output.toString(), info.toString(), listener.toString(), wrap.toString(), upper.toString(), fragment.toString(), profile.toString(), accessors.toString()));
+                modulePath(true), "-d", output.toString(), info.toString(), listener.toString(), wrap.toString(), upper.toString(), fragment.toString(), profile.toString(), accessors.toString(), constants.toString()));
         Files.writeString(web.resolve("WEB-INF/handlers.tld"), """
                 <taglib><uri>urn:tags</uri>
                 <tag><name>wrap</name><tag-class>app.Wrap</tag-class><body-content>scriptless</body-content>
@@ -172,6 +189,9 @@ class FoyHttpPagesTest {
                 """);
         Files.writeString(web.resolve("tags.jsp"), "<%@ page session='false' %><%@ taglib prefix='t' uri='urn:tags' %><t:wrap label='${param.label}'><t:upper>body</t:upper></t:wrap>");
         Files.writeString(web.resolve("compiled-el.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page session='false'/><jsp:useBean id='profile' class='app.Profile'/><jsp:text>${param.who}:${profile.name}:${[1,2,3].stream().map(x->x*2).toList()[1]}</jsp:text></jsp:root>");
+        Files.writeString(web.resolve("imports.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false' import='app.Constants'/><t:wrap label='${Constants.TEXT}'><jsp:body>${Constants.caption()}:${HttpServletResponse != null ? '200' : 'bad'}</jsp:body></t:wrap></jsp:root>");
+        Files.writeString(web.resolve("imports.jspf"), "<%@ page import='app.Constants' %>");
+        Files.writeString(web.resolve("imports.jsp"), "<%@ page session='false' %><%@ include file='imports.jspf' %>${Constants.TEXT}");
         Files.writeString(web.resolve("tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false'/><t:wrap label='xml'><t:upper>body</t:upper></t:wrap></jsp:root>");
         Files.writeString(web.resolve("named-tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false'/><t:fragment><jsp:attribute name='piece'> fragment </jsp:attribute><jsp:body><t:upper><jsp:body>body</jsp:body></t:upper></jsp:body></t:fragment></jsp:root>");
         Files.writeString(web.resolve("static-named-tags.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:jsptld:urn:tags' version='4.0'><jsp:directive.page session='false'/><t:staticWrap><jsp:attribute name='label'><b title='&quot;&amp;'><jsp:text>label</jsp:text></b></jsp:attribute><jsp:body>B</jsp:body></t:staticWrap></jsp:root>");
@@ -184,6 +204,7 @@ class FoyHttpPagesTest {
         Files.writeString(web.resolve("include.jsp"), "<%@ page session='false' %>before<jsp:include page='/piece.jsp' flush='false'/>after");
         Files.writeString(web.resolve("WEB-INF/secret.jsp"), "<%@ page session='false' %>SECRET");
         new PagePrecompiler().precompile(web, output, paths(true), null, GenerationOptions.DEFAULT);
+        assertNull(System.getProperty("ibarra.import.initialized"), "Import discovery initialized application code");
         Files.writeString(output.resolve("web.xml"), """
                 <web-app xmlns="https://jakarta.ee/xml/ns/jakartaee" version="6.1">
                   <servlet><servlet-name>named</servlet-name><jsp-file>/index.jsp</jsp-file></servlet>
