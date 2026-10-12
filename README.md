@@ -27,8 +27,10 @@ EL compiles at build time through Peano into application-owned classes; startup
 interpretation remains an explicit preview option. Precompiled pages run over HTTP on Foy/Chappe with extension
 mappings, named JSP registrations, includes and build-generated TLD listeners.
 Initial classic/simple tag handlers now render through direct constructors,
-setters and generated scriptless body/named fragments. Custom-tag named scalar
-attributes and explicit bodies are supported. Full tag metadata and tag files remain pending.
+setters and generated scriptless body/named fragments. Named scalar attributes,
+explicit bodies and compiler-provided JspIdConsumer identifiers are supported.
+Identifiers stay stable across requests while handler instances remain fresh.
+Full tag metadata and tag files remain pending.
 Page type/package imports now resolve through build-generated class references.
 TLD functions use generated direct static calls. Typed deferred tag values/methods
 are compiled and constructed per invocation. Dynamic import changes and official TCK
@@ -66,7 +68,7 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 | `ibarra-compiler` | JSP/JSPX parser, page model, Java generator, initial tag handlers and build-time compiler | I2 implemented; I3/I6 in progress |
 | `ibarra-maven-plugin` | `precompile` goal at process-classes; module service registration | Initial I4 implemented |
 | `ibarra-foy` | Optional Foy engine provider; application layer, routing and TLD listener lifecycle | Initial I5 implemented |
-| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; 18-test smoke passes, 71.1% measured full-suite pass rate |
+| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; 18-test smoke passes, 71.6% measured full-suite pass rate |
 
 Planned modules (`ibarra-bench`) are described in [PLAN.md](PLAN.md) and created by
 the milestone that needs them. JSTL is out of scope.

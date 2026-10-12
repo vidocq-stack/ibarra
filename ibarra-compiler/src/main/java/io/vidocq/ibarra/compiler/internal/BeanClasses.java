@@ -33,7 +33,7 @@ public final class BeanClasses {
         public Function { parameters = List.copyOf(parameters); }
     }
     public record Handler(String sourceName, boolean simple, boolean iteration, boolean buffered,
-            boolean catchFinally, boolean dynamic) { }
+            boolean catchFinally, boolean dynamic, boolean jspIdConsumer) { }
     private final List<Path> paths;
     public BeanClasses(List<Path> paths) { this.paths = List.copyOf(paths); }
 
@@ -154,7 +154,8 @@ public final class BeanClasses {
                 subtype(type, "jakarta.servlet.jsp.tagext.IterationTag", at, new HashSet<>()),
                 subtype(type, "jakarta.servlet.jsp.tagext.BodyTag", at, new HashSet<>()),
                 subtype(type, "jakarta.servlet.jsp.tagext.TryCatchFinally", at, new HashSet<>()),
-                subtype(type, "jakarta.servlet.jsp.tagext.DynamicAttributes", at, new HashSet<>()));
+                subtype(type, "jakarta.servlet.jsp.tagext.DynamicAttributes", at, new HashSet<>()),
+                subtype(type, "jakarta.servlet.jsp.tagext.JspIdConsumer", at, new HashSet<>()));
     }
     private boolean subtype(String type, String target, SourceLocation at, Set<String> visited) {
         if (type.equals(target)) return true;

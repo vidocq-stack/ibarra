@@ -13,6 +13,9 @@ are needed.
 The frame label accepts request-time values and omits its ordinary TLD type.
 Its actual String setter is selected from class-file metadata; the named label
 contains compiled EL. The Object metadata default does not require an Object setter.
+The frame implements JspIdConsumer and uses its compiler-provided identifier as
+the section's HTML id. Each tag occurrence has a distinct id that stays constant
+across requests; the handler itself is constructed afresh for each invocation.
 
 The same TLD declares the fixed-arity `example:welcome` function. Its public
 static method is validated from class files and invoked directly by generated

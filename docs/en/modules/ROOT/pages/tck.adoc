@@ -18,14 +18,14 @@ Run date: 2026-10-12, Temurin Java 25 and Maven 3.9.16.
 
 Official artifacts had already been prepared; the smoke command clean-installs the reactor.
 The verified official binary contains 92 test classes and 682 declared JUnit
-`@Test` methods. The run records *485 passing methods* and *197 failing methods*,
+`@Test` methods. The run records *488 passing methods* and *194 failing methods*,
 with *zero class-level setup/deployment errors*. Surefire therefore reports 682
-entries, 197 errors, zero assertion failures and zero skips, and exits nonzero.
+entries, 194 errors, zero assertion failures and zero skips, and exits nonzero.
 The upstream HTTP assertion helper reports failures as exceptions.
 
-*485/682 = 71.1% measured full-suite pass rate*. All 682 declared test methods
+*488/682 = 71.6% measured full-suite pass rate*. All 682 declared test methods
 execute across 92 official classes, with no skipped methods or deployment blockers.
-The suite remains failing and uncertified because 197 methods report errors.
+The suite remains failing and uncertified because 194 methods report errors.
 
 The detailed command, binary inventory, counts and remaining categories are in
 link:{repo-ibarra}/src/branch/main/ibarra-tck/BASELINE.md[the recorded baseline].
@@ -44,6 +44,11 @@ Ordinary TLD keyword/setter fixes add 40 confirmed passes, remove three setup
 blockers and restore four previously failing EL methods, without a regression
 among previously passing methods. See xref:modules/tag-handlers.adoc[Tag handlers]
 for the actual-property binding rules and remaining boundaries.
+
+The three JspIdConsumer methods now pass with stable compiler-provided tag IDs,
+including inherited classic/simple consumers. No previous pass regressed.
+See xref:modules/tag-handlers.adoc[Tag handlers] for identifier initialization,
+repeatable fragments and protection of the reserved container setter.
 
 `official-pages-tck-smoke` runs on pull requests and `main`. It clean-installs
 Ibarra, runs eighteen adapter regression tests, then three official JspFactory

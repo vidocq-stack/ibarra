@@ -1,8 +1,8 @@
 # Official Pages failure inventory
 
 Date: 2026-10-12, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-This inventory records the remaining 197 method errors and no setup errors
-after legacy WAR library adaptation. All 682 official methods now execute. Each class keeps its previous stable id.
+This inventory records the remaining 194 method errors and no setup errors
+after legacy WAR library and JspIdConsumer generation. All 682 official methods now execute. Each class keeps its previous stable id.
 Resolved method entries remain as a trace; other causes still need investigation.
 Append new ids when discovering new failing classes, without renumbering records.
 
@@ -91,16 +91,19 @@ Failing methods:
 ## TCK-007 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.jspidconsumer.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.jspidconsumer.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Status: RESOLVED; all three official methods now pass.
+- Symptom: generated tag instances previously had no compiler-provided JSP ID.
+- Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.jspidconsumer.URLClientIT`.
+- Cause: JspIdConsumer.setJspId was absent from tag property initialization.
+- Resolution: IBARRA-086, direct stable per-occurrence identifiers on fresh handlers;
+  reserved setter overwrite protection is tracked by IBARRA-104.
 
-Failing methods:
+Resolved methods (2026-10-12, JspIdConsumer generation):
 
 - `sameJspIdTest`
 - `setJspIdTest`
 - `multipleJspIdTest`
+
 
 ## TCK-008 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.pagedata.URLClientIT
 

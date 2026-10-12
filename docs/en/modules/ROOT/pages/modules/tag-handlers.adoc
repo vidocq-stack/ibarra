@@ -73,6 +73,32 @@ simple parents through the standard TagAdapter for classic handlers.
 Unqualified DynamicAttributes use direct interface calls when advertised by
 the TLD and implemented by the handler.
 
+== Compiler-provided tag identifiers
+
+Classic and simple handlers implementing
+https://jakarta.ee/specifications/pages/4.0/apidocs/jakarta.servlet.jsp/jakarta/servlet/jsp/tagext/jspidconsumer[JspIdConsumer]
+receive a direct setJspId call during property initialization, after context/parent
+setup and before ordinary attributes. Class-File hierarchy inspection also detects
+the interface inherited through parent classes or interfaces; no runtime reflection
+or instance test is required.
+
+Each consumer occurrence in the expanded translation unit receives its own constant
+identifier, unique within that page and stable across requests. Repeated static
+includes get distinct identifiers even when their original source locations match.
+Repeated fragment invocations keep the identifier assigned to their tag occurrence
+and construct fresh handler instances. The emitted identifier begins with a letter
+and uses only letters, digits and underscores, satisfying the API's character rules.
+These request-time handler identifiers are independent of translation-time XML
+view jsp:id metadata. They do not enable pooling or handler reuse.
+
+Caller ordinary/named attributes targeting the consumer's setJspId(String) are
+rejected at translation, including capitalization or recipient-prefix aliases.
+Unqualified dynamic jspId attributes are also rejected. This protects the reserved
+container property from overwriting the generated identifier;
+https://jakarta.ee/specifications/pages/4.0/jakarta-server-pages-spec-4.0.html#_valid_names_for_actions_and_attributes[Pages 4.0 section 1.3.7]
+reserves jsp-prefixed attribute names. This bounded guard does not reject an entire
+TLD catalogue merely because an unused descriptor declares such a property.
+
 == Named attributes and explicit bodies
 
 Custom tags accept `jsp:attribute` before an optional `jsp:body`. Named attributes
@@ -121,6 +147,8 @@ bodies, writer targets, mixed parents, setter failures, catch/finally/release,
 skip-page propagation and metadata/URI precedence. HTTP tests precompile private
 application handlers and serve JSP/JSPX without exports, opens or compiler
 modules at runtime. Repeated requests prove fresh handler state.
+Identifier fixtures cover classic/simple inherited consumers, setter order,
+character rules, repeated includes/fragments and both page syntaxes.
 
 The independent Maven-goal example also compiles a SimpleTag with named scalar
 and fragment attributes and an explicit body. No new runtime or build dependency

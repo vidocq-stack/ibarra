@@ -1,5 +1,17 @@
 # BUG.md — Ibarra
 
+## IBARRA-104 · 2026-10-12 · Caller attributes overwrite compiler-provided JSP identifiers
+
+- Symptom: an ordinary/named jspId attribute, including the JspId capitalization
+  alias, binds setJspId(String) after the generated constant and replaces it.
+- Minimal repro: TagGenerationTest.ordinaryAndNamedAttributesCannotOverwriteTheCompilerIdentifierSetter.
+- Cause: ordinary setter binding does not distinguish the reserved consumer setter
+  from a caller-declared property. Pages 4.0 section 1.3.7 reserves jsp-prefixed names.
+- Status: FIXED by rejecting caller scalar setters targeting the consumer's
+  setJspId(String), plus the dynamic jspId spelling, during page generation.
+  The reserved-container-property rule applies to ordinary and named attributes,
+  including capitalization/prefix aliases, without rejecting unrelated TLD catalogues.
+
 ## IBARRA-102 · 2026-10-12 · WAR libraries prevent the last two official deployments
 
 - Symptom: tag-file packaging and TLD resource classes fail setup on WEB-INF/lib.
@@ -64,8 +76,8 @@
 
 ## IBARRA-098 · 2026-10-12 · Remaining official Pages assertions after deployment recovery
 
-- Symptom: the current full official run reports 197 method errors and no class-level
-  setup/deployment errors after 485 passing methods; the previous baseline was 470 passes.
+- Symptom: the current full official run reports 194 method errors and no class-level
+  setup/deployment errors after 488 passing methods; the previous baseline was 485 passes.
 - Minimal repro: `./run-official-tck-pages-4.0.sh all`; individual classes and
   failing method selectors are recorded under stable TCK ids in
   [ibarra-tck/FAILURES.md](ibarra-tck/FAILURES.md).
@@ -128,8 +140,14 @@
 - Symptom: sameJspIdTest, setJspIdTest and multipleJspIdTest fail over HTTP in
   `api.jakarta_servlet.jsp.tagext.jspidconsumer.URLClientIT`.
 - Minimal repro: select that fully qualified class with the official script.
-- Hypothesis: generated tag invocations do not supply stable per-node JSP IDs.
-- Status: OPEN, I6 generator follow-up; retained WAR/server logs reproduce it.
+- Cause: generated tag invocations omit JspIdConsumer.setJspId.
+- Status: FIXED by Class-File hierarchy detection and a direct constant setter for
+  each consumer occurrence during property initialization. Identifiers are unique
+  within the page, stable across requests and valid for the API's character rules.
+  Repeated source locations from static includes get distinct ids; fragment
+  invocations retain their node ids while constructing fresh handler instances.
+  Red/green compiled fixtures cover classic/simple inherited consumers and JSPX;
+  official verification is recorded in the diagnostic baseline.
 
 ## IBARRA-087 · 2026-10-12 · Official TagLibraryValidator assertions fail
 

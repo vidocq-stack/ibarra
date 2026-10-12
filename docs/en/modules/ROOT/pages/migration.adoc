@@ -38,6 +38,18 @@ Equal output duplicates are deduplicated and conflicting bytes are rejected.
 Explicit modular/multi-release libraries, web fragments, classpath services,
 Servlet annotations and initializers still need separate adaptation.
 
+== Compiler-provided tag IDs
+
+Classic/simple handlers implementing JspIdConsumer now receive a constant ID
+per tag occurrence during property initialization. The ID stays stable across
+requests to that generated page; handlers remain fresh per invocation.
+Repeated includes receive distinct occurrence IDs, while repeated fragment
+invocations retain their tag's ID. Application packages need no new module reads.
+
+Caller attributes targeting setJspId(String), including capitalization or named
+recipient-prefix aliases, fail translation instead of replacing the generated
+identifier. Dynamic jspId attributes on consumers are likewise rejected.
+
 == Ordinary custom-tag setter selection
 
 Ordinary tag attributes now use the handler's actual JavaBeans write method,

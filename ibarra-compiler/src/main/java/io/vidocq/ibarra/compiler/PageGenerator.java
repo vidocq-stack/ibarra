@@ -88,6 +88,7 @@ public final class PageGenerator {
         private final Map<String, String> beans = new LinkedHashMap<>();
         private boolean needsFactory;
         private int serial;
+        private int jspIdSerial;
         private final boolean startupElAllowed;
 
         Generator(Page page, String className, Map<String, String> properties, Map<String, Page.Syntax> sourceSyntaxes, String responseEncoding, GenerationOptions options, TldReferences.Resolved resolved) {
@@ -338,10 +339,12 @@ public final class PageGenerator {
             body.add(handler + (kind.simple() ? ".setJspContext(pageContext);\n" : ".setPageContext(pageContext);\n"), node.location());
             if (!kind.simple()) body.add(handler + ".setParent(" + classicParent(parentTag) + ");\n");
             else if (!parentTag.equals("null")) body.add(handler + ".setParent(" + parentTag + ");\n");
+            if (kind.jspIdConsumer()) body.add(handler + ".setJspId(" + JavaSource.quote("ibarra_tag_" + jspIdSerial++) + ");\n", node.location());
             for (var supplied : node.attributes().entrySet()) {
                 if (namespaceAttribute(supplied.getKey())) continue;
                 var attribute = tag.attributes().get(supplied.getKey());
                 if (attribute == null) {
+                    if (kind.jspIdConsumer() && supplied.getKey().equals("jspId")) throw error(node.location(), "Tag attribute cannot override compiler-provided jspId");
                     if (!tag.dynamicAttributes() || supplied.getKey().contains(":")) throw error(node.location(), "Unknown or namespaced tag attribute: " + supplied.getKey());
                     body.add(handler + ".setDynamicAttribute(null, " + JavaSource.quote(supplied.getKey()) + ", " + value(supplied.getValue(), node.location(), false) + ");\n", node.location());
                 } else {
@@ -350,6 +353,7 @@ public final class PageGenerator {
                             ? classes.tagSetter(tag.handlerClass(), attribute.name(), attribute.setterType(), node.location())
                             : classes.tagPropertySetter(tag.handlerClass(), attribute.name(), node.location());
                     var target = new TagAttribute(attribute.name(), setter.type(), attribute.required(), attribute.runtimeExpression(), false);
+                    protectJspIdSetter(kind, setter, node.location());
                     String argument = attribute.deferred() ? deferredAttribute(attributeInput(supplied.getValue(), node.location()), attribute, node.location())
                             : tagValue(supplied.getValue(), target, node.location());
                     body.add(handler + "." + setter.name() + "((" + setter.type() + ") (" + argument + "));\n", node.location());
@@ -362,12 +366,14 @@ public final class PageGenerator {
                 var attribute = tag.attributes().get(supplied.getKey());
                 var content = namedContent(named);
                 if (attribute == null) {
+                    if (kind.jspIdConsumer() && supplied.getKey().equals("jspId")) throw error(named.location(), "Tag attribute cannot override compiler-provided jspId");
                     if (!tag.dynamicAttributes() || supplied.getKey().contains(":")) throw error(named.location(), "Unknown or namespaced tag attribute: " + supplied.getKey());
                     body.add(handler + ".setDynamicAttribute(null, " + JavaSource.quote(supplied.getKey()) + ", " + capture(content, named.location(), handler) + ");\n", named.location());
                 } else {
                     var setter = attribute.fragment() || attribute.deferred()
                             ? classes.tagSetter(tag.handlerClass(), attribute.name(), attribute.setterType(), named.location())
                             : classes.tagPropertySetter(tag.handlerClass(), attribute.name(), named.location());
+                    protectJspIdSetter(kind, setter, named.location());
                     String argument;
                     if (attribute.fragment()) argument = fragment(content, named.location(), handler);
                     else if (attribute.deferred()) argument = deferredAttribute(deferredInput(content, named.location()), attribute, named.location());
@@ -529,6 +535,11 @@ public final class PageGenerator {
                 }
             }
         }
+        private void protectJspIdSetter(BeanClasses.Handler kind, BeanClasses.Accessor setter, SourceLocation at) {
+            if (kind.jspIdConsumer() && setter.name().equals("setJspId") && setter.type().equals("java.lang.String"))
+                throw error(at, "Tag attribute cannot override compiler-provided jspId");
+        }
+
         private String fragment(List<PageNode> nodes, SourceLocation at, String parent) {
             scriptless(nodes);
             String name = "_jspxFragment" + serial++;

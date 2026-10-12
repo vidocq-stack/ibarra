@@ -34,6 +34,107 @@ class TagGenerationTest {
     @TempDir Path directory;
 
     @Test
+    void jspIdsAreUniqueStableAndInitializedForInheritedClassicAndSimpleConsumers() throws Exception {
+        var options = jspIdOptions();
+        String output = render("<x:simple label='one'/>|<x:classic/>|<x:simple label='two'/>;", false, options, 2);
+        String[] requests = output.split(";");
+        assertEquals(2, requests.length); assertEquals(requests[0], requests[1]);
+        String[] ids = requests[0].split("\\|");
+        assertEquals(3, new HashSet<>(List.of(ids)).size());
+        for (String id : ids) assertTrue(id.matches("[A-Za-z_][A-Za-z0-9_-]*"), id);
+    }
+
+    @Test
+    void repeatedStaticIncludesReceiveDistinctIdsEvenWithIdenticalSourceLocations() throws Exception {
+        var ids = jspIdOptions();
+        var options = new GenerationOptions(ids.propertyGroups(), Map.of("/piece.jspf", "<x:simple/>"), false, ids.byteSources(), ids.tagLibraries());
+        String[] values = render("<%@ include file='piece.jspf' %>|<%@ include file='piece.jspf' %>", false, options).split("\\|");
+        assertEquals(2, values.length); assertNotEquals(values[0], values[1]);
+    }
+
+    @Test
+    void tagsInRepeatedFragmentsKeepTheirOwnIdsAndFreshHandlerInstances() throws Exception {
+        var options = jspIdOptions();
+        String[] ids = render("<x:echo label='fragment' count='2'><x:simple/>|<x:classic/>;</x:echo>", false,
+                new GenerationOptions(options.propertyGroups(), options.sources(), false, options.byteSources(),
+                        Map.of("urn:test", mergeJspIds(options.tagLibraries().get("urn:test"), options().tagLibraries().get("urn:test"))))).replace("[fragment:", "").replace("]", "").split(";");
+        assertEquals(2, ids.length); assertEquals(ids[0], ids[1]);
+        String[] nested = ids[0].split("\\|"); assertNotEquals(nested[0], nested[1]);
+    }
+
+    private TagLibraryDescriptor mergeJspIds(TagLibraryDescriptor ids, TagLibraryDescriptor ordinary) {
+        var tags = new LinkedHashMap<>(ordinary.tags()); tags.putAll(ids.tags());
+        return new TagLibraryDescriptor(ids.resourcePath(), ids.uri(), ids.listenerClasses(), tags, ids.validationRequired(), ids.functions());
+    }
+
+    @Test
+    void ordinaryAndNamedAttributesCannotOverwriteTheCompilerIdentifierSetter() throws Exception {
+        jspIdOptions();
+        var library = new TldParser().parse("/WEB-INF/override.tld", ("<taglib><uri>urn:test</uri><tag><name>simple</name><tag-class>fixture.Ids$Simple</tag-class><body-content>empty</body-content>"
+                + "<attribute><name>jspId</name></attribute><attribute><name>JspId</name></attribute></tag>"
+                + "<tag><name>dynamic</name><tag-class>fixture.Ids$Dynamic</tag-class><body-content>empty</body-content><dynamic-attributes>true</dynamic-attributes></tag></taglib>").getBytes(StandardCharsets.UTF_8));
+        var options = GenerationOptions.DEFAULT.withTagLibraries(Map.of("urn:test", library));
+        for (String source : List.of("<x:simple jspId='caller'/>", "<x:simple JspId='caller'/>",
+                "<x:simple><jsp:attribute name='jspId'>caller</jsp:attribute></x:simple>",
+                "<x:simple><jsp:attribute name='x:JspId'>caller</jsp:attribute></x:simple>",
+                "<x:dynamic jspId='caller'/>", "<x:dynamic><jsp:attribute name='jspId'>caller</jsp:attribute></x:dynamic>")) {
+            var failure = assertThrows(PageParseException.class, () -> generator().generate("/tags.jsp", prefix()+source, "fixture.GeneratedPage", options));
+            assertTrue(failure.getMessage().contains("compiler-provided jspId"), failure.getMessage());
+        }
+    }
+
+    @Test
+    void xmlTagsReceiveStableIdentifiersAcrossRequests() throws Exception {
+        String source = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:x='urn:test' version='3.0'>"
+                + "<jsp:directive.page session='false'/><x:simple label='xml'/>|<x:classic/>;</jsp:root>";
+        String[] requests = render(source, false, jspIdOptions(), 2).split(";");
+        assertEquals(2, requests.length); assertEquals(requests[0], requests[1]);
+        String[] ids = requests[0].split("\\|"); assertEquals(2, ids.length); assertNotEquals(ids[0], ids[1]);
+    }
+
+    private GenerationOptions jspIdOptions() throws Exception {
+        prepare();
+        compile(List.of(new GeneratedPage("fixture.Ids", """
+                package fixture;
+                import jakarta.servlet.jsp.*; import jakarta.servlet.jsp.tagext.*;
+                public class Ids {
+                    public interface Consumer extends JspIdConsumer { }
+                    public static class Base extends SimpleTagSupport implements Consumer {
+                        protected String id;
+                        public void setJspId(String value) {
+                            if (id != null || getJspContext() == null) throw new AssertionError("Reused tag or missing context");
+                            id=value;
+                        }
+                        public void setLabel(String label) { if (id == null) throw new AssertionError("ID not initialized before properties"); }
+                    }
+                    public static class Simple extends Base {
+                        public void doTag() throws java.io.IOException {
+                            if (id == null) throw new AssertionError("Missing JSP ID"); getJspContext().getOut().write(id);
+                        }
+                    }
+                    public static class Classic extends TagSupport implements Consumer {
+                        private String id;
+                        public void setJspId(String value) {
+                            if (id != null || pageContext == null) throw new AssertionError("Reused tag or missing context"); id=value;
+                        }
+                        public int doStartTag() throws JspException {
+                            if (id == null) throw new AssertionError("Missing JSP ID");
+                            try { pageContext.getOut().write(id); } catch(java.io.IOException failure) { throw new JspException(failure); }
+                            return SKIP_BODY;
+                        }
+                    }
+                    public static class Dynamic extends Simple implements DynamicAttributes {
+                        public void setDynamicAttribute(String uri, String name, Object value) { }
+                    }
+                }
+                """, Map.of())));
+        var library = new TldParser().parse("/WEB-INF/ids.tld", ("<taglib><uri>urn:test</uri>"
+                + "<tag><name>simple</name><tag-class>fixture.Ids$Simple</tag-class><body-content>empty</body-content><attribute><name>label</name></attribute></tag>"
+                + "<tag><name>classic</name><tag-class>fixture.Ids$Classic</tag-class><body-content>empty</body-content></tag></taglib>").getBytes(StandardCharsets.UTF_8));
+        return GenerationOptions.DEFAULT.withTagLibraries(Map.of("urn:test", library));
+    }
+
+    @Test
     void ordinaryRuntimeAttributesBindActualInheritedSetterTypes() throws Exception {
         var library = new TldParser().parse("/WEB-INF/ordinary.tld", ("<taglib><uri>urn:test</uri>"
                 + "<tag><name>implicitText</name><tag-class>fixture.Tags$RuntimeText</tag-class><body-content>scriptless</body-content><attribute><name>label</name><rtexprvalue>true</rtexprvalue></attribute></tag>"
@@ -297,8 +398,11 @@ class TagGenerationTest {
         return render(source, expectFailure, options());
     }
     private String render(String source, boolean expectFailure, GenerationOptions options) throws Exception {
+        return render(source, expectFailure, options, 1);
+    }
+    private String render(String source, boolean expectFailure, GenerationOptions options, int requests) throws Exception {
         prepare();
-        var generated = generator().generate("/tags.jsp", prefix()+source, "fixture.GeneratedPage", options);
+        var generated = generator().generate("/tags.jsp", source.startsWith("<jsp:root") ? source : prefix()+source, "fixture.GeneratedPage", options);
         String main = """
                 package io.vidocq.ibarra.core.internal;
                 import jakarta.servlet.*; import jakarta.servlet.jsp.*;
@@ -315,13 +419,13 @@ class TagGenerationTest {
                             public java.util.Enumeration<String> getInitParameterNames() { return java.util.Collections.emptyEnumeration(); }
                         });
                         String failureTrace="";
-                        try { page.service(new ServletDoubles.Request(), response); }
+                        try { for (int i=0;i<REQUEST_COUNT;i++) page.service(new ServletDoubles.Request(), response); }
                         catch (Throwable expected) { if (!EXPECT_FAILURE) throw expected; failureTrace=String.valueOf(context.getAttribute("trace")); }
                         if (EXPECT_FAILURE && failureTrace.isEmpty()) throw new AssertionError("Expected servlet failure");
                         System.out.print("RESULT=" + java.util.Base64.getEncoder().encodeToString(response.output.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                     }
                 }
-                """.replace("EXPECT_FAILURE", String.valueOf(expectFailure)).replace("response.output.toString().getBytes", "(failureTrace+response.output).getBytes");
+                """.replace("EXPECT_FAILURE", String.valueOf(expectFailure)).replace("REQUEST_COUNT", String.valueOf(requests)).replace("response.output.toString().getBytes", "(failureTrace+response.output).getBytes");
         Path root=Path.of(System.getProperty("user.dir")).toAbsolutePath(); if(!Files.isDirectory(root.resolve("ibarra-core"))) root=root.getParent();
         String doubles=Files.readString(root.resolve("ibarra-core/src/test/java/io/vidocq/ibarra/core/internal/ServletDoubles.java"));
         compile(List.of(generated,new GeneratedPage("io.vidocq.ibarra.core.internal.TagMain",main,Map.of()),
