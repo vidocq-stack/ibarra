@@ -16,7 +16,7 @@ Use Java 25, Maven 3.9.16 and Python 3 from the repository checkout:
 ```
 
 The script verifies/downloads the official artifacts, installs them locally,
-builds the current Ibarra reactor with `clean install`, runs eighteen adapter
+builds the current Ibarra reactor with `clean install`, runs twenty-six adapter
 regression tests, then runs the requested official classes. The default smoke
 selects three `JspFactory` tests, one `JspEngineInfo` test and fourteen descriptor
 character-sequence/EL/encoding tests (18 total). CI runs this smoke
@@ -116,6 +116,34 @@ noncanonical ZIP paths fail before extraction. Explicit module descriptors,
 multi-release entries, web fragments and classpath service metadata require
 separate adaptation and are rejected, rather than discarding their semantics.
 This bounded test-runner assembly does not change production Maven packaging.
+
+## Private bean property access
+
+Legacy WAR classes have no Peano annotation-processing output. The runner uses
+Class-File metadata to emit application-owned AccessorTable implementations and
+register an existing Peano AccessorProvider service before page precompilation.
+Property reads/writes call public instance methods directly; primitive reads box
+and writes use the supplied ELContext for conversion. Read-only/write-only/null
+properties preserve the resolution-flag contract. Inherited getters prefer primitive
+boolean is methods and the most-specific covariant return; compatible setter
+overloads use their unique most-specific parameter type.
+
+Tables remain in their bean's package, with no exports or opens. Discovery and
+provider class literals do not initialize the beans. Native Map/List/ResourceBundle/
+Record types retain their standard resolvers. Binary-path mismatches and generated
+class collisions abort adaptation without rewriting the original WAR classes.
+
+Hierarchy/signature lookup follows the application module's non-static reads,
+transitive visibility and qualified/unqualified exports. Unavailable/inaccessible
+targets receive explicit diagnostics in bean-accessor-errors.txt and no unusable
+table; their actual page failures remain visible. Lookup checks exact resources,
+so unrelated unreadable package owners cannot mask valid classes.
+
+This is bounded property adaptation in the unpublished runner. Arbitrary method
+invocation, static members, conversion/functional-interface tables and explicit
+handwritten BeanELResolver instances remain separate capabilities. Production
+applications continue to use Peano's processor or their own complete accessor
+providers; neither Ibarra core nor its Maven plugin gains this automatic feature.
 
 Current adapter diagnostics explicitly reject unadapted library metadata,
 annotated Servlet components requiring generated metadata, ServletContainerInitializer

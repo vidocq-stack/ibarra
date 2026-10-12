@@ -1,6 +1,6 @@
 # Jakarta Pages 4.0.0 diagnostic baseline
 
-Date: 2026-10-12. Temurin Java 25, Maven 3.9.16, macOS; Ibarra development
+Date: 2026-10-13. Temurin Java 25, Maven 3.9.16, macOS; Ibarra development
 version `0.4.0-SNAPSHOT`, modular Foy/Chappe and published Peano snapshots.
 This records compatibility checks, not a performance benchmark or certification.
 
@@ -20,23 +20,23 @@ and exact preparation commands are in [README.md](README.md).
 | Official classes selected | 92 |
 | Declared runtime-visible JUnit `@Test` methods in the official binary | 682 |
 | Official Surefire entries reported | 682 |
-| Passing test methods | 488 |
-| Failing method entries | 194 |
+| Passing test methods | 504 |
+| Failing method entries | 178 |
 | Class-level setup/deployment errors | 0 |
-| Total reported errors | 194 |
+| Total reported errors | 178 |
 | Assertion failures reported as Surefire `failure` | 0 |
 | Skipped entries | 0 |
-| Adapter regression tests (separate invocation) | 18/18 |
+| Adapter regression tests (separate invocation) | 26/26 |
 | CI smoke subset (factory/engine + character sequence/EL/encoding configuration) | 18/18 |
 
-Surefire reports `Tests run: 682, Failures: 0, Errors: 194, Skipped: 0` and exits
+Surefire reports `Tests run: 682, Failures: 0, Errors: 178, Skipped: 0` and exits
 nonzero. The TCK's HTTP assertion helper reports failures as exceptions, hence
 `errors` rather than `failures`; zero in the failure column does not mean success.
 
-**488/682 = 71.6% measured full-suite pass rate**. All 682 declared method entries
+**504/682 = 73.9% measured full-suite pass rate**. All 682 declared method entries
 now execute across the 92 official classes; there are no class-level setup errors
 or skipped entries. This records complete method execution for this distribution,
-not certification: 194 methods still report errors.
+not certification: 178 methods still report errors.
 
 The denominator was inventoried from the verified official jar with Java 25:
 
@@ -49,7 +49,7 @@ Count only annotation display lines containing exactly
 
 ## Passing coverage
 
-Thirty-eight classes pass completely, including JspFactory (3), JspEngineInfo (1),
+Thirty-nine classes pass completely, including JspFactory (3), JspEngineInfo (1),
 JspWriter (30), PageContext (43), ErrorData (5), BodyContent (5), DynamicAttributes
 (2), TagAdapter (8), VariableInfo (5), several EL API/implicit-resolver classes,
 implicit objects (9), character sequence/EL/encoding configuration (14), i18n
@@ -69,7 +69,7 @@ ordinary Ibarra unit tests or Peano's independent EL TCK.
 | BeanELResolver fixture access | One method fails in the private application module; IBARRA-085. |
 | JspIdConsumer | All three methods pass; IBARRA-086 fixed by stable per-occurrence generated identifiers. |
 | TagLibraryValidator | Two methods fail; IBARRA-087. |
-| TryCatchFinally | One method fails; IBARRA-088. |
+| TryCatchFinally | The official method passes; IBARRA-088 was an EL verifier-access issue, fixed through direct WAR property accessors. |
 | Unbuffered forward | One method fails; IBARRA-089. |
 | PropertyEditor conversion | One method fails; IBARRA-090. |
 | Invalid precompile query | One method fails; IBARRA-091. |
@@ -105,6 +105,13 @@ multipleJspIdTest, raising passes from 485 to 488 and reducing method errors to
 194. No previous pass regressed. Identifiers are constant per occurrence across
 requests/includes/fragments; handlers remain fresh. Caller setter overwrite
 protection is covered by IBARRA-104 and ordinary/named/dynamic regression cases.
+
+Direct WAR bean property services then raise passes from 488 to 504 and reduce
+method errors from 194 to 178. Sixteen restored methods cover BodyTagSupport,
+TagSupport, TryCatchFinally and five scripting EL coercion scenarios. No previous
+pass regressed. Complete method execution and zero deployment errors are preserved.
+The runner's bounded property adaptation uses existing Peano services with private
+packages/reflection denial; arbitrary methods/static members remain separate work.
 
 The full remaining inventory is in [FAILURES.md](FAILURES.md), tracked by
 IBARRA-098. Every currently failing class and method has a reproducible selector;

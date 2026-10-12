@@ -56,6 +56,12 @@ https://codefloe.com/Vidocq/peano[Peano's processor] or its public AccessorProvi
 contract. This permits direct access with `peano.reflection=deny`, without
 exports/opens. Ibarra core introduces no Peano-specific runtime lookup.
 
+The unpublished official runner now adapts legacy WAR property access through
+Class-File-generated Peano services, because its original bytecode has no processor
+output. It retains reflection denial and private packages. This bounded property
+feature does not change production compilation or provide general method/static
+member access; see xref:modules/official-tck-runner.adoc[the runner reference].
+
 == Page imports
 
 Page directives import explicit types, public nested types or packages. The four

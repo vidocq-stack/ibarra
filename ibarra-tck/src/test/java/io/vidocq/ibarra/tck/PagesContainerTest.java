@@ -34,6 +34,63 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PagesContainerTest {
     @Test
+    void everyPrimitivePropertyBoxesReadsAndCoercesWritesThroughTheEvaluationContext() throws Exception {
+        var war=ShrinkWrap.create(WebArchive.class,"primitive-beans.war")
+                .addClass(io.vidocq.ibarra.tck.fixtures.PrimitiveBean.class)
+                .addAsWebResource(new StringAsset("<jsp:useBean id='bean' class='io.vidocq.ibarra.tck.fixtures.PrimitiveBean'/>"
+                        + "<% var el=pageContext.getELContext(); var base=pageContext.getAttribute(\"bean\");"
+                        + "String[] names={\"booleanValue\",\"byteValue\",\"charValue\",\"shortValue\",\"intValue\",\"longValue\",\"floatValue\",\"doubleValue\"};"
+                        + "String[] values={\"true\",\"12\",\"x\",\"34\",\"56\",\"78\",\"1.5\",\"2.5\"};"
+                        + "for(int i=0;i<names.length;i++) el.getELResolver().setValue(el,base,names[i],values[i]); %>"
+                        + "${bean.booleanValue}|${bean.byteValue}|${bean.charValue}|${bean.shortValue}|${bean.intValue}|${bean.longValue}|${bean.floatValue}|${bean.doubleValue}"),"index.jsp");
+        var container=new PagesContainer();container.setup(new PagesConfiguration());
+        try {
+            var http=container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            try(var client=HttpClient.newHttpClient()) {
+                var response=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+http.getPort()+"/primitive-beans/index.jsp")).build(),HttpResponse.BodyHandlers.ofString());
+                assertEquals(200,response.statusCode(),response.body());assertEquals("true|12|x|34|56|78|1.5|2.5",response.body());
+            }
+            container.undeploy(war);
+        } finally { container.stop(); }
+    }
+    @Test
+    void mapResolutionIsPreservedAndUnusedBeansAreNotInitializedByDiscovery() throws Exception {
+        var war = ShrinkWrap.create(WebArchive.class,"map-beans.war")
+                .addClasses(io.vidocq.ibarra.tck.fixtures.PropertyMap.class,io.vidocq.ibarra.tck.fixtures.MetadataBean.class)
+                .addAsWebResource(new StringAsset("<jsp:useBean id='mapping' class='io.vidocq.ibarra.tck.fixtures.PropertyMap'/>${mapping.name}"),"index.jsp");
+        var container=new PagesContainer();container.setup(new PagesConfiguration());
+        try {
+            var http=container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            try(var client=HttpClient.newHttpClient()) {
+                var response=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+http.getPort()+"/map-beans/index.jsp")).build(),HttpResponse.BodyHandlers.ofString());
+                assertEquals(200,response.statusCode(),response.body());assertEquals("map",response.body());
+            }
+            container.undeploy(war);
+        } finally { container.stop(); }
+    }
+    @Test
+    void privateWarBeanPropertiesUseDirectAccessorServicesWithReflectionDenied() throws Exception {
+        var war = ShrinkWrap.create(WebArchive.class, "beans.war")
+                .addClasses(io.vidocq.ibarra.tck.fixtures.PropertyBean.class, io.vidocq.ibarra.tck.fixtures.PropertyParent.class, io.vidocq.ibarra.tck.fixtures.PropertyView.class)
+                .addAsWebResource(new StringAsset("<%@ page session='false' %><jsp:useBean id='bean' class='io.vidocq.ibarra.tck.fixtures.PropertyBean'/>"
+                        + "${bean.name}|${bean.count = '7'}|${bean.count}|${bean.active}|${bean.readOnly}|${bean['empty'] == null}"), "index.jsp")
+                .addAsWebResource(new StringAsset("<%@ page session='false' %><jsp:useBean id='bean' class='io.vidocq.ibarra.tck.fixtures.PropertyBean'/>"
+                        + "<% var el=pageContext.getELContext(); var base=pageContext.getAttribute(\"bean\");"
+                        + "out.print(el.getELResolver().isReadOnly(el,base,\"readOnly\")); out.print(\"|\");"
+                        + "out.print(el.getELResolver().getType(el,base,\"readOnly\")==null); %>"), "readonly.jsp");
+        var container = new PagesContainer(); container.setup(new PagesConfiguration());
+        try {
+            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            try (var client = HttpClient.newHttpClient()) {
+                var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/beans/index.jsp")).build(), HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, response.statusCode(), response.body()); assertEquals("private|7|7|true|parent|true", response.body());
+                response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/beans/readonly.jsp")).build(), HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, response.statusCode(), response.body()); assertEquals("true|true", response.body());
+            }
+            container.undeploy(war);
+        } finally { container.stop(); }
+    }
+    @Test
     void warLibrariesShareThePrivateApplicationModuleAndDiscoverTheirTlds() throws Exception {
         var library = ShrinkWrap.create(org.jboss.shrinkwrap.api.spec.JavaArchive.class, "tags.jar")
                 .addClass(LibraryTag.class)

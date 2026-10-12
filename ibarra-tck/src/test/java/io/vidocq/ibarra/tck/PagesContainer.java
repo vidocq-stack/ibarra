@@ -100,6 +100,17 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
             Files.writeString(descriptor, "module tck.application { requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; requires io.vidocq.foy.api; " + service + " }");
             compile("--module-path", join(modules), "--patch-module", "tck.application=" + classes,
                     "-d", classes.toString(), descriptor.toString());
+            var beanAccessors = BeanAccessors.generate(classes, modules);
+            var beanProviders = beanAccessors.providers();
+            var beanDiagnostics = new ArrayList<String>();
+            new TreeMap<>(beanAccessors.unsupported()).forEach((type, reason) -> beanDiagnostics.add(type+"\n"+reason+"\n"));
+            Files.write(work.resolve("bean-accessor-errors.txt"),beanDiagnostics);
+            if (!beanProviders.isEmpty()) {
+                Files.writeString(descriptor, "module tck.application { requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; requires io.vidocq.foy.api; " + service
+                        + "provides io.vidocq.peano.spi.AccessorProvider with " + String.join(",", beanProviders) + "; }");
+                compile("--module-path", join(modules), "--patch-module", "tck.application=" + classes,
+                        "-d", classes.toString(), descriptor.toString());
+            }
             var result = new PagePrecompiler().precompileDeployment(web, classes, modules, null, new GenerationOptions(groups, Map.of()));
             var diagnostics = new ArrayList<String>();
             new TreeMap<>(result.failures()).forEach((page, failure) -> diagnostics.add(page + "\n" + failure + "\n"));
@@ -154,7 +165,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
 
     private static String join(List<Path> paths) { return String.join(File.pathSeparator, paths.stream().map(Path::toString).toList()); }
 
-    private static List<Path> modulePaths(boolean compiler) throws IOException {
+    static List<Path> modulePaths(boolean compiler) throws IOException {
         String available = System.getProperty("jdk.module.path", "") + File.pathSeparator + System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
         var paths = new ArrayList<Path>();
         for (String item : available.split(Pattern.quote(File.pathSeparator))) {

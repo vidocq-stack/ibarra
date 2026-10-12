@@ -38,6 +38,19 @@ Equal output duplicates are deduplicated and conflicting bytes are rejected.
 Explicit modular/multi-release libraries, web fragments, classpath services,
 Servlet annotations and initializers still need separate adaptation.
 
+== Legacy WAR bean properties in the official runner
+
+The unpublished runner now supplies direct Peano property accessors for eligible
+legacy WAR bean classes, without exports/opens or reflective property access.
+Inherited JavaBeans properties and primitive conversion use generated calls and
+the current ELContext. Native containers keep their standard resolver behaviour.
+
+Unadapted hierarchy/signature types are recorded in bean-accessor-errors.txt;
+their real page errors remain visible. General method/static member access and
+handwritten BeanELResolver calls remain separate capabilities. Production
+applications still generate/register their own accessors through Peano's processor
+or SPI; the Ibarra Maven plugin's dependency contract is unchanged.
+
 == Compiler-provided tag IDs
 
 Classic/simple handlers implementing JspIdConsumer now receive a constant ID

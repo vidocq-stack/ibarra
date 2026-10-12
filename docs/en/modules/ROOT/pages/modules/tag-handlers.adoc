@@ -130,6 +130,13 @@ scripting variables, TagExtraInfo, TagLibraryValidator and tag files
 remain follow-up work. Unsupported invoked metadata fails
 translation; no reflective fallback or handler pooling is enabled.
 
+The official TEI metadata fixtures also share/reset translation-time static state
+with their JSP requests. Build-side validation alone does not preserve that state
+in the separate server process. The observed contract and required design work are
+recorded in link:{repo-ibarra}/src/branch/main/studies/tag-extra-info-aot.md[the TEI/AOT study].
+Metadata models, validation and variables remain incomplete; no fixture rewrite
+or artificial passing marker is used.
+
 Java-expression request values must be compatible with the selected ordinary setter
 parameter. Fragment, ValueExpression, MethodExpression and mixed Object setter
 contracts remain exact.

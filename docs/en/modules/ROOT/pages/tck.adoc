@@ -8,7 +8,7 @@ executes all declared methods but remains failing; Ibarra is not certified.
 
 == Recorded baseline
 
-Run date: 2026-10-12, Temurin Java 25 and Maven 3.9.16.
+Run date: 2026-10-13, Temurin Java 25 and Maven 3.9.16.
 
 [source,bash]
 ----
@@ -18,14 +18,14 @@ Run date: 2026-10-12, Temurin Java 25 and Maven 3.9.16.
 
 Official artifacts had already been prepared; the smoke command clean-installs the reactor.
 The verified official binary contains 92 test classes and 682 declared JUnit
-`@Test` methods. The run records *488 passing methods* and *194 failing methods*,
+`@Test` methods. The run records *504 passing methods* and *178 failing methods*,
 with *zero class-level setup/deployment errors*. Surefire therefore reports 682
-entries, 194 errors, zero assertion failures and zero skips, and exits nonzero.
+entries, 178 errors, zero assertion failures and zero skips, and exits nonzero.
 The upstream HTTP assertion helper reports failures as exceptions.
 
-*488/682 = 71.6% measured full-suite pass rate*. All 682 declared test methods
+*504/682 = 73.9% measured full-suite pass rate*. All 682 declared test methods
 execute across 92 official classes, with no skipped methods or deployment blockers.
-The suite remains failing and uncertified because 194 methods report errors.
+The suite remains failing and uncertified because 178 methods report errors.
 
 The detailed command, binary inventory, counts and remaining categories are in
 link:{repo-ibarra}/src/branch/main/ibarra-tck/BASELINE.md[the recorded baseline].
@@ -50,8 +50,15 @@ including inherited classic/simple consumers. No previous pass regressed.
 See xref:modules/tag-handlers.adoc[Tag handlers] for identifier initialization,
 repeatable fragments and protection of the reserved container setter.
 
+Direct legacy WAR property accessors restore sixteen more methods across
+BodyTagSupport, TagSupport, TryCatchFinally and scripting EL coercion. The
+TryCatchFinally failure was its private verifier's denied property access;
+handler lifecycle generation is unchanged. No previous pass regressed.
+See xref:modules/official-tck-runner.adoc[the runner reference] for the bounded
+property services and preserved reflection/module boundaries.
+
 `official-pages-tck-smoke` runs on pull requests and `main`. It clean-installs
-Ibarra, runs eighteen adapter regression tests, then three official JspFactory
+Ibarra, runs twenty-six adapter regression tests, then three official JspFactory
 tests, one JspEngineInfo test and fourteen character-sequence/EL/encoding
 configuration tests. This deliberately bounded regression check
 does not claim 100% Pages coverage. Full-suite certification is milestone I8;

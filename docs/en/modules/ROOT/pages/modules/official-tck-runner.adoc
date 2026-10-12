@@ -98,3 +98,25 @@ test-runner feature; production Maven packaging remains unchanged.
 The adapter explicitly rejects unadapted library metadata, Servlet annotation metadata and
 initializers that it cannot yet adapt. Invalid global configuration and TLD
 metadata still abort deployment. These remain visible full-suite errors.
+
+== Private bean property tables
+
+Legacy WAR bean properties receive build-generated Peano AccessorTable/AccessorProvider
+services in the existing application module. Class-File metadata supplies direct
+getter/setter calls, boxing and ELContext conversion. Inherited property lookup
+honours boolean getter precedence, covariant returns and compatible most-specific
+setter overloads. Null, read-only and write-only properties preserve resolution flags.
+
+Tables stay in the bean package without exports/opens; neither metadata discovery
+nor provider class literals initialize bean classes. Map, List, ResourceBundle and
+Record hierarchies retain native resolver semantics. Runtime reflection stays denied.
+
+Lookup follows actual module reads/exports, including qualified exports; exact
+resource checks avoid unrelated package-owner masking. Unsupported hierarchy or
+signature types are reported in bean-accessor-errors.txt without registering an
+unusable target. Binary identity mismatches and class collisions fail adaptation.
+
+This unpublished runner feature covers properties. General method invocation,
+static members, conversions/functional adapters and explicit BeanELResolver calls
+remain follow-up capabilities. Production compilation and dependency contracts
+remain unchanged; no runtime parser, compiler or new SPI is introduced.

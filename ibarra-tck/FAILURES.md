@@ -1,8 +1,8 @@
 # Official Pages failure inventory
 
-Date: 2026-10-12, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-This inventory records the remaining 194 method errors and no setup errors
-after legacy WAR library and JspIdConsumer generation. All 682 official methods now execute. Each class keeps its previous stable id.
+Date: 2026-10-13, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
+This inventory records the remaining 178 method errors and no setup errors
+after legacy WAR library, JspIdConsumer and direct property-accessor generation. All 682 official methods now execute. Each class keeps its previous stable id.
 Resolved method entries remain as a trace; other causes still need investigation.
 Append new ids when discovering new failing classes, without renumbering records.
 
@@ -68,11 +68,15 @@ for explicit root web.xml components without application exports/opens.
 
 Failing methods:
 
-- `bodyTagSupportEvalBodyBufferedTest`
 - `bodyTagSupportVariableSynchronizationTest`
+
+Resolved methods (2026-10-13, direct WAR bean property access):
+
+- `bodyTagSupportEvalBodyBufferedTest`
 - `bodyTagSupportSkipBodyTest`
 - `bodyTagSupportEvalBodyIncludeTest`
 - `bodyTagSupportEmptyTagTest`
+
 
 ## TCK-006 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.functioninfo.URLClientIT
 
@@ -264,13 +268,17 @@ Failing methods:
 
 Failing methods:
 
+- `tagSupportVariableSynchronizationTest`
+
+Resolved methods (2026-10-13, direct WAR bean property access):
+
 - `tagSupportDoEndTagSkipPageTest`
 - `tagSupportDoStartEvalBodyIncludeTest`
 - `tagSupportDoEndTagEvalPageTest`
 - `tagSupportDoStartSkipBodyTest`
 - `tagSupportDoAfterBodySkipBodyTest`
-- `tagSupportVariableSynchronizationTest`
 - `tagSupportDoAfterBodyEvalBodyAgainTest`
+
 
 ## TCK-018 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagvariableinfo.URLClientIT
 
@@ -291,14 +299,15 @@ Failing methods:
 ## TCK-019 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.trycatchfinally.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
+- Status: RESOLVED; the official class now passes.
+- Symptom: the verifier's private bean previously failed with reflection fallback denied.
 - Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.trycatchfinally.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Cause: private WAR bean properties had no direct accessor provider (IBARRA-106); handler lifecycle generation remains unchanged.
 
-Failing methods:
+Resolved methods (2026-10-13, direct WAR bean property access):
 
 - `tryCatchFinallyTest`
+
 
 ## TCK-020 — ee.jakarta.tck.pages.signaturetest.jsp.JSPSigTestIT
 
@@ -607,11 +616,15 @@ Failing methods:
 Failing methods:
 
 - `elInvocationAndUsageTest`
+
+Resolved methods (2026-10-13, direct WAR bean property access):
+
 - `elPrimitiveBoxedTypeConversionTest`
 - `elBooleanCoercionTest`
 - `elNumberCoercionTest`
 - `elCharacterCoercionTest`
 - `elStringCoercionTest`
+
 
 ## TCK-043 — ee.jakarta.tck.pages.spec.el.jsp.URLClientIT
 

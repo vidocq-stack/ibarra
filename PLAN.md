@@ -229,6 +229,11 @@ the runtime's packaging goal, after I8.
   preserving shared packages, original JAR resources and separate TLD metadata.
   Explicit modular/multi-release libraries, fragments, classpath services,
   annotations and initializer providers remain unsupported.
+  Legacy private WAR bean properties receive Class-File-generated Peano accessor
+  services, with module visibility checks and reflection denial preserved. General
+  methods/static members remain separate capabilities. The TEI fixture lifecycle
+  constraint and remaining metadata design are recorded in
+  [studies/tag-extra-info-aot.md](studies/tag-extra-info-aot.md).
   Degraded runtime translation is not used as a fallback.
 - Script `run-official-tck-pages-4.0.sh` (`smoke` / `all` / `-Dtest=`), modelled
   on `foy/run-official-tck-servlet6.1.sh`.

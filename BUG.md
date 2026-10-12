@@ -1,5 +1,86 @@
 # BUG.md — Ibarra
 
+## IBARRA-108 · 2026-10-13 · Interface-first bean lookup widens a covariant getter
+
+- Symptom: a parent String getter becomes Object from an interface, making an
+  incompatible Integer setter writable instead of read-only.
+- Minimal repro: the private WAR bean fixture's interface/parent readOnly property;
+  HTTP metadata was false|false before the fix, instead of true|true.
+- Cause: getter selection keeps the first interface descriptor rather than the
+  most-specific covariant return type across the hierarchy.
+- Status: FIXED by covariant getter selection with primitive boolean is-getter
+  precedence before compatible most-specific setter selection.
+
+## IBARRA-109 · 2026-10-13 · Automatic bean tables shadow native map key resolution
+
+- Symptom: a Map subclass's getName returns bean even though its name key is map.
+- Minimal repro: PagesContainerTest.mapResolutionIsPreservedAndUnusedBeansAreNotInitializedByDiscovery.
+- Cause: an automatic provider before the standard Map resolver claims a getter
+  on a native container type extracted from legacy WAR classes.
+- Status: FIXED by excluding Map, List, ResourceBundle and Record hierarchies;
+  native resolvers retain their semantics. The Map assertion was red first.
+
+## IBARRA-110 · 2026-10-13 · Accessor targets include unreadable or unexported hierarchy types
+
+- Symptom: an available but inaccessible dependency yields an unusable table,
+  whose eager target class lookup can fail during service discovery.
+- Minimal repro: BeanAccessorsTest.unavailableAndUnexportedHierarchiesDoNotProduceUnusableTables.
+- Cause: the original reader scans available artifacts without application
+  module reads/exports and signature visibility constraints.
+- Status: FIXED by non-static direct/transitive reads, qualified export checks
+  and signature accessibility. Unadapted targets have bean-accessor-errors.txt
+  diagnostics; real page errors remain visible. Positive qualified exports pass.
+
+## IBARRA-111 · 2026-10-13 · Bean bytecode identity differs from its archive path
+
+- Symptom: app/Wrong.class declaring app.Bean yields an unloadable accessor target.
+- Minimal repro: BeanAccessorsTest.mismatchedBinaryPathsAreRejectedBeforeProviderRegistration.
+- Cause: generation trusts thisClass without comparing the extracted path.
+- Status: FIXED by binary identity validation before emission; mismatches abort
+  adaptation without changing original application class bytes.
+
+## IBARRA-112 · 2026-10-13 · Unreadable package owner masks a readable dependency class
+
+- Symptom: support.Other in a.unread masks support.Parent in z.support,
+  producing no provider for a valid bean.
+- Minimal repro: BeanAccessorsTest.unrelatedUnreadableModuleCannotMaskTheReadableClassInTheSamePackage.
+- Cause: package ownership is rejected before checking the exact class entry.
+- Status: FIXED by exact resource lookup, continued readable candidates and
+  inaccessible-hit diagnostics only after exhausting the search. Red/green verified.
+
+## IBARRA-105 · 2026-10-13 · Official TEI fixtures rely on runtime-visible translation state
+
+- Symptom: TagAttributeInfo and related metadata scenarios remain blocked by
+  unsupported TEI metadata; their JSPs also require the TEI helper's shared static
+  validation flag and reset it after serving each request.
+- Minimal repro: official api.jakarta_servlet.jsp.tagext.tagattributeinfo.URLClientIT;
+  inspect BaseTCKExtraInfo.validate and GetNameTest.jsp in the unchanged 4.0.0 binary.
+- Hypothesis: build-side TEI execution alone cannot reproduce this cross-phase
+  fixture state in the runner's separate compiler-free server process.
+- Status: OPEN; the evidence and required design follow-up are recorded in
+  [studies/tag-extra-info-aot.md](studies/tag-extra-info-aot.md). No challenge is filed
+  and no fixture rewrite, fake marker or request-time validation replay is used.
+
+## IBARRA-106 · 2026-10-13 · Private WAR bean properties have no direct EL accessors
+
+- Symptom: TryCatchFinally's valid page fails with Reflection fallback denied for
+  ResultVerifierBean; ordinary private WAR bean property reads/writes likewise fail.
+- Minimal repro: official api.jakarta_servlet.jsp.tagext.trycatchfinally.URLClientIT
+  and PagesContainerTest.privateWarBeanPropertiesUseDirectAccessorServicesWithReflectionDenied.
+- Cause: original WAR bytecode has no Peano-generated property provider, while the
+  server deliberately denies reflection and keeps application packages private.
+- Status: FIXED; build-only Class-File property table/service generation
+  uses the existing Peano SPI in the same module, preserving both runtime boundaries.
+
+## IBARRA-107 · 2026-10-13 · Generated bean provider uses a class reference for List.of
+
+- Symptom: accessor discovery throws IncompatibleClassChangeError and closes HTTP
+  requests before a response because List.of requires an InterfaceMethodref.
+- Minimal repro: the new private bean HTTP adapter fixture before the bytecode fix.
+- Cause: invokestatic emission uses the default class-member constant for java.util.List.
+- Status: FIXED by explicitly marking the static interface invocation; the complete
+  adapter suite then passes, including private property reads and primitive writes.
+
 ## IBARRA-104 · 2026-10-12 · Caller attributes overwrite compiler-provided JSP identifiers
 
 - Symptom: an ordinary/named jspId attribute, including the JspId capitalization
@@ -76,8 +157,8 @@
 
 ## IBARRA-098 · 2026-10-12 · Remaining official Pages assertions after deployment recovery
 
-- Symptom: the current full official run reports 194 method errors and no class-level
-  setup/deployment errors after 488 passing methods; the previous baseline was 485 passes.
+- Symptom: the current full official run reports 178 method errors and no class-level
+  setup/deployment errors after 504 passing methods; the previous baseline was 488 passes.
 - Minimal repro: `./run-official-tck-pages-4.0.sh all`; individual classes and
   failing method selectors are recorded under stable TCK ids in
   [ibarra-tck/FAILURES.md](ibarra-tck/FAILURES.md).
@@ -162,8 +243,10 @@
 - Symptom: `api.jakarta_servlet.jsp.tagext.trycatchfinally.URLClientIT#tryCatchFinallyTest`
   reports Test FAILED despite the existing handler unit tests passing.
 - Minimal repro: select that fully qualified class with the official script.
-- Hypothesis: a nested handler/body exception path differs from the official expected output.
-- Status: OPEN, isolate the failing page and record its response before changing the generator.
+- Cause: the verifier's private bean has no generated EL property accessor;
+  server.log reports Peano reflection fallback denial, rather than a callback fault.
+- Status: FIXED by runner-owned direct property tables; the unmodified official
+  TryCatchFinally scenario passes without changing handler lifecycle generation.
 
 ## IBARRA-089 · 2026-10-12 · Official unbuffered forward scenario fails
 
