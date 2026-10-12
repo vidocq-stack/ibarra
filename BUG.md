@@ -1,5 +1,27 @@
 # BUG.md — Ibarra
 
+## IBARRA-102 · 2026-10-12 · WAR libraries prevent the last two official deployments
+
+- Symptom: tag-file packaging and TLD resource classes fail setup on WEB-INF/lib.
+- Minimal repro: official `spec.tagfiles.packaging.URLClientIT` and `spec.tldres.URLClientIT`.
+- Cause: legacy WAR libraries are rejected before compilation, and their overlapping
+  packages cannot be placed in independent named dependency modules.
+- Status: FIXED for bounded legacy libraries by build-side assembly into the existing
+  private application module. Original JARs remain unchanged for physical TLD references;
+  library TLDs retain separate discovery paths. Conflicting bytecode/resources and
+  unsupported module/version/fragment/service metadata fail explicitly. Both classes
+  now execute 22 official methods (15 passing); tag-file and URI assertions remain open.
+
+## IBARRA-103 · 2026-10-12 · Noncanonical library entries bypass metadata rejection
+
+- Symptom: ./module-info.class or META-INF/./web-fragment.xml is accepted despite
+  the runner's explicit rejection of those metadata capabilities.
+- Minimal repro: WarLibrariesTest.unsafeLibraryPathsCannotEscapeTheApplicationRoot;
+  the added dotted-name case was red before the fix.
+- Cause: classification uses the raw ZIP entry while its destination is normalized.
+- Status: FIXED by rejecting empty, dot and parent segments before classification
+  or extraction, as well as absolute paths and backslash separators.
+
 ## IBARRA-101 · 2026-10-12 · Generated component constructors leak checked Throwable
 
 - Symptom: a constructor declared `throws Throwable` propagates a checked failure
@@ -42,8 +64,8 @@
 
 ## IBARRA-098 · 2026-10-12 · Remaining official Pages assertions after deployment recovery
 
-- Symptom: the current full official run reports 190 method errors and 2 class-level
-  setup/deployment errors after 470 passing methods; the previous baseline was 467 passes.
+- Symptom: the current full official run reports 197 method errors and no class-level
+  setup/deployment errors after 485 passing methods; the previous baseline was 470 passes.
 - Minimal repro: `./run-official-tck-pages-4.0.sh all`; individual classes and
   failing method selectors are recorded under stable TCK ids in
   [ibarra-tck/FAILURES.md](ibarra-tck/FAILURES.md).

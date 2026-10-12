@@ -19,6 +19,9 @@
  */
 package io.vidocq.ibarra.tck;
 
+import io.vidocq.ibarra.tck.fixtures.LibraryHelper;
+import io.vidocq.ibarra.tck.fixtures.LibraryTag;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -30,6 +33,35 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PagesContainerTest {
+    @Test
+    void warLibrariesShareThePrivateApplicationModuleAndDiscoverTheirTlds() throws Exception {
+        var library = ShrinkWrap.create(org.jboss.shrinkwrap.api.spec.JavaArchive.class, "tags.jar")
+                .addClass(LibraryTag.class)
+                .addAsResource(new StringAsset("<taglib xmlns='https://jakarta.ee/xml/ns/jakartaee' version='3.0'><tlib-version>1.0</tlib-version><short-name>lib</short-name><uri>urn:library</uri><tag><name>value</name><tag-class>"
+                        + LibraryTag.class.getName() + "</tag-class><body-content>empty</body-content></tag></taglib>"), "META-INF/taglib.tld")
+                .addAsResource(new StringAsset("resource"), "library.txt");
+        var second = ShrinkWrap.create(org.jboss.shrinkwrap.api.spec.JavaArchive.class, "second.jar")
+                .addAsResource(new StringAsset("<taglib xmlns='https://jakarta.ee/xml/ns/jakartaee' version='3.0'><tlib-version>1.0</tlib-version><short-name>second</short-name><uri>urn:second</uri><tag><name>value</name><tag-class>"
+                        + LibraryTag.class.getName() + "</tag-class><body-content>empty</body-content></tag></taglib>"), "META-INF/taglib.tld");
+        var war = ShrinkWrap.create(WebArchive.class, "libraries.war").addAsLibrary(library)
+                .addAsLibrary(second)
+                .addClass(LibraryHelper.class)
+                .addAsWebResource(new StringAsset("<%@ taglib prefix='lib' uri='urn:library' %><lib:value/>"), "index.jsp")
+                .addAsWebResource(new StringAsset("<%@ taglib prefix='lib' uri='/WEB-INF/lib/tags.jar' %><lib:value/>"), "direct.jsp")
+                .addAsWebResource(new StringAsset("<%@ taglib prefix='lib' uri='urn:second' %><lib:value/>"), "second.jsp");
+        var container = new PagesContainer(); container.setup(new PagesConfiguration());
+        try {
+            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            try (var client = HttpClient.newHttpClient()) {
+                for (String page : java.util.List.of("index.jsp", "direct.jsp", "second.jsp")) {
+                    var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/libraries/" + page)).build(), HttpResponse.BodyHandlers.ofString());
+                    assertEquals(200, response.statusCode(), response.body()); assertEquals("helper|resource|private", response.body());
+                }
+            }
+            container.undeploy(war);
+        } finally { container.stop(); }
+    }
+
     @Test
     void descriptorComponentsUseDirectFactoriesInUnexportedApplicationPackages() throws Exception {
         String servlet = DescriptorServlet.class.getName();

@@ -4,7 +4,7 @@
 [.lead]
 The official Jakarta Pages 4.0.0 TCK now runs through a build-side Arquillian
 adapter on Foy. The eighteen-test smoke subset passes. The full diagnostic attempt
-is incomplete and failing; Ibarra is not certified.
+executes all declared methods but remains failing; Ibarra is not certified.
 
 == Recorded baseline
 
@@ -12,19 +12,20 @@ Run date: 2026-10-12, Temurin Java 25 and Maven 3.9.16.
 
 [source,bash]
 ----
-./run-official-tck-pages-4.0.sh all --no-prepare
+./run-official-tck-pages-4.0.sh smoke --no-prepare
+./run-official-tck-pages-4.0.sh all --no-install --no-prepare
 ----
 
-Official artifacts had already been prepared; the command clean-installs the reactor.
+Official artifacts had already been prepared; the smoke command clean-installs the reactor.
 The verified official binary contains 92 test classes and 682 declared JUnit
-`@Test` methods. The run records *470 passing methods* and *190 failing methods*,
-plus *2 class-level setup/deployment errors*. Surefire therefore reports 662
-entries, 192 errors, zero assertion failures and zero skips, and exits nonzero.
+`@Test` methods. The run records *485 passing methods* and *197 failing methods*,
+with *zero class-level setup/deployment errors*. Surefire therefore reports 682
+entries, 197 errors, zero assertion failures and zero skips, and exits nonzero.
 The upstream HTTP assertion helper reports failures as exceptions.
 
-*470/682 = 68.9% confirmed passes*, a conservative floor, not a complete suite
-pass rate. Only 660 method entries ran. Class-level errors prevent whole groups
-of methods from executing; they must not be counted as executed methods.
+*485/682 = 71.1% measured full-suite pass rate*. All 682 declared test methods
+execute across 92 official classes, with no skipped methods or deployment blockers.
+The suite remains failing and uncertified because 197 methods report errors.
 
 The detailed command, binary inventory, counts and remaining categories are in
 link:{repo-ibarra}/src/branch/main/ibarra-tck/BASELINE.md[the recorded baseline].
@@ -36,8 +37,8 @@ Passing classes include JspFactory, JspEngineInfo, JspWriter, PageContext,
 ErrorData, BodyContent, DynamicAttributes, TagAdapter, VariableInfo, several
 EL/implicit-resolver API tests, implicit objects, character-sequence/EL/encoding
 configuration, i18n and scripting syntax.
-Other classes pass partially; the full suite remains blocked by translation,
-tag metadata/files and WAR-adaptation gaps.
+Other classes pass partially; remaining failures include translation,
+tag metadata/files, routing, API and signature-tooling gaps.
 
 Ordinary TLD keyword/setter fixes add 40 confirmed passes, remove three setup
 blockers and restore four previously failing EL methods, without a regression
@@ -45,7 +46,7 @@ among previously passing methods. See xref:modules/tag-handlers.adoc[Tag handler
 for the actual-property binding rules and remaining boundaries.
 
 `official-pages-tck-smoke` runs on pull requests and `main`. It clean-installs
-Ibarra, runs thirteen adapter regression tests, then three official JspFactory
+Ibarra, runs eighteen adapter regression tests, then three official JspFactory
 tests, one JspEngineInfo test and fourteen character-sequence/EL/encoding
 configuration tests. This deliberately bounded regression check
 does not claim 100% Pages coverage. Full-suite certification is milestone I8;
@@ -70,8 +71,12 @@ Root web.xml Servlet/filter/listener classes in WEB-INF/classes now receive dire
 build-generated Foy factories, with application packages kept private. This removes
 three setup blockers and adds three passing API tests; general configuration now
 executes and exposes three method errors. No previous pass regressed.
-Libraries, Servlet annotations and initializers that cannot yet be adapted fail
-explicitly; invalid global metadata still aborts deployment.
+Legacy WAR libraries now assemble into the existing private module, preserving
+shared packages, physical JAR references and distinct TLD discovery paths.
+This removes the final two setup blockers and adds 15 passes from 22 newly runnable
+methods. Seven new method errors remain, with no regression among previous passes.
+Unadapted library metadata, Servlet annotations and initializers fail explicitly;
+invalid global metadata still aborts deployment.
 
 See xref:modules/official-tck-runner.adoc[Official TCK runner] for dependencies,
 commands, artifact preparation, retained logs and limits.

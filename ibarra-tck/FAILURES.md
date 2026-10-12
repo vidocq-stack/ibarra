@@ -1,8 +1,8 @@
 # Official Pages failure inventory
 
 Date: 2026-10-12, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-This inventory records the remaining 190 method errors and two setup errors
-after descriptor component factory adaptation. Each class keeps its previous stable id.
+This inventory records the remaining 197 method errors and no setup errors
+after legacy WAR library adaptation. All 682 official methods now execute. Each class keeps its previous stable id.
 Resolved method entries remain as a trace; other causes still need investigation.
 Append new ids when discovering new failing classes, without renumbering records.
 
@@ -809,9 +809,23 @@ Failing methods:
 
 - Date: 2026-10-12.
 - Status: OPEN.
-- Symptom: class setup/deployment failed: java.io.IOException: WAR libraries need explicit Java module adaptation: WEB-INF/lib/tagfile.jar
-- Minimal repro: select `ee.jakarta.tck.pages.spec.tagfiles.packaging.URLClientIT`.
-- Hypothesis: the runner cannot yet adapt the required deployment metadata/resources; inspect the retained diagnostic.
+- Symptom: the newly runnable official HTTP assertions report errors.
+- Minimal repro: select `ee.jakarta.tck.pages.spec.tagfiles.packaging.URLClientIT` and any method below.
+- Hypothesis: tag-file translation and implicit TLD metadata remain incomplete; inspect retained page diagnostics and HTTP responses before assigning the cause.
+
+Resolved setup error (2026-10-12, IBARRA-102): legacy WAR library bytecode now
+assembles into the existing private application module, preserving physical
+JAR references and separate build TLD discovery.
+
+Failing methods:
+
+- `tldImplicitTldJspVersionNotMatchTest`
+- `implicitTldDefaultJspVersionTest`
+- `jspTagFilePackagedWarTldTest`
+- `implicitTldReservedName20Test`
+- `jspTagFilePackagedWarTest`
+- `jspTagFilePackagedJarTest`
+
 
 ## TCK-056 — ee.jakarta.tck.pages.spec.tagfiles.semantics.URLClientIT
 
@@ -836,6 +850,14 @@ Failing methods:
 
 - Date: 2026-10-12.
 - Status: OPEN.
-- Symptom: class setup/deployment failed: java.io.IOException: WAR libraries need explicit Java module adaptation: WEB-INF/lib/jsp11taglib.jar
-- Minimal repro: select `ee.jakarta.tck.pages.spec.tldres.URLClientIT`.
-- Hypothesis: the runner cannot yet adapt the required deployment metadata/resources; inspect the retained diagnostic.
+- Symptom: the newly runnable official HTTP assertions report errors.
+- Minimal repro: select `ee.jakarta.tck.pages.spec.tldres.URLClientIT` and any method below.
+- Hypothesis: the missing absolute tag-library URI translation/error response is incorrect; inspect retained page diagnostics and HTTP responses before assigning the cause.
+
+Resolved setup error (2026-10-12, IBARRA-102): legacy WAR library bytecode now
+assembles into the existing private application module, preserving physical
+JAR references and separate build TLD discovery.
+
+Failing methods:
+
+- `tldResPathAbsUriNotFoundTest`

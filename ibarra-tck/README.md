@@ -16,7 +16,7 @@ Use Java 25, Maven 3.9.16 and Python 3 from the repository checkout:
 ```
 
 The script verifies/downloads the official artifacts, installs them locally,
-builds the current Ibarra reactor with `clean install`, runs thirteen adapter
+builds the current Ibarra reactor with `clean install`, runs eighteen adapter
 regression tests, then runs the requested official classes. The default smoke
 selects three `JspFactory` tests, one `JspEngineInfo` test and fourteen descriptor
 character-sequence/EL/encoding tests (18 total). CI runs this smoke
@@ -101,7 +101,23 @@ error servlet messages are bounded safely. Each javac invocation uses isolated
 outputs and a clean application view excluding previous generated classes.
 The ordinary precompile entry point and Maven plugin continue to reject page errors.
 
-Current adapter diagnostics explicitly reject WAR libraries,
+Legacy WEB-INF/lib JARs are assembled into the same private application module.
+This preserves the WAR's shared package/class visibility when application and
+library classes overlap in one package; no automatic or additional dependency
+module is introduced. Ordinary resources retain their module-relative paths.
+Each library's META-INF TLD metadata receives a separate build-discovery path,
+so distinct META-INF/taglib.tld descriptors remain discoverable by URI. Original
+JAR bytes stay unchanged under WEB-INF/lib for explicit physical TLD references.
+TLD parsing remains build-only; no archive/XML parser is added to the server.
+
+Byte-identical duplicate class/resource outputs are deduplicated; incompatible
+duplicates abort deployment without overwriting the earlier output. Unsafe or
+noncanonical ZIP paths fail before extraction. Explicit module descriptors,
+multi-release entries, web fragments and classpath service metadata require
+separate adaptation and are rejected, rather than discarding their semantics.
+This bounded test-runner assembly does not change production Maven packaging.
+
+Current adapter diagnostics explicitly reject unadapted library metadata,
 annotated Servlet components requiring generated metadata, ServletContainerInitializer
 providers. Bean/accessor adaptation, runtime JSP descriptor exposure and signature-test
 configuration remain incomplete. Invalid global metadata still aborts deployment.

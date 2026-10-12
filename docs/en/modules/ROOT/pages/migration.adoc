@@ -31,7 +31,12 @@ The unpublished TCK adapter now generates Foy component factories for root web.x
 Servlet/filter/listener classes in WEB-INF/classes. Its synthetic application module
 requires `io.vidocq.foy.api` and provides those factories without exports or opens.
 This runner change does not change the production Maven plugin or add a new public
-Ibarra SPI. WAR libraries, annotations and initializer adaptation remain pending.
+Ibarra SPI. Legacy WAR libraries now assemble into that same module, retaining
+private packages even when a library and the WAR share a package. Original JARs
+remain unchanged for physical TLD references; library TLD discovery stays distinct.
+Equal output duplicates are deduplicated and conflicting bytes are rejected.
+Explicit modular/multi-release libraries, web fragments, classpath services,
+Servlet annotations and initializers still need separate adaptation.
 
 == Ordinary custom-tag setter selection
 

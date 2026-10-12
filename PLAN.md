@@ -225,7 +225,10 @@ the runtime's packaging goal, after I8.
   property groups now reach the compiler through a build-side descriptor adapter.
   Explicit root web.xml Servlet/filter/listener classes in WEB-INF/classes receive
   Class-File-generated Foy WebComponent providers in the same private application
-  module. WAR libraries, annotations and initializer providers remain unsupported.
+  module. Ordinary legacy WAR libraries now assemble into that same module,
+  preserving shared packages, original JAR resources and separate TLD metadata.
+  Explicit modular/multi-release libraries, fragments, classpath services,
+  annotations and initializer providers remain unsupported.
   Degraded runtime translation is not used as a fallback.
 - Script `run-official-tck-pages-4.0.sh` (`smoke` / `all` / `-Dtest=`), modelled
   on `foy/run-official-tck-servlet6.1.sh`.

@@ -77,6 +77,24 @@ Foy continues to apply descriptor mappings, init parameters, startup order, filt
 and listener lifecycle. This adaptation
 belongs to the unpublished test runner; the production Maven plugin is unchanged.
 
-The adapter explicitly rejects libraries, Servlet annotation metadata and
+== Legacy WAR libraries
+
+The runner assembles ordinary WEB-INF/lib JAR bytecode and resources into the
+existing private application module. Legacy WARs may share packages between
+WEB-INF/classes and several libraries; assembly keeps that overlap inside one
+explicit module, without automatic modules, exports or opens. Equal duplicate
+outputs are deduplicated; incompatible class/resource collisions fail explicitly.
+
+Original JAR bytes are retained for physical TLD references. Library META-INF TLDs
+receive separate build-discovery paths, preserving URI discovery when several
+libraries use META-INF/taglib.tld. Other resources retain their module-relative
+paths. Parsing happens during the build; the server receives compiled pages only.
+
+Unsafe/noncanonical ZIP paths, explicit module descriptors, multi-release entries,
+web fragments and classpath service metadata are rejected before runtime because
+their semantics still need separate adaptation. This is a bounded unpublished
+test-runner feature; production Maven packaging remains unchanged.
+
+The adapter explicitly rejects unadapted library metadata, Servlet annotation metadata and
 initializers that it cannot yet adapt. Invalid global configuration and TLD
 metadata still abort deployment. These remain visible full-suite errors.

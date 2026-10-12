@@ -65,7 +65,6 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
                 var asset = entry.getValue().getAsset();
                 if (asset == null) continue;
                 String name = entry.getKey().get().replaceFirst("^/", "");
-                if (name.startsWith("WEB-INF/lib/")) throw new IOException("WAR libraries need explicit Java module adaptation: " + name);
                 Path root = name.startsWith("WEB-INF/classes/") ? classes : web;
                 String relative = root == classes ? name.substring("WEB-INF/classes/".length()) : name;
                 Path file = root.resolve(relative).normalize();
@@ -73,6 +72,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
                 Files.createDirectories(file.getParent());
                 try (var input = asset.openStream()) { Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING); }
             }
+            WarLibraries.assemble(web, classes);
             if (Files.exists(classes.resolve("META-INF/services/jakarta.servlet.ServletContainerInitializer")))
                 throw new IOException("WAR ServletContainerInitializer factories are not yet adapted by this runner");
             try (var files = Files.walk(classes)) {

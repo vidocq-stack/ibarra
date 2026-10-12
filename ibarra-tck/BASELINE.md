@@ -5,11 +5,12 @@ version `0.4.0-SNAPSHOT`, modular Foy/Chappe and published Peano snapshots.
 This records compatibility checks, not a performance benchmark or certification.
 
 ```bash
-./run-official-tck-pages-4.0.sh all --no-prepare
+./run-official-tck-pages-4.0.sh smoke --no-prepare
+./run-official-tck-pages-4.0.sh all --no-install --no-prepare
 ```
 
 Prerequisites were prepared by `prepare-tck.py`, preserving the official embedded
-POM; the command clean-installs the current reactor before execution. Distribution checksums
+POM; the smoke command clean-installs the current reactor before execution. Distribution checksums
 and exact preparation commands are in [README.md](README.md).
 
 ## Recorded results
@@ -18,25 +19,24 @@ and exact preparation commands are in [README.md](README.md).
 |---|---:|
 | Official classes selected | 92 |
 | Declared runtime-visible JUnit `@Test` methods in the official binary | 682 |
-| Official Surefire entries reported | 662 |
-| Passing test methods | 470 |
-| Failing method entries | 190 |
-| Class-level setup/deployment errors | 2 |
-| Total reported errors | 192 |
+| Official Surefire entries reported | 682 |
+| Passing test methods | 485 |
+| Failing method entries | 197 |
+| Class-level setup/deployment errors | 0 |
+| Total reported errors | 197 |
 | Assertion failures reported as Surefire `failure` | 0 |
 | Skipped entries | 0 |
-| Adapter regression tests (separate invocation) | 13/13 |
+| Adapter regression tests (separate invocation) | 18/18 |
 | CI smoke subset (factory/engine + character sequence/EL/encoding configuration) | 18/18 |
 
-Surefire reports `Tests run: 662, Failures: 0, Errors: 192, Skipped: 0` and exits
+Surefire reports `Tests run: 682, Failures: 0, Errors: 197, Skipped: 0` and exits
 nonzero. The TCK's HTTP assertion helper reports failures as exceptions, hence
 `errors` rather than `failures`; zero in the failure column does not mean success.
 
-**470/682 = 68.9% confirmed passes**, a conservative measured floor. Only
-660 method entries actually ran; the 2 empty-name class-level error entries are
-not executed test methods. A failed deployment prevents the methods in that class
-from running, so `662/682` is not an execution percentage and `470/662` is not a
-suite pass rate. No full-suite certification or complete coverage is claimed.
+**485/682 = 71.1% measured full-suite pass rate**. All 682 declared method entries
+now execute across the 92 official classes; there are no class-level setup errors
+or skipped entries. This records complete method execution for this distribution,
+not certification: 197 methods still report errors.
 
 The denominator was inventoried from the verified official jar with Java 25:
 
@@ -63,7 +63,7 @@ ordinary Ibarra unit tests or Peano's independent EL TCK.
 | Category | Evidence / next step |
 |---|---|
 | Per-page translation failures | IBARRA-084 fixed: genuine parse/generation/javac failures become compiled error servlets, while valid pages still render. Global deployment metadata remains fatal. |
-| WAR adaptation | Two WAR library setup failures remain. Explicit web.xml Servlet/filter/listener components use build-generated factories (IBARRA-100 fixed). JSP property groups apply at build time; TLD keyword names no longer block deployment. Runtime JSP descriptor exposure remains pending upstream. |
+| WAR adaptation | No setup failures remain. Legacy WAR libraries assemble into the private application module (IBARRA-102 fixed); explicit web.xml components use direct factories (IBARRA-100 fixed). Unadapted library metadata remains an explicit boundary. JSP property groups apply at build time; TLD keyword names no longer block deployment. Runtime JSP descriptor exposure remains pending upstream. |
 | Tag files and full tag metadata | `urn:jsptagdir`, variables, TEI/TLV and related metadata remain I6/I7 work. |
 | Ordinary TLD attributes | IBARRA-093/094 fixed: keyword names accepted and actual JavaBeans setter types selected/coerced from class files. Deferred/fragment protocols remain exact. |
 | BeanELResolver fixture access | One method fails in the private application module; IBARRA-085. |
@@ -94,6 +94,11 @@ The newly runnable general configuration class reports three method errors;
 remaining method errors are 190 and the two library deployments still fail setup.
 No previously passing method regressed. A final repeat after constructor-failure
 hardening used `all --no-install --no-prepare`, following the clean reactor install.
+
+Legacy library assembly raises confirmed passes from 470 to 485 and execution
+from 660 to all 682 methods. Both library setup blockers are removed; 22 newly
+runnable methods yield 15 passes and 7 errors. No previous pass regressed.
+The 197 remaining errors are method assertions, not deployment failures.
 
 The full remaining inventory is in [FAILURES.md](FAILURES.md), tracked by
 IBARRA-098. Every currently failing class and method has a reproducible selector;
