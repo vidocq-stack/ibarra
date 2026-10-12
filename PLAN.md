@@ -223,6 +223,9 @@ the runtime's packaging goal, after I8.
   allowing mixed positive/negative fixtures to deploy. Normal packaging still
   rejects page errors; global metadata/module failures remain fatal. Root JSP
   property groups now reach the compiler through a build-side descriptor adapter.
+  Explicit root web.xml Servlet/filter/listener classes in WEB-INF/classes receive
+  Class-File-generated Foy WebComponent providers in the same private application
+  module. WAR libraries, annotations and initializer providers remain unsupported.
   Degraded runtime translation is not used as a fallback.
 - Script `run-official-tck-pages-4.0.sh` (`smoke` / `all` / `-Dtest=`), modelled
   on `foy/run-official-tck-servlet6.1.sh`.

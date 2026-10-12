@@ -17,13 +17,13 @@ Run date: 2026-10-12, Temurin Java 25 and Maven 3.9.16.
 
 Official artifacts had already been prepared; the command clean-installs the reactor.
 The verified official binary contains 92 test classes and 682 declared JUnit
-`@Test` methods. The run records *467 passing methods* and *187 failing methods*,
-plus *5 class-level setup/deployment errors*. Surefire therefore reports 659
+`@Test` methods. The run records *470 passing methods* and *190 failing methods*,
+plus *2 class-level setup/deployment errors*. Surefire therefore reports 662
 entries, 192 errors, zero assertion failures and zero skips, and exits nonzero.
 The upstream HTTP assertion helper reports failures as exceptions.
 
-*467/682 = 68.5% confirmed passes*, a conservative floor, not a complete suite
-pass rate. Only 654 method entries ran. Class-level errors prevent whole groups
+*470/682 = 68.9% confirmed passes*, a conservative floor, not a complete suite
+pass rate. Only 660 method entries ran. Class-level errors prevent whole groups
 of methods from executing; they must not be counted as executed methods.
 
 The detailed command, binary inventory, counts and remaining categories are in
@@ -45,7 +45,7 @@ among previously passing methods. See xref:modules/tag-handlers.adoc[Tag handler
 for the actual-property binding rules and remaining boundaries.
 
 `official-pages-tck-smoke` runs on pull requests and `main`. It clean-installs
-Ibarra, runs seven adapter regression tests, then three official JspFactory
+Ibarra, runs thirteen adapter regression tests, then three official JspFactory
 tests, one JspEngineInfo test and fourteen character-sequence/EL/encoding
 configuration tests. This deliberately bounded regression check
 does not claim 100% Pages coverage. Full-suite certification is milestone I8;
@@ -66,8 +66,12 @@ property groups reach the compiler through build-side descriptor parsing.
 Explicit deployment precompilation retains genuine per-page translation failures
 as compiled error servlets, so valid pages and negative translation tests can
 coexist. No source is parsed in the server. Normal packaging still rejects errors.
-Libraries and Servlet component factories/annotations/initializers that cannot
-yet be adapted fail explicitly; invalid global metadata still aborts deployment.
+Root web.xml Servlet/filter/listener classes in WEB-INF/classes now receive direct
+build-generated Foy factories, with application packages kept private. This removes
+three setup blockers and adds three passing API tests; general configuration now
+executes and exposes three method errors. No previous pass regressed.
+Libraries, Servlet annotations and initializers that cannot yet be adapted fail
+explicitly; invalid global metadata still aborts deployment.
 
 See xref:modules/official-tck-runner.adoc[Official TCK runner] for dependencies,
 commands, artifact preparation, retained logs and limits.

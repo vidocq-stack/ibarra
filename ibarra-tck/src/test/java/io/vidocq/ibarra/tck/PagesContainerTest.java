@@ -31,6 +31,80 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PagesContainerTest {
     @Test
+    void descriptorComponentsUseDirectFactoriesInUnexportedApplicationPackages() throws Exception {
+        String servlet = DescriptorServlet.class.getName();
+        String filter = DescriptorFilter.class.getName();
+        String listener = DescriptorListener.class.getName();
+        var war = ShrinkWrap.create(WebArchive.class, "components.war")
+                .addClasses(DescriptorServlet.class, DescriptorFilter.class, DescriptorListener.class)
+                .setWebXML(new StringAsset("<web-app xmlns='https://jakarta.ee/xml/ns/jakartaee' version='6.1'>"
+                        + "<listener><listener-class>" + listener + "</listener-class></listener>"
+                        + "<servlet><servlet-name>probe</servlet-name><servlet-class>" + servlet + "</servlet-class><init-param><param-name>value</param-name><param-value>servlet</param-value></init-param><load-on-startup>1</load-on-startup></servlet>"
+                        + "<servlet-mapping><servlet-name>probe</servlet-name><url-pattern>/probe</url-pattern></servlet-mapping>"
+                        + "<filter><filter-name>prefix</filter-name><filter-class>" + filter + "</filter-class></filter>"
+                        + "<filter-mapping><filter-name>prefix</filter-name><url-pattern>/*</url-pattern></filter-mapping></web-app>"))
+                .addAsWebResource(new StringAsset("${applicationScope.ready}"), "index.jsp");
+        var container = new PagesContainer(); container.setup(new PagesConfiguration());
+        try {
+            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            try (var client = HttpClient.newHttpClient()) {
+                for (String path : java.util.List.of("probe", "index.jsp")) {
+                    var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/components/" + path)).build(), HttpResponse.BodyHandlers.ofString());
+                    assertEquals(200, response.statusCode(), response.body());
+                    assertEquals(path.equals("probe") ? "filter|servlet|listener|private" : "filter|listener", response.body());
+                }
+            }
+            container.undeploy(war);
+        } finally { container.stop(); }
+    }
+
+    public static class DescriptorServlet extends jakarta.servlet.http.HttpServlet {
+        public DescriptorServlet() throws java.io.IOException { }
+        @Override protected void doGet(jakarta.servlet.http.HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
+            var module = getClass().getModule();
+            if (!module.isNamed() || module.isExported(getClass().getPackageName()) || module.isOpen(getClass().getPackageName()))
+                throw new IllegalStateException("Application package must remain private");
+            response.getWriter().write(getInitParameter("value") + "|" + getServletContext().getAttribute("ready") + "|private");
+        }
+    }
+
+    public static class DescriptorFilter implements jakarta.servlet.Filter {
+        @Override public void doFilter(jakarta.servlet.ServletRequest request, jakarta.servlet.ServletResponse response, jakarta.servlet.FilterChain chain) throws java.io.IOException, jakarta.servlet.ServletException {
+            response.getWriter().write("filter|"); chain.doFilter(request, response);
+        }
+    }
+
+    public static class DescriptorListener implements jakarta.servlet.ServletContextListener {
+        @Override public void contextInitialized(jakarta.servlet.ServletContextEvent event) {
+            event.getServletContext().setAttribute("ready", "listener");
+        }
+    }
+
+    @Test
+    void invalidComponentConstructorsFailBeforeStartingTheServer() throws Exception {
+        var container = new PagesContainer(); container.setup(new PagesConfiguration());
+        try {
+            for (Class<?> type : java.util.List.of(AbstractServlet.class, MissingConstructorServlet.class, PrivateConstructorServlet.class)) {
+                var war = ShrinkWrap.create(WebArchive.class, "invalid.war").addClass(type)
+                        .setWebXML(new StringAsset("<web-app><servlet><servlet-name>invalid</servlet-name><servlet-class>"
+                                + type.getName() + "</servlet-class></servlet></web-app>"));
+                var failure = assertThrows(org.jboss.arquillian.container.spi.client.container.DeploymentException.class, () -> container.deploy(war));
+                assertTrue(failure.getCause().getMessage().contains("public no-arg constructor"), failure.toString());
+            }
+            var war = ShrinkWrap.create(WebArchive.class, "reusable.war").addAsWebResource(new StringAsset("ready"), "index.jsp");
+            assertNotNull(container.deploy(war)); container.undeploy(war);
+        } finally { container.stop(); }
+    }
+
+    public abstract static class AbstractServlet extends jakarta.servlet.http.HttpServlet { }
+    public static class MissingConstructorServlet extends jakarta.servlet.http.HttpServlet {
+        public MissingConstructorServlet(String value) { }
+    }
+    public static class PrivateConstructorServlet extends jakarta.servlet.http.HttpServlet {
+        private PrivateConstructorServlet() { }
+    }
+
+    @Test
     void invalidPagesFailOnlyTheirRequestsWhileValidPagesKeepRendering() throws Exception {
         var war = ShrinkWrap.create(WebArchive.class, "partial.war")
                 .addAsWebResource(new StringAsset("ready"), "index.jsp")
@@ -150,7 +224,7 @@ class PagesContainerTest {
         try {
             var unsupported = ShrinkWrap.create(WebArchive.class, "components.war").setWebXML(new StringAsset("<web-app xmlns=\"https://jakarta.ee/xml/ns/jakartaee\" version=\"6.1\"><servlet><servlet-name>probe</servlet-name><servlet-class>app.Probe</servlet-class></servlet></web-app>"));
             var failure = assertThrows(org.jboss.arquillian.container.spi.client.container.DeploymentException.class, () -> container.deploy(unsupported));
-            assertTrue(failure.getCause().getMessage().contains("factories"));
+            assertTrue(failure.getCause().getMessage().contains("Component class is missing"));
             var configured = ShrinkWrap.create(WebArchive.class, "configuration.war").setWebXML(new StringAsset("<web-app xmlns=\"https://jakarta.ee/xml/ns/jakartaee\" version=\"6.1\"><jsp-config><jsp-property-group><url-pattern>*.jsp</url-pattern><el-ignored>maybe</el-ignored></jsp-property-group></jsp-config></web-app>"));
             var configurationFailure = assertThrows(org.jboss.arquillian.container.spi.client.container.DeploymentException.class, () -> container.deploy(configured));
             assertTrue(configurationFailure.getCause().getMessage().contains("true or false"));

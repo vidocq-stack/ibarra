@@ -18,24 +18,24 @@ and exact preparation commands are in [README.md](README.md).
 |---|---:|
 | Official classes selected | 92 |
 | Declared runtime-visible JUnit `@Test` methods in the official binary | 682 |
-| Official Surefire entries reported | 659 |
-| Passing test methods | 467 |
-| Failing method entries | 187 |
-| Class-level setup/deployment errors | 5 |
+| Official Surefire entries reported | 662 |
+| Passing test methods | 470 |
+| Failing method entries | 190 |
+| Class-level setup/deployment errors | 2 |
 | Total reported errors | 192 |
 | Assertion failures reported as Surefire `failure` | 0 |
 | Skipped entries | 0 |
-| Adapter regression tests (separate invocation) | 7/7 |
+| Adapter regression tests (separate invocation) | 13/13 |
 | CI smoke subset (factory/engine + character sequence/EL/encoding configuration) | 18/18 |
 
-Surefire reports `Tests run: 659, Failures: 0, Errors: 192, Skipped: 0` and exits
+Surefire reports `Tests run: 662, Failures: 0, Errors: 192, Skipped: 0` and exits
 nonzero. The TCK's HTTP assertion helper reports failures as exceptions, hence
 `errors` rather than `failures`; zero in the failure column does not mean success.
 
-**467/682 = 68.5% confirmed passes**, a conservative measured floor. Only
-654 method entries actually ran; the 5 empty-name class-level error entries are
+**470/682 = 68.9% confirmed passes**, a conservative measured floor. Only
+660 method entries actually ran; the 2 empty-name class-level error entries are
 not executed test methods. A failed deployment prevents the methods in that class
-from running, so `659/682` is not an execution percentage and `467/659` is not a
+from running, so `662/682` is not an execution percentage and `470/662` is not a
 suite pass rate. No full-suite certification or complete coverage is claimed.
 
 The denominator was inventoried from the verified official jar with Java 25:
@@ -49,7 +49,7 @@ Count only annotation display lines containing exactly
 
 ## Passing coverage
 
-Thirty-five classes pass completely, including JspFactory (3), JspEngineInfo (1),
+Thirty-seven classes pass completely, including JspFactory (3), JspEngineInfo (1),
 JspWriter (30), PageContext (43), ErrorData (5), BodyContent (5), DynamicAttributes
 (2), TagAdapter (8), VariableInfo (5), several EL API/implicit-resolver classes,
 implicit objects (9), character sequence/EL/encoding configuration (14), i18n
@@ -63,7 +63,7 @@ ordinary Ibarra unit tests or Peano's independent EL TCK.
 | Category | Evidence / next step |
 |---|---|
 | Per-page translation failures | IBARRA-084 fixed: genuine parse/generation/javac failures become compiled error servlets, while valid pages still render. Global deployment metadata remains fatal. |
-| WAR adaptation | Five setup failures remain: three Servlet component deployments and two WAR library deployments. JSP property groups apply at build time; TLD keyword names no longer block deployment. Runtime JSP descriptor exposure remains pending upstream. |
+| WAR adaptation | Two WAR library setup failures remain. Explicit web.xml Servlet/filter/listener components use build-generated factories (IBARRA-100 fixed). JSP property groups apply at build time; TLD keyword names no longer block deployment. Runtime JSP descriptor exposure remains pending upstream. |
 | Tag files and full tag metadata | `urn:jsptagdir`, variables, TEI/TLV and related metadata remain I6/I7 work. |
 | Ordinary TLD attributes | IBARRA-093/094 fixed: keyword names accepted and actual JavaBeans setter types selected/coerced from class files. Deferred/fragment protocols remain exact. |
 | BeanELResolver fixture access | One method fails in the private application module; IBARRA-085. |
@@ -76,7 +76,7 @@ ordinary Ibarra unit tests or Peano's independent EL TCK.
 | Signature tooling | One method fails with an empty signature-tool classpath; IBARRA-092. |
 
 The previous runner baseline (PR #22) recorded 174 passes, 11 method errors and
-54 setup errors. This update records 427 passes, 179 method errors and 8 setup
+54 setup errors. The per-page recovery stage recorded 427 passes, 179 method errors and 8 setup
 errors: 421 additional method entries now execute instead of being blocked by
 whole-WAR precompilation or unsupported JSP configuration. The unmodified
 official tests remain authoritative; genuine negative translation errors are
@@ -87,6 +87,13 @@ and execution from 606 to 654 methods. Three keyword-related TLD setup failures
 are removed. Four previously failing EL methods now pass; no previously passing
 method regressed. Remaining method errors rise from 179 to 187 as additional
 methods become runnable. The two stages are recorded separately from certification.
+
+Descriptor component factories then raise confirmed passes from 467 to 470,
+and execution from 654 to 660 methods, removing all three component setup blockers.
+The newly runnable general configuration class reports three method errors;
+remaining method errors are 190 and the two library deployments still fail setup.
+No previously passing method regressed. A final repeat after constructor-failure
+hardening used `all --no-install --no-prepare`, following the clean reactor install.
 
 The full remaining inventory is in [FAILURES.md](FAILURES.md), tracked by
 IBARRA-098. Every currently failing class and method has a reproducible selector;

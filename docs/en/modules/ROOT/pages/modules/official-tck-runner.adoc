@@ -59,6 +59,24 @@ Global property keys, booleans, encoding and buffer capacity are validated befor
 individual page recovery, even for an application with no pages. Invalid global
 settings leave previous generated output ownership intact.
 
-The adapter explicitly rejects libraries, Servlet component factories and
+== Descriptor component factories
+
+Root web.xml servlets, filters and listeners whose bytecode is in WEB-INF/classes
+receive build-generated Foy `WebComponent` providers. The Class-File API emits
+direct class literals and no-arg constructor calls, without initializing component
+classes during discovery. The named application module explicitly requires
+`io.vidocq.foy.api` and declares the providers through `provides`; packages retain
+no exports or opens. Existing page provider registrations are preserved.
+
+Components must be public concrete classes with public no-arg constructors.
+Missing classes, invalid constructors and generated provider name collisions
+abort deployment before server launch.
+Generated factories preserve runtime exceptions/errors and wrap checked constructor
+failures with their cause, including constructors declared to throw Throwable.
+Foy continues to apply descriptor mappings, init parameters, startup order, filters
+and listener lifecycle. This adaptation
+belongs to the unpublished test runner; the production Maven plugin is unchanged.
+
+The adapter explicitly rejects libraries, Servlet annotation metadata and
 initializers that it cannot yet adapt. Invalid global configuration and TLD
 metadata still abort deployment. These remain visible full-suite errors.

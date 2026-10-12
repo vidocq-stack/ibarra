@@ -1,8 +1,8 @@
 # Official Pages failure inventory
 
 Date: 2026-10-12, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-This inventory records the remaining 187 method errors and five setup errors
-after ordinary TLD setter/name fixes. Each class keeps its previous stable id.
+This inventory records the remaining 190 method errors and two setup errors
+after descriptor component factory adaptation. Each class keeps its previous stable id.
 Resolved method entries remain as a trace; other causes still need investigation.
 Append new ids when discovering new failing classes, without renumbering records.
 
@@ -25,10 +25,14 @@ Failing methods:
 ## TCK-002 — ee.jakarta.tck.pages.api.jakarta_el.compelresolver.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: class setup/deployment failed: java.io.IOException: WAR servlet/filter/listener factories are not yet adapted by this runner
+- Status: RESOLVED; the official class now passes.
+- Symptom: the previous class-level deployment failure is removed.
 - Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_el.compelresolver.URLClientIT`.
-- Hypothesis: the runner cannot yet adapt the required deployment metadata/resources; inspect the retained diagnostic.
+- Cause: descriptor Servlet components lacked generated constructor factories.
+
+Resolved setup error (2026-10-12, IBARRA-100): direct Foy factories are generated
+for explicit root web.xml components without application exports/opens.
+
 
 ## TCK-003 — ee.jakarta.tck.pages.api.jakarta_el.methodinfo.URLClientIT
 
@@ -45,10 +49,14 @@ Failing methods:
 ## TCK-004 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.jspapplicationcontext.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: class setup/deployment failed: java.io.IOException: WAR servlet/filter/listener factories are not yet adapted by this runner
+- Status: RESOLVED; the official class now passes.
+- Symptom: the previous class-level deployment failure is removed.
 - Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.jspapplicationcontext.URLClientIT`.
-- Hypothesis: the runner cannot yet adapt the required deployment metadata/resources; inspect the retained diagnostic.
+- Cause: descriptor Servlet components lacked generated constructor factories.
+
+Resolved setup error (2026-10-12, IBARRA-100): direct Foy factories are generated
+for explicit root web.xml components without application exports/opens.
+
 
 ## TCK-005 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.bodytagsupport.URLClientIT
 
@@ -305,9 +313,19 @@ Failing methods:
 
 - Date: 2026-10-12.
 - Status: OPEN.
-- Symptom: class setup/deployment failed: java.io.IOException: WAR servlet/filter/listener factories are not yet adapted by this runner
-- Minimal repro: select `ee.jakarta.tck.pages.spec.configuration.general.URLClientIT`.
-- Hypothesis: the runner cannot yet adapt the required deployment metadata/resources; inspect the retained diagnostic.
+- Symptom: the newly runnable official HTTP assertions report errors.
+- Minimal repro: select `ee.jakarta.tck.pages.spec.configuration.general.URLClientIT` and any method below.
+- Hypothesis: JSP property-group URL mapping/runtime routing remains incomplete; inspect actual HTTP responses before assigning the cause.
+
+Resolved setup error (2026-10-12, IBARRA-100): direct Foy factories are generated
+for explicit root web.xml components without application exports/opens.
+
+Failing methods:
+
+- `identicalMappingTest`
+- `mostSpecificMappingTest`
+- `moreSpecificMappingTest`
+
 
 ## TCK-022 — ee.jakarta.tck.pages.spec.configuration.includes.URLClientIT
 

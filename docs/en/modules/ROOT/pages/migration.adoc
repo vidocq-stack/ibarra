@@ -25,6 +25,14 @@ The earlier `urn:jsptld:urn:example:functions` form mixed these modes and is now
 rejected. Forced paths bypass aliases; plain namespaces use mappings only.
 Direct discovery does not add implicit URI entries for external descriptors.
 
+== Official runner descriptor components
+
+The unpublished TCK adapter now generates Foy component factories for root web.xml
+Servlet/filter/listener classes in WEB-INF/classes. Its synthetic application module
+requires `io.vidocq.foy.api` and provides those factories without exports or opens.
+This runner change does not change the production Maven plugin or add a new public
+Ibarra SPI. WAR libraries, annotations and initializer adaptation remain pending.
+
 == Ordinary custom-tag setter selection
 
 Ordinary tag attributes now use the handler's actual JavaBeans write method,

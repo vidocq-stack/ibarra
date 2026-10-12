@@ -16,7 +16,7 @@ Use Java 25, Maven 3.9.16 and Python 3 from the repository checkout:
 ```
 
 The script verifies/downloads the official artifacts, installs them locally,
-builds the current Ibarra reactor with `clean install`, runs seven adapter
+builds the current Ibarra reactor with `clean install`, runs thirteen adapter
 regression tests, then runs the requested official classes. The default smoke
 selects three `JspFactory` tests, one `JspEngineInfo` test and fourteen descriptor
 character-sequence/EL/encoding tests (18 total). CI runs this smoke
@@ -81,6 +81,18 @@ Surefire XML/text reports are under `ibarra-tck/target/surefire-reports`.
 options, preserving patterns, scalar settings, preludes/codas and legacy EL defaults.
 Malformed global settings abort deployment even if no page matches the group.
 
+Servlets, filters and listeners explicitly declared in root web.xml are adapted
+when their bytecode is in WEB-INF/classes. The build-side Class-File API emits
+Foy `WebComponent` providers with direct class literals and constructor calls;
+the application descriptor registers them with `provides` and explicitly requires
+`io.vidocq.foy.api`. Providers share the application module, so component packages
+stay private. Metadata discovery does not initialize component classes. Components
+must be public concrete classes with public no-arg constructors; missing classes,
+invalid constructors and generated-name collisions abort deployment before launch.
+Mappings, init parameters and lifecycle remain handled by Foy's descriptor merger.
+Generated factories preserve runtime exceptions/errors and wrap checked constructor
+failures with their cause, including constructors declared to throw Throwable.
+
 The runner calls explicit `PagePrecompiler.precompileDeployment`. Genuine per-page
 parse/generation/javac failures become compiled error servlets that throw the retained
 translation error on request, including precompile requests. Valid pages remain
@@ -89,8 +101,8 @@ error servlet messages are bounded safely. Each javac invocation uses isolated
 outputs and a clean application view excluding previous generated classes.
 The ordinary precompile entry point and Maven plugin continue to reject page errors.
 
-Current adapter diagnostics explicitly reject WAR libraries, descriptor or
-annotated Servlet components requiring generated factories, ServletContainerInitializer
+Current adapter diagnostics explicitly reject WAR libraries,
+annotated Servlet components requiring generated metadata, ServletContainerInitializer
 providers. Bean/accessor adaptation, runtime JSP descriptor exposure and signature-test
 configuration remain incomplete. Invalid global metadata still aborts deployment.
 Unsupported compiler semantics retain their existing diagnostics. None of

@@ -86,15 +86,18 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
             }
             Path webXml = web.resolve("WEB-INF/web.xml");
             var groups = Files.exists(webXml) ? new JspConfigurationParser().parse("/WEB-INF/web.xml", Files.readAllBytes(webXml)) : List.<JspPropertyGroup>of();
+            var components = new TreeSet<String>();
             if (Files.exists(webXml)) try (var input = Files.newInputStream(webXml)) {
                 var model = WebXmlParser.parse(input);
-                if (model.servlets().stream().anyMatch(s -> s.className() != null)
-                        || !model.filters().isEmpty() || !model.listenerClasses().isEmpty())
-                    throw new IOException("WAR servlet/filter/listener factories are not yet adapted by this runner");
+                model.servlets().stream().map(s -> s.className()).filter(Objects::nonNull).forEach(components::add);
+                model.filters().stream().map(f -> f.className()).forEach(components::add);
+                components.addAll(model.listenerClasses());
             }
+            var providers = ComponentFactories.generate(classes, components);
             List<Path> modules = modulePaths(true);
             Path descriptor = work.resolve("module-info.java");
-            Files.writeString(descriptor, "module tck.application { requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; }");
+            String service = providers.isEmpty() ? "" : "provides io.vidocq.foy.spi.gen.WebComponent with " + String.join(",", providers) + ";";
+            Files.writeString(descriptor, "module tck.application { requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; requires io.vidocq.foy.api; " + service + " }");
             compile("--module-path", join(modules), "--patch-module", "tck.application=" + classes,
                     "-d", classes.toString(), descriptor.toString());
             var result = new PagePrecompiler().precompileDeployment(web, classes, modules, null, new GenerationOptions(groups, Map.of()));

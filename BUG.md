@@ -1,5 +1,32 @@
 # BUG.md — Ibarra
 
+## IBARRA-101 · 2026-10-12 · Generated component constructors leak checked Throwable
+
+- Symptom: a constructor declared `throws Throwable` propagates a checked failure
+  out of WebComponent.newInstance, bypassing Foy's Exception/RuntimeException cleanup.
+- Minimal repro: ComponentFactoriesTest.checkedThrowableConstructorsAreWrappedWhileRuntimeFailuresKeepTheirType.
+- Cause: the first generated factory invokes the constructor without an exception boundary.
+- Status: FIXED by generated exception handlers preserving RuntimeException/Error
+  unchanged and wrapping all other Throwable in IllegalStateException with its cause.
+  The generation test was red with an unexpected java.lang.Throwable before the fix.
+
+## IBARRA-100 · 2026-10-12 · Official WAR descriptor components cannot be instantiated
+
+- Symptom: CompositeELResolver, JspApplicationContext and general configuration
+  classes fail deployment before their official test methods execute.
+- Minimal repro: select `api.jakarta_el.compelresolver.URLClientIT`,
+  `api.jakarta_servlet.jsp.jspapplicationcontext.URLClientIT` or
+  `spec.configuration.general.URLClientIT` with the official runner.
+  Adapter regression: descriptorComponentsUseDirectFactoriesInUnexportedApplicationPackages.
+- Cause: the runner rejects descriptor components, and Foy's fallback constructors
+  cannot access the private application packages without generated factories.
+- Status: FIXED for classes in WEB-INF/classes explicitly declared in root web.xml.
+  Build-only Class-File generation emits Foy WebComponent service providers with
+  direct class literals and constructors in the application module. Metadata
+  discovery never initializes components, invalid constructors/collisions fail
+  before server launch, and application packages retain no exports/opens.
+  WAR libraries, annotations and initializer providers remain separate boundaries.
+
 ## IBARRA-099 · 2026-10-12 · Ordinary tag getter guidance selects incompatible setters
 
 - Symptom: getter-guided overload selection chooses Object instead of String or
@@ -15,8 +42,8 @@
 
 ## IBARRA-098 · 2026-10-12 · Remaining official Pages assertions after deployment recovery
 
-- Symptom: the current full official run reports 187 method errors and 5 class-level
-  setup/deployment errors after 467 passing methods; the previous baseline was 427 passes.
+- Symptom: the current full official run reports 190 method errors and 2 class-level
+  setup/deployment errors after 470 passing methods; the previous baseline was 467 passes.
 - Minimal repro: `./run-official-tck-pages-4.0.sh all`; individual classes and
   failing method selectors are recorded under stable TCK ids in
   [ibarra-tck/FAILURES.md](ibarra-tck/FAILURES.md).
