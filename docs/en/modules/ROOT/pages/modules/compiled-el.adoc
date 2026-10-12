@@ -196,7 +196,8 @@ map/list navigation, operators, calls, lambdas and fixed-arity TLD functions.
 Typed deferred tag attributes are implemented within the boundaries above.
 Immediate static expressions use class-only constructors; deferred tag expressions
 capture the invoking context's VariableMapper through per-invocation constructors.
-I3 remains in progress; the official Pages TCK has not been run.
+I3 remains in progress; the initial official Pages TCK baseline is available in
+xref:tck.adoc[TCK status], with full certification pending.
 
 A packaged named-module fixture renders with both compilers excluded and a
 factory that rejects every runtime expression-creation call. HTTP JSP/JSPX tests
@@ -205,8 +206,8 @@ Tests cover bytecode immutability, collisions, diagnostics, required module read
 and incremental cleanup. The independent Maven example compiles EL through the
 actual precompile goal, calls a TLD function and explicitly requires Peano API.
 The local Ibarra reactor passes 263 tests. Peano's compatible prerequisite passes
-303 tests and 361/361 official EL TCK tests. The official Pages TCK remains unrun;
-these unit and integration results are not Pages certification.
+303 tests and 361/361 official EL TCK tests. The official Pages TCK now has an
+initial diagnostic baseline; these unit and integration results are not Pages certification.
 Deferred fixtures also verify setter overload selection, writability, variable
 capture, literal interpreter agreement, serialization, loader restoration and
 private-bean method dispatch over HTTP in both JSP syntaxes.

@@ -1,0 +1,16 @@
+name: official-pages-tck-smoke
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  official-pages-tck-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: https://codefloe.com/Vidocq/ci/setup-maven@main
+      - name: Build Ibarra, validate the adapter and run official Pages smoke tests
+        run: ./run-official-tck-pages-4.0.sh smoke

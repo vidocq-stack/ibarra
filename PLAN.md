@@ -201,24 +201,27 @@ the runtime's packaging goal, after I8.
 
 ## TCK plan
 
-- Runner: `ibarra-tck`, in the reactor only under `-Ptck` (present now as a
-  skeleton); the official suite is resolved only under `-Ptck,tck-official`.
+- Runner: `ibarra-tck`, in the reactor only under `-Ptck`; its modular WAR
+  adapter is implemented and regression-tested. The official suite is resolved
+  only under `-Ptck,tck-official`.
 - The Pages 4.0 TCK moved from the Platform TCK into the `jakartaee/pages`
   repository and was rewritten to **Arquillian + JUnit 5**. Distribution
   (checked 2026-10-10): **not on Maven Central** — it ships as
   `jakarta-pages-tck-4.0.0.zip` on `download.eclipse.org/jakartaee/pages/4.0/`,
   whose artefacts are installed into the local Maven repository, as for the
   Servlet TCK of `foy-tck`. Central only has the Platform-mode
-  `jakarta.tck:pages-platform-tck` 11.0.x. The Maven coordinates are **to
-  confirm** against the zip (placeholder `jakarta.tck:jakarta-pages-tck:4.0.0`
-  in the POM), including a possible split like the Servlet TCK
-  (`servlet-tck-runtime` + `servlet-tck-util`).
+  `jakarta.tck:pages-platform-tck` 11.0.x. Coordinates verified on 2026-10-12:
+  `jakarta.tck:jakarta-pages-tck:4.0.0`, one jar, with the embedded upstream POM
+  preserved. The archive omits its JavaTest 5.0 dependency; `prepare-tck.py`
+  obtains that exact tool from an earlier Eclipse distribution, with SHA-256
+  verification. It does not run or replace any Pages 4.0 tests with older tests.
 - The TCK deploys WARs that contain **JSP sources**, so it exercises translation
-  at deployment time. Two ways to run it (**open question**): (a) the degraded
-  runtime-translation mode, which must then be TCK-complete; (b) an Arquillian
-  adapter that precompiles each WAR with `ibarra-compiler` before deploying it
-  into Foy — closer to the production path. Recommended: (b), with (a) covered by
-  a smaller smoke subset.
+  at deployment time. The implemented adapter precompiles each WAR with
+  `ibarra-compiler` before launching Foy in a separate process. Neither compiler
+  nor `java.compiler` is present in that runtime. Eager translation currently
+  rejects whole WARs containing intentionally invalid negative-test pages;
+  supporting their request-time translation-error semantics remains runner work.
+  Degraded runtime translation is not used as a fallback.
 - Script `run-official-tck-pages-4.0.sh` (`smoke` / `all` / `-Dtest=`), modelled
   on `foy/run-official-tck-servlet6.1.sh`.
 - Gate: once green, 100 % PASS is a merge gate; challenges go to a `TCK.md`.
@@ -235,7 +238,7 @@ the runtime's packaging goal, after I8.
 | I5 | `ibarra-foy` + Foy's JSP-engine SPI (Foy-side PR), `*.jsp` mapping, `addJspFile`, `getJspConfigDescriptor`, TLD listeners | initial HTTP implementation with build-generated TLD listeners; broader deployment/TCK coverage pending |
 | I6 | Custom tags: TLD parsing, classic + simple handlers, scripting variables, validators | initial rendering: Tag/IterationTag/BodyTag/TryCatchFinally, SimpleTag bodies, named scalar/fragment attributes, explicit bodies and unqualified dynamic attributes; variables/validators/full metadata pending |
 | I7 | Tag files, fragments, `jsp:invoke` / `jsp:doBody`; Peano compiled expressions in pages | |
-| I8 | Official TCK through `ibarra-tck` (Arquillian adapter on Foy) | 100 % PASS recorded in docs `tck` page |
+| I8 | Official TCK through `ibarra-tck` (Arquillian adapter on Foy) | in progress: initial adapter and smoke delivered, full diagnostic baseline failing; acceptance remains 100 % PASS recorded in docs `tck` page |
 | I9 | Degraded runtime translation polish, Class-File API path for scriptless pages, `ibarra-bench` (vs Jasper), Vidocq Runtime extension | numbers in `BENCH.md` only |
 
 ## Implementation progress

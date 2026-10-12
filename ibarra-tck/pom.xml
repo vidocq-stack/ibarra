@@ -7,21 +7,22 @@
     `mvn install` neither downloads nor runs anything TCK-related.
 
     Two levels:
-      -Ptck                 builds this (empty) runner against ibarra-core;
+      -Ptck                 tests the build-side modular WAR adapter;
       -Ptck,tck-official    additionally resolves the official TCK artifact.
 
     The Pages 4.0 TCK moved from the Platform TCK into the jakartaee/pages
     repository (tck/ module) and was refactored to Arquillian + JUnit 5; it
     deploys WARs, so the real runner needs a container: Foy + Ibarra behind an
     Arquillian adapter, modelled on foy-tck (PLAN.md, milestone I8).
-    Distribution (checked 2026-10-10): the standalone TCK is NOT on Maven Central.
+    Distribution (checked 2026-10-12): the standalone TCK is NOT on Maven Central.
     It ships as https://download.eclipse.org/jakartaee/pages/4.0/
     jakarta-pages-tck-4.0.0.zip, whose artefacts must be installed into the
     local Maven repository, like the Servlet TCK for foy-tck. Central only
     carries the Platform-mode variant jakarta.tck:pages-platform-tck (11.0.x).
-    The coordinates below are a placeholder TO CONFIRM against the zip content,
-    including a possible split into runtime/util artefacts (foy-tck depends on
-    servlet-tck-runtime + servlet-tck-util).
+    Coordinates below were verified against the jar's embedded upstream POM.
+    prepare-tck.py preserves that POM and installs JavaTest 5.0, omitted from
+    the standalone distribution. Arquillian clients use a test-only classpath;
+    the precompiled application and Foy host run strictly as named modules.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -36,10 +37,10 @@
 
     <artifactId>ibarra-tck</artifactId>
     <name>Ibarra :: TCK</name>
-    <description>Official Jakarta Pages 4.0 TCK runner — skeleton, see PLAN.md milestone I8</description>
+    <description>Official Jakarta Pages 4.0 TCK runner — build-side modular WAR adapter on Foy</description>
 
     <properties>
-        <!-- TO CONFIRM (PLAN.md, "TCK plan"). -->
+        <!-- Verified from the official 4.0.0 jar's embedded Maven POM. -->
         <tck.pages.groupId>jakarta.tck</tck.pages.groupId>
         <tck.pages.artifactId>jakarta-pages-tck</tck.pages.artifactId>
         <tck.pages.version>4.0.0</tck.pages.version>
@@ -52,9 +53,17 @@
     </properties>
 
     <dependencies>
+        <dependency><groupId>io.vidocq.ibarra</groupId><artifactId>ibarra-compiler</artifactId><scope>test</scope></dependency>
+        <dependency><groupId>io.vidocq.ibarra</groupId><artifactId>ibarra-foy</artifactId><version>${project.version}</version><scope>test</scope></dependency>
+        <dependency><groupId>io.vidocq.foy</groupId><artifactId>foy-core</artifactId><scope>test</scope></dependency>
+        <dependency><groupId>io.vidocq.peano</groupId><artifactId>peano-core</artifactId><scope>test</scope></dependency>
+        <dependency><groupId>io.vidocq.chappe</groupId><artifactId>chappe-core</artifactId><version>${chappe.version}</version><scope>test</scope></dependency>
+        <dependency><groupId>org.jboss.arquillian.container</groupId><artifactId>arquillian-container-spi</artifactId><version>1.8.0.Final</version><scope>test</scope></dependency>
+        <dependency><groupId>org.jboss.shrinkwrap</groupId><artifactId>shrinkwrap-impl-base</artifactId><version>1.2.6</version><scope>test</scope></dependency>
         <dependency>
             <groupId>io.vidocq.ibarra</groupId>
             <artifactId>ibarra-core</artifactId>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -62,6 +71,10 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build><plugins>
+        <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><configuration><useModulePath>false</useModulePath></configuration></plugin>
+    </plugins></build>
 
     <profiles>
         <profile>
@@ -85,6 +98,11 @@
                             <dependenciesToScan>
                                 <dependency>${tck.pages.groupId}:${tck.pages.artifactId}</dependency>
                             </dependenciesToScan>
+                            <includes><include>**/*IT.class</include></includes>
+                            <trimStackTrace>false</trimStackTrace>
+                            <systemPropertyVariables>
+                                <porting.ts.url.class.1>ee.jakarta.tck.pages.lib.implementation.sun.common.SunRIURL</porting.ts.url.class.1>
+                            </systemPropertyVariables>
                         </configuration>
                     </plugin>
                 </plugins>

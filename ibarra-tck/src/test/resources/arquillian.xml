@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<arquillian xmlns="http://jboss.org/schema/arquillian">
+    <container qualifier="ibarra" default="true"/>
+</arquillian>

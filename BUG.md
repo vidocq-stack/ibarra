@@ -1,5 +1,140 @@
 # BUG.md — Ibarra
 
+## IBARRA-084 · 2026-10-12 · Eager TCK precompilation rejects mixed positive/negative WARs
+
+- Symptom: a whole official test class fails deployment on an intentionally
+  invalid page, before valid pages or negative translation assertions can run.
+- Minimal repro: `spec.core_syntax.directives.page.URLClientIT`, whose WAR contains
+  `negativeDuplicateAutoFlushFatalTranslationError.jsp`; run with the official script.
+- Cause: PagePrecompiler translates every page atomically before starting Foy.
+- Status: OPEN, runner follow-up. Preserve per-page translation failures and expose
+  their request-time error semantics without placing a compiler in the server.
+
+## IBARRA-085 · 2026-10-12 · Official BeanELResolver fixture fails in the private application module
+
+- Symptom: official `api.jakarta_el.beanelresolver.URLClientIT#beanElResolverTest`
+  reports Test FAILED over HTTP.
+- Minimal repro: select that fully qualified class with the official script.
+- Hypothesis: the upstream reflective BeanELResolver cannot access a fixture bean
+  in the unexported synthetic application module; accessor adaptation is incomplete.
+- Status: OPEN, investigation required; do not attribute this to Peano's separate
+  certified EL TCK without distinguishing the Pages deployment environment.
+
+## IBARRA-086 · 2026-10-12 · Official JspIdConsumer tests fail
+
+- Symptom: sameJspIdTest, setJspIdTest and multipleJspIdTest fail over HTTP in
+  `api.jakarta_servlet.jsp.tagext.jspidconsumer.URLClientIT`.
+- Minimal repro: select that fully qualified class with the official script.
+- Hypothesis: generated tag invocations do not supply stable per-node JSP IDs.
+- Status: OPEN, I6 generator follow-up; retained WAR/server logs reproduce it.
+
+## IBARRA-087 · 2026-10-12 · Official TagLibraryValidator assertions fail
+
+- Symptom: tagLibraryValidatorAPITest and tagLibraryValidatorTranslationFailureTest
+  fail in `api.jakarta_servlet.jsp.tagext.taglibraryvalidator.URLClientIT`.
+- Minimal repro: select that fully qualified class with the official script.
+- Hypothesis: full TLV validation and XML-view handling remain incomplete.
+- Status: OPEN, I6 translation/runner investigation; full metadata is not claimed complete.
+
+## IBARRA-088 · 2026-10-12 · Official TryCatchFinally scenario fails
+
+- Symptom: `api.jakarta_servlet.jsp.tagext.trycatchfinally.URLClientIT#tryCatchFinallyTest`
+  reports Test FAILED despite the existing handler unit tests passing.
+- Minimal repro: select that fully qualified class with the official script.
+- Hypothesis: a nested handler/body exception path differs from the official expected output.
+- Status: OPEN, isolate the failing page and record its response before changing the generator.
+
+## IBARRA-089 · 2026-10-12 · Official unbuffered forward scenario fails
+
+- Symptom: `spec.core_syntax.actions.forward.URLClientIT#unbufferedWriteForwardTest`
+  reports Test FAILED; six other methods in that class pass.
+- Minimal repro: select that fully qualified class with the official script.
+- Hypothesis: commitment and forwarding after unbuffered output differ between
+  the generated page writer and Foy dispatch.
+- Status: OPEN, cross-layer investigation; no upstream attribution established yet.
+
+## IBARRA-090 · 2026-10-12 · Official bean PropertyEditor conversion fails
+
+- Symptom: `spec.core_syntax.actions.setproperty.URLClientIT#positiveBeanPropertyEditorTest`
+  reports Test FAILED.
+- Minimal repro: select that fully qualified class with the official script.
+- Hypothesis: generated bean-property conversion lacks the required custom editor path.
+- Status: OPEN, I3 conversion investigation; preserve direct build-time calls.
+
+## IBARRA-091 · 2026-10-12 · Official negative precompile query fails
+
+- Symptom: `spec.misc.precompilation.URLClientIT#precompileNegativeTest` fails;
+  the three other precompile query tests pass.
+- Minimal repro: select that fully qualified class with the official script.
+- Hypothesis: the Foy page-engine route does not reject an invalid jsp_precompile value.
+- Status: OPEN, verify the HTTP response against the Pages precompilation contract.
+
+## IBARRA-092 · 2026-10-12 · Official Pages signature test is not configured
+
+- Symptom: `signaturetest.jsp.JSPSigTestIT#signatureTest` fails with signature differences.
+- Minimal repro: select that fully qualified class with the official script.
+- Cause: the upstream signature tool is invoked with an empty `-Classpath`.
+- Status: OPEN, runner configuration follow-up; this is not proof of an API mismatch.
+
+## IBARRA-093 · 2026-10-12 · TLD attribute names that are Java keywords are rejected
+
+- Symptom: official action/EL fixture WARs fail translation with "Invalid tag
+  attribute name: boolean", "byte" or "static".
+- Minimal repro: `spec.core_syntax.actions.attribute.URLClientIT` loads `/WEB-INF/attribute.tld`.
+- Hypothesis: TLD names are checked as Java identifiers although they are XML names
+  and generated setter names can remain valid Java identifiers.
+- Status: OPEN, I3/I6 validation follow-up; isolate from intentionally invalid pages.
+
+## IBARRA-094 · 2026-10-12 · Official fixtures fail inferred TLD setter validation
+
+- Symptom: configuration/EL fixture WARs fail translation with "No setter matching
+  TLD type java.lang.Object" for SimpleTag.echo or SetTag.value.
+- Minimal repro: `spec.el.language.URLClientIT`, `/CompositeExprEval1.jsp`.
+- Hypothesis: missing TLD type defaults or inherited setter metadata differ from
+  the official fixtures' expected translation semantics.
+- Status: OPEN, inspect the unmodified TLD/handler bytecode before changing validation.
+
+## IBARRA-083 · 2026-10-12 · Initial TCK adapter ignores JSP property groups
+
+- Symptom: deployment succeeds although descriptor `el-ignored` and other JSP
+  property-group settings never reach the precompiler.
+- Minimal repro: PagesContainerTest.unsupportedDeploymentFeaturesFailExplicitlyAndLeaveTheAdapterReusable,
+  a WAR declaring `<jsp-property-group><el-ignored>true</el-ignored>`.
+- Cause: the initial adapter passes GenerationOptions.DEFAULT for every WAR.
+- Status: CONTAINED by an explicit deployment diagnostic. Mapping descriptor
+  property groups into compiler options is a runner follow-up; those tests are
+  excluded from the passing smoke subset and remain errors in the full baseline.
+
+## IBARRA-082 · 2026-10-12 · Pages TCK adapter accepts only one active WAR
+
+- Symptom: multi-deployment configuration tests fail with "A deployment is already active".
+- Minimal repro: PagesContainerTest.multipleDeploymentsHaveIndependentPortsAndLifecycles;
+  official `spec.configuration.elevaluation.URLClientIT` also declares multiple WARs.
+- Cause: the initial adapter stores one process for the whole Arquillian container.
+- Status: FIXED by per-archive processes, ports and work directories; undeploying one
+  archive leaves the others running. Stop reaps every child with bounded waits and
+  restores interruption; failed deployments clean up only their own process.
+
+## IBARRA-080 · 2026-10-12 · TCK WAR resources are unavailable to compiled pages
+
+- Symptom: a compiled page reading `/answer.txt` through ServletContext returns 500.
+- Minimal repro: PagesContainerTest.extractedResourcesAreVisibleToThePageAndStopPreservesInterruption.
+- Cause: the new runner extracts web resources but creates Foy DeployOptions without
+  a resource provider for that directory.
+- Status: FIXED by a contained filesystem provider supporting streams, URLs,
+  directory paths and metadata. Application and server still run as named modules.
+
+## IBARRA-081 · 2026-10-12 · Official Pages clients use a missing REST URL adapter
+
+- Symptom: all three official JspFactory tests error before sending an HTTP request
+  with a null TSURLInterface and ClassNotFoundException for the REST SunRIURL class.
+- Minimal repro: `./mvnw -Ptck,tck-official -pl ibarra-tck test
+  -Dtest=ee.jakarta.tck.pages.api.jakarta_servlet.jsp.jspfactory.URLClientIT`
+  without the porting URL system property.
+- Cause: the upstream common runtime defaults to the REST TCK URL implementation.
+- Status: FIXED by setting `porting.ts.url.class.1` to the unmodified Pages TCK's
+  `ee.jakarta.tck.pages.lib.implementation.sun.common.SunRIURL` in Surefire.
+
 ## IBARRA-079 · 2026-10-12 · Deferred private-bean methods fail in the Foy application layer
 
 - Symptom: the deferred.jsp HTTP fixture returns 500 when invoking profile.greet

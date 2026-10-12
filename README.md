@@ -66,7 +66,7 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 | `ibarra-compiler` | JSP/JSPX parser, page model, Java generator, initial tag handlers and build-time compiler | I2 implemented; I3/I6 in progress |
 | `ibarra-maven-plugin` | `precompile` goal at process-classes; module service registration | Initial I4 implemented |
 | `ibarra-foy` | Optional Foy engine provider; application layer, routing and TLD listener lifecycle | Initial I5 implemented |
-| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | skeleton |
+| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; smoke passes, full suite pending |
 
 Planned modules (`ibarra-bench`) are described in [PLAN.md](PLAN.md) and created by
 the milestone that needs them. JSTL is out of scope.
@@ -77,8 +77,9 @@ the milestone that needs them. JSTL is out of scope.
 sdk env          # Java 25 (Temurin) + Maven 3.9.16, pinned by .sdkmanrc
 ./mvnw -ntp install
 ./mvnw -ntp -f examples/precompiled-pages/pom.xml clean package
-./mvnw -Ptck -pl ibarra-tck test                 # TCK runner skeleton
-./mvnw -Ptck,tck-official -pl ibarra-tck test    # official TCK (coordinates to confirm)
+./mvnw -Ptck -pl ibarra-tck test                 # adapter regression tests
+./run-official-tck-pages-4.0.sh smoke            # prepare official artifacts, clean install, smoke
+./run-official-tck-pages-4.0.sh all              # diagnostic full-suite attempt; not yet green
 ```
 
 ## License

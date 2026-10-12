@@ -1,25 +1,69 @@
 = TCK status
-:description: Jakarta Pages 4.0 TCK — not run yet; the runner is milestone I8.
+:description: Initial official Jakarta Pages 4.0 results; full certification remains pending.
 
 [.lead]
-Honest status: the official Jakarta Pages 4.0 TCK has **not been run** against Ibarra — there is no page engine yet. The runner is milestone I8.
+The official Jakarta Pages 4.0.0 TCK now runs through a build-side Arquillian
+adapter on Foy. The four-test smoke subset passes. The full diagnostic attempt
+is incomplete and failing; Ibarra is not certified.
 
-== Plan of record
+== Recorded baseline
 
-[cols="1,3",options="header"]
-|===
-| Item | Plan
+Run date: 2026-10-12, Temurin Java 25 and Maven 3.9.16.
 
-| Runner | `ibarra-tck` module, in the reactor only under the `-Ptck` Maven profile (same pattern as the other Vidocq bricks); the official artefact is resolved only under `-Ptck,tck-official`.
-| Artefact | The Pages 4.0 TCK lives in the `jakartaee/pages` repository (Arquillian + JUnit 5). Not on Maven Central: `jakarta-pages-tck-4.0.0.zip` from download.eclipse.org, installed into the local Maven repository. Maven coordinates to confirm against the zip.
-| Container | Foy + Ibarra behind an Arquillian adapter, modelled on `foy-tck`. The TCK deploys WARs with JSP sources: the adapter either precompiles them or relies on the development-mode translation (open question).
-| Script | `run-official-tck-pages-4.0.sh` with `smoke` / `all` / `-Dtest=` modes, added with the first run.
-| Merge gate | Once wired, 100 % PASS becomes a hard merge gate on `main`.
-|===
+[source,bash]
+----
+./run-official-tck-pages-4.0.sh all --no-install --no-prepare
+----
+
+The current reactor had already been installed and official artifacts prepared.
+The verified official binary contains 92 test classes and 682 declared JUnit
+`@Test` methods. The run records *174 passing methods* and *11 failing methods*,
+plus *54 class-level setup/deployment errors*. Surefire therefore reports 239
+entries, 65 errors, zero assertion failures and zero skips, and exits nonzero.
+The upstream HTTP assertion helper reports failures as exceptions.
+
+*174/682 = 25.5% confirmed passes*, a conservative floor, not a complete suite
+pass rate. Only 185 method entries ran. Class-level errors prevent whole groups
+of methods from executing; they must not be counted as executed methods.
+
+The detailed command, binary inventory, counts and remaining categories are in
+link:{repo-ibarra}/src/branch/main/ibarra-tck/BASELINE.md[the recorded baseline].
+Peano's independent EL TCK result is not a Pages TCK result.
+
+== Passing coverage and CI
+
+Passing classes include JspFactory, JspEngineInfo, JspWriter, PageContext,
+ErrorData, BodyContent, DynamicAttributes, TagAdapter, VariableInfo, several
+EL/implicit-resolver API tests, implicit objects and scripting syntax.
+Other classes pass partially; the full suite remains blocked by translation,
+tag metadata/files and WAR-adaptation gaps.
+
+`official-pages-tck-smoke` runs on pull requests and `main`. It clean-installs
+Ibarra, runs four adapter regression tests, then three official JspFactory
+tests and one JspEngineInfo test. This deliberately bounded regression check
+does not claim 100% Pages coverage. Full-suite certification is milestone I8;
+100% PASS becomes the gate once that suite is green.
+
+== Runner
+
+`ibarra-tck` enters the reactor only under `-Ptck`; official artifact scanning
+requires `-Ptck,tck-official`. Coordinates verified from the embedded POM:
+`jakarta.tck:jakarta-pages-tck:4.0.0`, distributed by Eclipse rather than Central.
+Preparation preserves the original POM and supplies the omitted JavaTest 5.0
+dependency, with mandatory SHA-256 checks.
+
+The adapter precompiles pages before launching modular Foy/Chappe; the server
+contains neither compiler nor `java.compiler` and retains reflection denial.
+It supports multiple isolated WARs and their filesystem resources.
+Libraries, Servlet component factories/annotations/initializers and JSP property
+groups that cannot yet be adapted fail explicitly. Intentionally invalid pages
+currently fail eager whole-WAR translation, blocking their request-time tests.
+
+See xref:modules/official-tck-runner.adoc[Official TCK runner] for dependencies,
+commands, artifact preparation, retained logs and limits.
 
 == Tracking
 
-* Reproducible issues: link:{repo-ibarra}/src/branch/main/BUG.md[BUG.md]
-* Plan and open questions: `PLAN.md` in {repo-ibarra}[the repo]
-
-This page will carry the run date, suite version, exact command and pass counts as soon as the first official run happens.
+* Reproducible issues: link:{repo-ibarra}/src/branch/main/BUG.md[BUG.md], IBARRA-083–094.
+* Plan and milestones: link:{repo-ibarra}/src/branch/main/PLAN.md[PLAN.md].
+* Challenges, if actually filed, belong in `TCK.md` with a specification citation.

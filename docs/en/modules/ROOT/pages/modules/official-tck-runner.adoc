@@ -1,0 +1,43 @@
+= Official TCK runner
+:description: Build-side Arquillian WAR adapter for Jakarta Pages 4.0 on modular Foy.
+
+`ibarra-tck` is unpublished and enters the reactor only under `-Ptck`.
+`-Ptck,tck-official` additionally resolves the official Pages 4.0.0 suite.
+See xref:tck.adoc[TCK status] for the measured baseline and certification limits.
+
+[source,bash]
+----
+./run-official-tck-pages-4.0.sh smoke
+./run-official-tck-pages-4.0.sh all
+./run-official-tck-pages-4.0.sh -Dtest=ee.jakarta.tck.pages.api.jakarta_servlet.jsp.jspwriter.URLClientIT
+----
+
+The script verifies distribution checksums, preserves the upstream Maven POM,
+installs the non-Central artifacts, clean-installs Ibarra, tests the adapter,
+and runs the requested official tests. Java 25, Maven 3.9.16 and Python 3 are
+required. Local ZIP overrides and skip switches are documented in
+link:{repo-ibarra}/src/branch/main/ibarra-tck/README.md[the runner README].
+
+== Test tooling dependencies
+
+The runner uses Arquillian container SPI, ShrinkWrap, JUnit and the official
+`jakarta.tck:jakarta-pages-tck:4.0.0` jar with its original dependencies,
+including `jakarta.tck:common`, `runtime`, `libutil`, signature tooling,
+Apache HttpClient and `javatest:javatest:5.0`. This last tool is extracted from
+an earlier Eclipse distribution because the Pages 4.0 ZIP omits it.
+Only that tool is used from the older distribution; all tests are Pages 4.0.
+These dependencies are test-only and never enter application artifacts.
+
+== Runtime isolation
+
+The build-side adapter precompiles each WAR as a named application module,
+then launches Foy/Chappe in a separate process on the module path.
+The server rejects the presence of `java.compiler` or either compiler module;
+Peano reflection remains denied. Application packages have no added exports
+or opens. Multiple WARs have independent ports, lifecycles and resource roots.
+Retained server logs and Surefire reports are in `ibarra-tck/target`.
+
+The initial adapter explicitly rejects libraries, Servlet component factories,
+initializers and JSP property groups that it cannot yet adapt. Whole-WAR eager
+precompilation also blocks mixed positive/negative translation fixtures.
+Those are reported errors in the full suite, not omitted successes.

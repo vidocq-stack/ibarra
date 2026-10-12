@@ -52,8 +52,9 @@ of local divergence, the brick-specific sections further down take precedence.
 - `jakarta.servlet.jsp:jakarta.servlet.jsp-api:4.0.0` is already modular upstream
   (module `jakarta.servlet.jsp`, requires `jakarta.servlet` and `jakarta.el`
   transitively) — no Vidocq fork needed.
-- The official Pages 4.0 TCK coordinates are **not yet confirmed** (see PLAN.md
-  "TCK plan"); it is an Arquillian suite and will need Foy as the container.
+- Official Pages TCK coordinates: `jakarta.tck:jakarta-pages-tck:4.0.0`, verified
+  from the distribution's embedded POM. The build-side Arquillian adapter
+  precompiles WARs and launches modular Foy; see `ibarra-tck/README.md`.
 - The build uses `git-commit-id-maven-plugin` (from `vidocq-parent`): it needs at least
   one commit in the repository.
 
@@ -63,8 +64,9 @@ of local divergence, the brick-specific sections further down take precedence.
 sdk env
 ./mvnw -ntp install                                # default reactor (no TCK)
 ./mvnw test
-./mvnw -Ptck -pl ibarra-tck test                   # TCK runner skeleton
-./mvnw -Ptck,tck-official -pl ibarra-tck test      # official TCK (coordinates to confirm)
+./mvnw -Ptck -pl ibarra-tck test                   # adapter regression tests
+./run-official-tck-pages-4.0.sh smoke              # bootstrap, clean install, official smoke
+./run-official-tck-pages-4.0.sh all                # diagnostic full-suite attempt (not green)
 ```
 
 `ibarra-tck` is **in-reactor behind the `tck` Maven profile** from day one: a plain
@@ -150,7 +152,9 @@ directives").
 
 ## TCK — Technology Compatibility Kit
 
-Not run yet (milestone I8). Once green, 100 % PASS is a merge gate; any challenge goes
+Initial official smoke runs pass; the full-suite diagnostic baseline is incomplete
+and failing (see `ibarra-tck/BASELINE.md`). Do not treat class-level deployment
+errors as executed test methods or claim certification. Once green, 100 % PASS is a merge gate; any challenge goes
 in a `TCK.md` with spec citation — created only if one is actually filed.
 
 ## AI Principles — Collaboration on This Repository

@@ -160,7 +160,7 @@
             TCK harmonisation: the official Jakarta Pages 4.0 TCK
             runner joins the reactor only when this profile is active.
 
-                ./mvnw -Ptck -pl ibarra-tck test                  (runner skeleton only)
+                ./mvnw -Ptck -pl ibarra-tck test                  (adapter tests only)
                 ./mvnw -Ptck,tck-official -pl ibarra-tck test     (pulls the official TCK)
 
             See PLAN.md, "TCK plan".

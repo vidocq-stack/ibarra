@@ -96,7 +96,8 @@ Production packaging compiles immediate EL with Peano; runtime parsing is not
 enabled. Fixed-arity TLD functions use direct static invokers as described in
 xref:modules/compiled-el.adoc[Compiled EL]. Typed deferred-value/deferred-method
 attributes follow the contracts described there.
-The official Pages TCK has not been run.
+The initial official Pages TCK baseline is recorded in xref:tck.adoc[TCK status];
+full tag/TLV coverage remains incomplete and failing.
 
 == Verification
 

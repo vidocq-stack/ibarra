@@ -11,3 +11,4 @@
 ** xref:modules/foy-binding.adoc[Foy binding]
 ** xref:modules/tag-handlers.adoc[Tag handlers]
 ** xref:modules/compiled-el.adoc[Compiled EL]
+** xref:modules/official-tck-runner.adoc[Official TCK runner]
