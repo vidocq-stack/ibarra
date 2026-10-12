@@ -1,12 +1,10 @@
 # Official Pages failure inventory
 
 Date: 2026-10-12, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-This lists the still-failing official cases after per-page translation recovery
-and build-side JSP configuration. Status is OPEN unless a specific BUG.md entry
-already records a fix. Causes below are observed symptoms; attribution remains
-under investigation for cases without an established cause.
-Keep these TCK ids stable when updating the inventory: retain resolved entries
-with their final status and append new ids for newly discovered failing classes.
+This inventory records the remaining 187 method errors and five setup errors
+after ordinary TLD setter/name fixes. Each class keeps its previous stable id.
+Resolved method entries remain as a trace; other causes still need investigation.
+Append new ids when discovering new failing classes, without renumbering records.
 
 Reproduce a method with `./run-official-tck-pages-4.0.sh -Dtest=<class>#<method>`;
 for deployment errors select the class alone. Add `--no-install --no-prepare`
@@ -351,9 +349,14 @@ Failing methods:
 
 - Date: 2026-10-12.
 - Status: OPEN.
-- Symptom: class setup/deployment failed: io.vidocq.ibarra.compiler.PageParseException: /WEB-INF/attribute.tld:1:1: Invalid tag attribute name: boolean
-- Minimal repro: select `ee.jakarta.tck.pages.spec.core_syntax.actions.attribute.URLClientIT`.
-- Hypothesis: the runner cannot yet adapt the required deployment metadata/resources; inspect the retained diagnostic.
+- Symptom: the official HTTP/signature assertion reported an error.
+- Minimal repro: select `ee.jakarta.tck.pages.spec.core_syntax.actions.attribute.URLClientIT` and any method below.
+- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- The previous TLD setup blocker was resolved by IBARRA-093/094 on 2026-10-12.
+
+Failing methods:
+
+- `jspAttributeFragmentTest`
 
 ## TCK-026 — ee.jakarta.tck.pages.spec.core_syntax.actions.declaration.URLClientIT
 
@@ -575,9 +578,19 @@ Failing methods:
 
 - Date: 2026-10-12.
 - Status: OPEN.
-- Symptom: class setup/deployment failed: io.vidocq.ibarra.compiler.PageParseException: /WEB-INF/el.tld:1:1: Invalid tag attribute name: byte
-- Minimal repro: select `ee.jakarta.tck.pages.spec.core_syntax.scripting.el.URLClientIT`.
-- Hypothesis: the runner cannot yet adapt the required deployment metadata/resources; inspect the retained diagnostic.
+- Symptom: the official HTTP/signature assertion reported an error.
+- Minimal repro: select `ee.jakarta.tck.pages.spec.core_syntax.scripting.el.URLClientIT` and any method below.
+- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- The previous TLD setup blocker was resolved by IBARRA-093/094 on 2026-10-12.
+
+Failing methods:
+
+- `elInvocationAndUsageTest`
+- `elPrimitiveBoxedTypeConversionTest`
+- `elBooleanCoercionTest`
+- `elNumberCoercionTest`
+- `elCharacterCoercionTest`
+- `elStringCoercionTest`
 
 ## TCK-043 — ee.jakarta.tck.pages.spec.el.jsp.URLClientIT
 
@@ -591,8 +604,11 @@ Failing methods:
 
 - `positiveELDeferredMethodValueTest`
 - `implicitImportTest`
-- `positiveELDeferredValueValueTest`
 - `allowedDynamicAttributeValueTypesTest`
+
+Resolved methods (2026-10-12, ordinary setter binding):
+
+- `positiveELDeferredValueValueTest`
 
 ## TCK-044 — ee.jakarta.tck.pages.spec.el.language.URLClientIT
 
@@ -604,10 +620,13 @@ Failing methods:
 
 Failing methods:
 
-- `poundDollarSameMeaningTest`
 - `dotAndIndexOperatorsSameTest`
+
+Resolved methods (2026-10-12, ordinary setter binding):
+
 - `compositeExprEval1Test`
 - `compositeExprEval2Test`
+- `poundDollarSameMeaningTest`
 
 ## TCK-045 — ee.jakarta.tck.pages.spec.jspdocument.elements.URLClientIT
 
@@ -626,9 +645,18 @@ Failing methods:
 
 - Date: 2026-10-12.
 - Status: OPEN.
-- Symptom: class setup/deployment failed: io.vidocq.ibarra.compiler.PageParseException: /WEB-INF/tagdep.tld:1:1: Invalid tag attribute name: static
-- Minimal repro: select `ee.jakarta.tck.pages.spec.jspdocument.general.URLClientIT`.
-- Hypothesis: the runner cannot yet adapt the required deployment metadata/resources; inspect the retained diagnostic.
+- Symptom: the official HTTP/signature assertion reported an error.
+- Minimal repro: select `ee.jakarta.tck.pages.spec.jspdocument.general.URLClientIT` and any method below.
+- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- The previous TLD setup blocker was resolved by IBARRA-093/094 on 2026-10-12.
+
+Failing methods:
+
+- `invalidPlainURITest`
+- `identifyByExtensionTest`
+- `identifyByJspRootTest`
+- `tagDependentTest`
+- `identifyByConfigTest`
 
 ## TCK-047 — ee.jakarta.tck.pages.spec.misc.precompilation.URLClientIT
 

@@ -24,3 +24,17 @@ Use `xmlns:f="urn:example:functions"` for a mapped library URI, or
 The earlier `urn:jsptld:urn:example:functions` form mixed these modes and is now
 rejected. Forced paths bypass aliases; plain namespaces use mappings only.
 Direct discovery does not add implicit URI entries for external descriptors.
+
+== Ordinary custom-tag setter selection
+
+Ordinary tag attributes now use the handler's actual JavaBeans write method,
+including when their TLD type is omitted or differs from the property type.
+For a property with Object and String setter overloads, the String writer wins
+when it is the most-specific compatible method. The earlier Object metadata
+default no longer forces the Object overload. Incomparable overloads or a setter
+that does not fit the getter's property contract fail translation.
+
+Java keyword attribute names such as boolean, byte and static are accepted.
+Fragment and deferred-expression setter protocols retain their exact API types.
+See xref:modules/tag-handlers.adoc[Tag handlers] for the compatibility interpretation
+and Class-File binding rules.

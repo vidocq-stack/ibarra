@@ -35,7 +35,7 @@ public record TagAttribute(String name, String type, boolean required, boolean r
     }
     /** Whether this attribute permits deferred expressions. */
     public boolean deferred() { return deferredValueType != null || deferredMethod != null; }
-    /** Exact setter input, independent of the expected expression result type. */
+    /** Protocol input for deferred/fragment setters; ordinary properties bind the handler's actual setter type. */
     public String setterType() {
         if (deferred()) return runtimeExpression ? "java.lang.Object"
                 : deferredMethod == null ? "jakarta.el.ValueExpression" : "jakarta.el.MethodExpression";

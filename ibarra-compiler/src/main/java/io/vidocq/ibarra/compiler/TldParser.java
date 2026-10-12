@@ -121,7 +121,7 @@ public final class TldParser {
                         throw new PageParseException(at, "Invalid or duplicate tag attribute field: " + name);
                 }
                 String name = required(values, "name", at);
-                if (!SourceVersion.isIdentifier(name) || SourceVersion.isKeyword(name))
+                if (!SourceVersion.isIdentifier(name))
                     throw new PageParseException(at, "Invalid tag attribute name: " + name);
                 boolean fragment = bool(values, "fragment", false, at);
                 boolean runtime = fragment || bool(values, "rtexprvalue", false, at);

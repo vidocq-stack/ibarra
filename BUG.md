@@ -1,9 +1,22 @@
 # BUG.md — Ibarra
 
+## IBARRA-099 · 2026-10-12 · Ordinary tag getter guidance selects incompatible setters
+
+- Symptom: getter-guided overload selection chooses Object instead of String or
+  Parent[] instead of Child[], and accepts a broad setter for a narrow getter.
+- Minimal repro: TagGenerationTest.tagGetterCompatibilityMatchesJavaBeansForUniqueAndOverloadedSetters
+  and getterGuidanceAndNestedArrayCovarianceSelectTheCorrectOrdinarySetter.
+- Cause: the initial tag-property binding uses reversed getter compatibility and
+  prefers an exact getter-type setter before the most-specific writable method.
+- Status: FIXED for ordinary tag properties by Class-File getter/write compatibility
+  and unique most-specific setter selection, including single candidates, boolean
+  getters and reference-array covariance. Bean actions and deferred protocols retain
+  their existing paths; no runtime introspection is introduced.
+
 ## IBARRA-098 · 2026-10-12 · Remaining official Pages assertions after deployment recovery
 
-- Symptom: the full official run reports 179 method errors and 8 class-level
-  setup/deployment errors after 427 passing methods.
+- Symptom: the current full official run reports 187 method errors and 5 class-level
+  setup/deployment errors after 467 passing methods; the previous baseline was 427 passes.
 - Minimal repro: `./run-official-tck-pages-4.0.sh all`; individual classes and
   failing method selectors are recorded under stable TCK ids in
   [ibarra-tck/FAILURES.md](ibarra-tck/FAILURES.md).
@@ -122,18 +135,23 @@
 - Symptom: official action/EL fixture WARs fail translation with "Invalid tag
   attribute name: boolean", "byte" or "static".
 - Minimal repro: `spec.core_syntax.actions.attribute.URLClientIT` loads `/WEB-INF/attribute.tld`.
-- Hypothesis: TLD names are checked as Java identifiers although they are XML names
-  and generated setter names can remain valid Java identifiers.
-- Status: OPEN, I3/I6 validation follow-up; isolate from intentionally invalid pages.
+- Cause: the parser additionally rejects Java keywords although the schema's
+  identifier lexical constraint does not require these names to become Java variables.
+- Status: FIXED by retaining identifier syntax validation and accepting keyword
+  names. Direct generated setBoolean/setByte/setStatic calls are covered by rendering tests.
 
 ## IBARRA-094 · 2026-10-12 · Official fixtures fail inferred TLD setter validation
 
 - Symptom: configuration/EL fixture WARs fail translation with "No setter matching
   TLD type java.lang.Object" for SimpleTag.echo or SetTag.value.
 - Minimal repro: `spec.el.language.URLClientIT`, `/CompositeExprEval1.jsp`.
-- Hypothesis: missing TLD type defaults or inherited setter metadata differ from
-  the official fixtures' expected translation semantics.
-- Status: OPEN, inspect the unmodified TLD/handler bytecode before changing validation.
+- Cause: ordinary tag setters are matched exactly against TLD EL metadata rather
+  than the actual JavaBeans property. Omitted dynamic metadata correctly defaults
+  to Object, but that does not mandate a setValue(Object) method.
+- Status: FIXED by actual-property binding/coercion for ordinary attributes,
+  including inherited methods and explicit metadata differences. The compatibility
+  interpretation follows the official fixtures and Jasper's property-based generation;
+  deferred/fragment setter protocols remain exact.
 
 ## IBARRA-083 · 2026-10-12 · Initial TCK adapter ignores JSP property groups
 

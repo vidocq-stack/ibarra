@@ -32,6 +32,107 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class TagGenerationTest {
     @TempDir Path directory;
+
+    @Test
+    void ordinaryRuntimeAttributesBindActualInheritedSetterTypes() throws Exception {
+        var library = new TldParser().parse("/WEB-INF/ordinary.tld", ("<taglib><uri>urn:test</uri>"
+                + "<tag><name>implicitText</name><tag-class>fixture.Tags$RuntimeText</tag-class><body-content>scriptless</body-content><attribute><name>label</name><rtexprvalue>true</rtexprvalue></attribute></tag>"
+                + "<tag><name>typedCount</name><tag-class>fixture.Tags$CountOnly</tag-class><body-content>empty</body-content><attribute><name>count</name><type>java.lang.String</type><rtexprvalue>true</rtexprvalue></attribute></tag></taglib>").getBytes(StandardCharsets.UTF_8));
+        var options = GenerationOptions.DEFAULT.withTagLibraries(Map.of("urn:test", library));
+        assertEquals("[text:bodybody]|[named:bodybody]|8|9", render("<x:implicitText label='<%=\"text\"%>'>body</x:implicitText>|"
+                + "<x:implicitText><jsp:attribute name='label'><%=\"named\"%></jsp:attribute><jsp:body>body</jsp:body></x:implicitText>|"
+                + "<x:typedCount count='08'/>|<x:typedCount><jsp:attribute name='count'>9</jsp:attribute></x:typedCount>", false, options));
+    }
+
+    @Test
+    void ordinarySetterOverloadsChooseMostSpecificCompatiblePropertyType() throws Exception {
+        assertEquals("Sliteral", render("<x:overload value='literal'/>"));
+        prepare();
+        compile(List.of(new GeneratedPage("fixture.Ambiguous", "package fixture; public class Ambiguous extends jakarta.servlet.jsp.tagext.SimpleTagSupport { public void setValue(String value){} public void setValue(Integer value){} }", Map.of())));
+        var library = new TldParser().parse("/WEB-INF/ambiguous.tld", "<taglib><uri>urn:test</uri><tag><name>ambiguous</name><tag-class>fixture.Ambiguous</tag-class><attribute><name>value</name><rtexprvalue>true</rtexprvalue></attribute></tag></taglib>".getBytes(StandardCharsets.UTF_8));
+        assertThrows(PageParseException.class, () -> generator().generate("/tags.jsp", prefix()+"<x:ambiguous value='x'/>", "fixture.GeneratedPage",
+                GenerationOptions.DEFAULT.withTagLibraries(Map.of("urn:test", library))));
+    }
+
+    @Test
+    void getterGuidanceAndNestedArrayCovarianceSelectTheCorrectOrdinarySetter() throws Exception {
+        prepare();
+        compile(List.of(new GeneratedPage("fixture.Relations", """
+                package fixture;
+                public class Relations {
+                    public static class Parent { } public static class Child extends Parent { }
+                    public static class Getter extends jakarta.servlet.jsp.tagext.SimpleTagSupport {
+                        private String selected; public Number getValue(){return null;}
+                        public void setValue(Integer value){selected="integer";} public void setValue(Object value){selected="object";}
+                        public void doTag() throws java.io.IOException {getJspContext().getOut().write(selected);}
+                    }
+                    public static class Arrays extends jakarta.servlet.jsp.tagext.SimpleTagSupport {
+                        private String selected;
+                        public Parent[] getValue(){return null;}
+                        public void setValue(Parent[] value){selected="parent";} public void setValue(Child[] value){selected="child";}
+                        public void doTag() throws java.io.IOException {getJspContext().getOut().write(selected);}
+                    }
+                }
+                """, Map.of())));
+        var library = new TldParser().parse("/WEB-INF/relations.tld", ("<taglib><uri>urn:test</uri>"
+                + "<tag><name>getter</name><tag-class>fixture.Relations$Getter</tag-class><body-content>empty</body-content><attribute><name>value</name><rtexprvalue>true</rtexprvalue></attribute></tag>"
+                + "<tag><name>arrays</name><tag-class>fixture.Relations$Arrays</tag-class><body-content>empty</body-content><attribute><name>value</name><rtexprvalue>true</rtexprvalue></attribute></tag></taglib>").getBytes(StandardCharsets.UTF_8));
+        assertEquals("integer|child", render("<x:getter value='7'/>|<x:arrays value='<%=new fixture.Relations.Child[0]%>'/>", false,
+                GenerationOptions.DEFAULT.withTagLibraries(Map.of("urn:test", library))));
+    }
+
+    @Test
+    void tagGetterCompatibilityMatchesJavaBeansForUniqueAndOverloadedSetters() throws Exception {
+        prepare();
+        compile(List.of(new GeneratedPage("fixture.GetterContracts", """
+                package fixture;
+                public class GetterContracts {
+                    public static class ReadObject extends jakarta.servlet.jsp.tagext.SimpleTagSupport {
+                        private String selected; public Object getValue(){return null;}
+                        public void setValue(Object value){selected="object";} public void setValue(String value){selected="string";}
+                        public void doTag() throws java.io.IOException {getJspContext().getOut().write(selected);}
+                    }
+                    public static class ReadString extends jakarta.servlet.jsp.tagext.SimpleTagSupport {
+                        public String getValue(){return null;}
+                        public void setValue(Object value){} public void setValue(CharSequence value){}
+                    }
+                    public static class Unique extends jakarta.servlet.jsp.tagext.SimpleTagSupport {
+                        public String getValue(){return null;} public void setValue(Object value){}
+                    }
+                    public static class BooleanRead extends jakarta.servlet.jsp.tagext.SimpleTagSupport {
+                        private String selected; public boolean isValue(){return false;} public String getValue(){return null;}
+                        public void setValue(boolean value){selected="boolean";} public void setValue(String value){selected="string";}
+                        public void doTag() throws java.io.IOException {getJspContext().getOut().write(selected);}
+                    }
+                }
+                """, Map.of())));
+        StringBuilder body = new StringBuilder("<taglib><uri>urn:test</uri>");
+        for (String name : List.of("ReadObject", "ReadString", "Unique", "BooleanRead")) body.append("<tag><name>").append(name).append("</name><tag-class>fixture.GetterContracts$").append(name)
+                .append("</tag-class><body-content>empty</body-content><attribute><name>value</name><rtexprvalue>true</rtexprvalue></attribute></tag>");
+        var library = new TldParser().parse("/WEB-INF/getters.tld", body.append("</taglib>").toString().getBytes(StandardCharsets.UTF_8));
+        var options = GenerationOptions.DEFAULT.withTagLibraries(Map.of("urn:test", library));
+        assertEquals("string|boolean", render("<x:ReadObject value='text'/>|<x:BooleanRead value='true'/>", false, options));
+        for (String name : List.of("ReadString", "Unique"))
+            assertThrows(PageParseException.class, () -> generator().generate("/tags.jsp", prefix()+"<x:"+name+" value='text'/>", "fixture.GeneratedPage", options));
+    }
+
+    @Test
+    void keywordAttributesRenderWithDirectPrimitiveAndNamedSetterCalls() throws Exception {
+        prepare();
+        compile(List.of(new GeneratedPage("fixture.Keywords", """
+                package fixture;
+                public class Keywords extends jakarta.servlet.jsp.tagext.SimpleTagSupport {
+                    private boolean bool; private byte number; private String text;
+                    public void setBoolean(boolean value){bool=value;} public void setByte(byte value){number=value;} public void setStatic(String value){text=value;}
+                    public void doTag() throws java.io.IOException {getJspContext().getOut().write(bool+":"+number+":"+text);}
+                }
+                """, Map.of())));
+        var library = new TldParser().parse("/WEB-INF/keywords.tld", ("<taglib><uri>urn:test</uri><tag><name>keywords</name><tag-class>fixture.Keywords</tag-class><body-content>empty</body-content>"
+                + "<attribute><name>boolean</name><type>java.lang.Boolean</type><rtexprvalue>true</rtexprvalue></attribute>"
+                + "<attribute><name>byte</name><rtexprvalue>true</rtexprvalue></attribute><attribute><name>static</name><type>java.lang.Object</type><rtexprvalue>true</rtexprvalue></attribute></tag></taglib>").getBytes(StandardCharsets.UTF_8));
+        assertEquals("true:7:word", render("<x:keywords boolean='true' byte='7'><jsp:attribute name='static'>word</jsp:attribute></x:keywords>", false,
+                GenerationOptions.DEFAULT.withTagLibraries(Map.of("urn:test", library))));
+    }
     @Test void simpleAttributesAndRepeatedFragmentEvaluationRenderWithoutEl() throws Exception {
         assertEquals("[hello:bodybody]", render("<x:echo label='hello' count='2'>body</x:echo>"));
     }
@@ -103,9 +204,9 @@ class TagGenerationTest {
     @Test void bodyContentSetterFailuresBypassCatchFinallyButStillRelease() throws Exception {
         assertEquals("R", render("<x:setterFailure>body</x:setterFailure>", true));
     }
-    @Test void staticValuesUseSetterTypesAndRuntimeValuesUseObjectDefaults() throws Exception {
+    @Test void ordinaryValuesUseSetterTypesWhileObjectMetadataDefaultsStayIndependent() throws Exception {
         assertEquals("8|42", render("<x:countOnly count='08'/>|<x:objectValue value='<%=42%>'/>"));
-        assertEquals("Oliteral",render("<x:overload value='literal'/>"));
+        assertEquals("Sliteral",render("<x:overload value='literal'/>"));
     }
     @Test void ordinaryAttributesBeginningWithXmlnsAreNotNamespaceDeclarations() throws Exception {
         assertEquals("[name:body]", render("<x:xmlnsLabel xmlnsLabel='name'>body</x:xmlnsLabel>"));

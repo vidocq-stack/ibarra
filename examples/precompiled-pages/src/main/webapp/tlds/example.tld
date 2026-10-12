@@ -19,7 +19,7 @@
         <name>frame</name>
         <tag-class>io.vidocq.ibarra.example.Frame</tag-class>
         <body-content>scriptless</body-content>
-        <attribute><name>label</name><required>true</required></attribute>
+        <attribute><name>label</name><required>true</required><rtexprvalue>true</rtexprvalue></attribute>
         <attribute><name>heading</name><fragment>true</fragment></attribute>
     </tag>
 </taglib>

@@ -12,18 +12,18 @@ Run date: 2026-10-12, Temurin Java 25 and Maven 3.9.16.
 
 [source,bash]
 ----
-./run-official-tck-pages-4.0.sh all --no-install --no-prepare
+./run-official-tck-pages-4.0.sh all --no-prepare
 ----
 
-The current reactor had already been installed and official artifacts prepared.
+Official artifacts had already been prepared; the command clean-installs the reactor.
 The verified official binary contains 92 test classes and 682 declared JUnit
-`@Test` methods. The run records *427 passing methods* and *179 failing methods*,
-plus *8 class-level setup/deployment errors*. Surefire therefore reports 614
-entries, 187 errors, zero assertion failures and zero skips, and exits nonzero.
+`@Test` methods. The run records *467 passing methods* and *187 failing methods*,
+plus *5 class-level setup/deployment errors*. Surefire therefore reports 659
+entries, 192 errors, zero assertion failures and zero skips, and exits nonzero.
 The upstream HTTP assertion helper reports failures as exceptions.
 
-*427/682 = 62.6% confirmed passes*, a conservative floor, not a complete suite
-pass rate. Only 606 method entries ran. Class-level errors prevent whole groups
+*467/682 = 68.5% confirmed passes*, a conservative floor, not a complete suite
+pass rate. Only 654 method entries ran. Class-level errors prevent whole groups
 of methods from executing; they must not be counted as executed methods.
 
 The detailed command, binary inventory, counts and remaining categories are in
@@ -38,6 +38,11 @@ EL/implicit-resolver API tests, implicit objects, character-sequence/EL/encoding
 configuration, i18n and scripting syntax.
 Other classes pass partially; the full suite remains blocked by translation,
 tag metadata/files and WAR-adaptation gaps.
+
+Ordinary TLD keyword/setter fixes add 40 confirmed passes, remove three setup
+blockers and restore four previously failing EL methods, without a regression
+among previously passing methods. See xref:modules/tag-handlers.adoc[Tag handlers]
+for the actual-property binding rules and remaining boundaries.
 
 `official-pages-tck-smoke` runs on pull requests and `main`. It clean-installs
 Ibarra, runs seven adapter regression tests, then three official JspFactory

@@ -177,17 +177,49 @@ public final class BeanClasses {
     }
 
     public Accessor setter(String type, String property, SourceLocation at) {
+        return setter(type, property, at, false);
+    }
+
+    /** Ordinary tag values bind JavaBeans properties independently of TLD EL type defaults. */
+    public Accessor tagPropertySetter(String type, String property, SourceLocation at) {
+        return setter(type, property, at, true);
+    }
+
+    private Accessor setter(String type, String property, SourceLocation at, boolean tagProperty) {
         String name = "set" + suffix(property, at);
         var candidates = new LinkedHashMap<String, Accessor>();
-        for (var method : methods(type, at)) {
+        var parameters = new HashMap<String, String>();
+        var methods = methods(type, at);
+        for (var method : methods) {
             var descriptor = method.methodTypeSymbol();
             if (method.methodName().stringValue().equals(name) && descriptor.parameterCount() == 1
                     && descriptor.returnType().descriptorString().equals("V")) {
                 String parameter = javaType(descriptor.parameterType(0).descriptorString());
                 candidates.putIfAbsent(parameter, new Accessor(name, parameter));
+                parameters.putIfAbsent(parameter, descriptor.parameterType(0).descriptorString());
             }
         }
-        if (candidates.size() > 1) {
+        if (tagProperty) {
+            String readType = null;
+            for (String getter : List.of("is" + suffix(property, at), "get" + suffix(property, at))) {
+                for (var method : methods) {
+                    var descriptor = method.methodTypeSymbol();
+                    String returned = descriptor.returnType().descriptorString();
+                    if (method.methodName().stringValue().equals(getter) && descriptor.parameterCount() == 0
+                            && !returned.equals("V") && (!getter.startsWith("is") || returned.equals("Z"))
+                            && (readType == null || assignable(returned, readType, at))) readType = returned;
+                }
+                if (readType != null) break;
+            }
+            if (readType != null) {
+                String expected = readType;
+                candidates.entrySet().removeIf(entry -> !assignable(parameters.get(entry.getKey()), expected, at));
+            }
+            for (var candidate : candidates.values()) {
+                String value = parameters.get(candidate.type());
+                if (candidates.keySet().stream().allMatch(other -> assignable(value, parameters.get(other), at))) return candidate;
+            }
+        } else if (candidates.size() > 1) {
             try {
                 var getter = getter(type, property, at);
                 if (candidates.containsKey(getter.type())) return candidates.get(getter.type());
@@ -195,6 +227,21 @@ public final class BeanClasses {
         }
         if (candidates.size() != 1) throw new PageParseException(at, "Missing or ambiguous writable property " + property + " on " + type);
         return candidates.values().iterator().next();
+    }
+
+    private boolean assignable(String value, String target, SourceLocation at) {
+        if (value.equals(target)) return true;
+        boolean valueReference = value.startsWith("L") || value.startsWith("[");
+        boolean targetReference = target.startsWith("L") || target.startsWith("[");
+        if (!valueReference || !targetReference) return false;
+        if (target.equals("Ljava/lang/Object;")) return true;
+        if (value.startsWith("[")) {
+            if (target.startsWith("[")) return assignable(value.substring(1), target.substring(1), at);
+            return target.equals("Ljava/lang/Cloneable;") || target.equals("Ljava/io/Serializable;");
+        }
+        if (target.startsWith("[")) return false;
+        return subtype(value.substring(1, value.length() - 1).replace('/', '.'),
+                target.substring(1, target.length() - 1).replace('/', '.'), at, new HashSet<>());
     }
 
     public Set<String> writableProperties(String type, SourceLocation at) {

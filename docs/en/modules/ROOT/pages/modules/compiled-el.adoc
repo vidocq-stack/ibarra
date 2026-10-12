@@ -205,7 +205,7 @@ render repeated request values, TLD functions and private beans with Peano refle
 Tests cover bytecode immutability, collisions, diagnostics, required module reads
 and incremental cleanup. The independent Maven example compiles EL through the
 actual precompile goal, calls a TLD function and explicitly requires Peano API.
-The local Ibarra reactor passes 271 tests. Peano's compatible prerequisite passes
+The local Ibarra reactor passes 277 tests. Peano's compatible prerequisite passes
 303 tests and 361/361 official EL TCK tests. The official Pages TCK now has an
 initial diagnostic baseline; these unit and integration results are not Pages certification.
 Deferred fixtures also verify setter overload selection, writability, variable

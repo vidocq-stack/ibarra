@@ -3,7 +3,7 @@
 <%@ page import="java.util.Map.Entry" %>
 <html><head><title>Ibarra precompiled pages</title></head><body>
 <example:frame>
-<jsp:attribute name="label">Build-generated tag</jsp:attribute>
+<jsp:attribute name="label">Build-generated tag ${1 + 2}</jsp:attribute>
 <jsp:attribute name="heading" trim="false"> with a named fragment</jsp:attribute>
 <jsp:body>
 <jsp:useBean id="greeting" class="io.vidocq.ibarra.example.Greeting" scope="application">

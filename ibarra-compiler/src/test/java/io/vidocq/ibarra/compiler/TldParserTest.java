@@ -29,6 +29,16 @@ class TldParserTest {
     private TagLibraryDescriptor parse(String xml) { return new TldParser().parse("/WEB-INF/test.tld", xml.getBytes(StandardCharsets.UTF_8)); }
 
     @Test
+    void attributeNamesUseIdentifierLexicalRulesWithoutRejectingJavaKeywords() {
+        for (String name : List.of("boolean", "byte", "short", "long", "float", "double", "static", "class", "true", "null", "_", "$cash", "étiquette")) {
+            var library = parse("<taglib><tag><name>x</name><tag-class>example.Handler</tag-class><attribute><name>" + name + "</name></attribute></tag></taglib>");
+            assertEquals(name, library.tags().get("x").attributes().get(name).name());
+        }
+        for (String name : List.of("1value", "two words", "a.b", "a-b", "p:value"))
+            assertThrows(PageParseException.class, () -> parse("<taglib><tag><name>x</name><tag-class>example.Handler</tag-class><attribute><name>"+name+"</name></attribute></tag></taglib>"));
+    }
+
+    @Test
     void directListenerDeclarationsAndUriAreRetainedAsImmutableMetadata() {
         var library = parse("""
                 <taglib xmlns="https://jakarta.ee/xml/ns/jakartaee" version="3.0">

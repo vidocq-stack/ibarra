@@ -10,6 +10,10 @@ The page invokes it through direct construction/setters and
 named scalar/fragment attributes and an explicit body; no package exports or opens
 are needed.
 
+The frame label accepts request-time values and omits its ordinary TLD type.
+Its actual String setter is selected from class-file metadata; the named label
+contains compiled EL. The Object metadata default does not require an Object setter.
+
 The same TLD declares the fixed-arity `example:welcome` function. Its public
 static method is validated from class files and invoked directly by generated
 code; it requires no accessor provider, exports or runtime TLD parsing.

@@ -5,11 +5,11 @@ version `0.4.0-SNAPSHOT`, modular Foy/Chappe and published Peano snapshots.
 This records compatibility checks, not a performance benchmark or certification.
 
 ```bash
-./run-official-tck-pages-4.0.sh all --no-install --no-prepare
+./run-official-tck-pages-4.0.sh all --no-prepare
 ```
 
 Prerequisites were prepared by `prepare-tck.py`, preserving the official embedded
-POM; the current reactor artifacts were already installed. Distribution checksums
+POM; the command clean-installs the current reactor before execution. Distribution checksums
 and exact preparation commands are in [README.md](README.md).
 
 ## Recorded results
@@ -18,24 +18,24 @@ and exact preparation commands are in [README.md](README.md).
 |---|---:|
 | Official classes selected | 92 |
 | Declared runtime-visible JUnit `@Test` methods in the official binary | 682 |
-| Official Surefire entries reported | 614 |
-| Passing test methods | 427 |
-| Failing method entries | 179 |
-| Class-level setup/deployment errors | 8 |
-| Total reported errors | 187 |
+| Official Surefire entries reported | 659 |
+| Passing test methods | 467 |
+| Failing method entries | 187 |
+| Class-level setup/deployment errors | 5 |
+| Total reported errors | 192 |
 | Assertion failures reported as Surefire `failure` | 0 |
 | Skipped entries | 0 |
 | Adapter regression tests (separate invocation) | 7/7 |
 | CI smoke subset (factory/engine + character sequence/EL/encoding configuration) | 18/18 |
 
-Surefire reports `Tests run: 614, Failures: 0, Errors: 187, Skipped: 0` and exits
+Surefire reports `Tests run: 659, Failures: 0, Errors: 192, Skipped: 0` and exits
 nonzero. The TCK's HTTP assertion helper reports failures as exceptions, hence
 `errors` rather than `failures`; zero in the failure column does not mean success.
 
-**427/682 = 62.6% confirmed passes**, a conservative measured floor. Only
-606 method entries actually ran; the 8 empty-name class-level error entries are
+**467/682 = 68.5% confirmed passes**, a conservative measured floor. Only
+654 method entries actually ran; the 5 empty-name class-level error entries are
 not executed test methods. A failed deployment prevents the methods in that class
-from running, so `614/682` is not an execution percentage and `427/614` is not a
+from running, so `659/682` is not an execution percentage and `467/659` is not a
 suite pass rate. No full-suite certification or complete coverage is claimed.
 
 The denominator was inventoried from the verified official jar with Java 25:
@@ -63,9 +63,9 @@ ordinary Ibarra unit tests or Peano's independent EL TCK.
 | Category | Evidence / next step |
 |---|---|
 | Per-page translation failures | IBARRA-084 fixed: genuine parse/generation/javac failures become compiled error servlets, while valid pages still render. Global deployment metadata remains fatal. |
-| WAR adaptation | Eight setup failures remain: components/libraries and globally invalid TLD metadata. JSP property groups are now applied at build time (IBARRA-083 fixed). Runtime JSP descriptor exposure remains pending upstream. |
+| WAR adaptation | Five setup failures remain: three Servlet component deployments and two WAR library deployments. JSP property groups apply at build time; TLD keyword names no longer block deployment. Runtime JSP descriptor exposure remains pending upstream. |
 | Tag files and full tag metadata | `urn:jsptagdir`, variables, TEI/TLV and related metadata remain I6/I7 work. |
-| TLD validation/defaults | Keyword attribute names and inferred Object setters; IBARRA-093/094. |
+| Ordinary TLD attributes | IBARRA-093/094 fixed: keyword names accepted and actual JavaBeans setter types selected/coerced from class files. Deferred/fragment protocols remain exact. |
 | BeanELResolver fixture access | One method fails in the private application module; IBARRA-085. |
 | JspIdConsumer | Three methods fail; IBARRA-086. |
 | TagLibraryValidator | Two methods fail; IBARRA-087. |
@@ -81,6 +81,12 @@ errors: 421 additional method entries now execute instead of being blocked by
 whole-WAR precompilation or unsupported JSP configuration. The unmodified
 official tests remain authoritative; genuine negative translation errors are
 served as errors, never replaced with canned passing responses.
+
+Ordinary setter/name fixes then raise the confirmed count from 427 to 467,
+and execution from 606 to 654 methods. Three keyword-related TLD setup failures
+are removed. Four previously failing EL methods now pass; no previously passing
+method regressed. Remaining method errors rise from 179 to 187 as additional
+methods become runnable. The two stages are recorded separately from certification.
 
 The full remaining inventory is in [FAILURES.md](FAILURES.md), tracked by
 IBARRA-098. Every currently failing class and method has a reproducible selector;

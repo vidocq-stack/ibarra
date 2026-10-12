@@ -30,10 +30,23 @@ Standalone generators can also provide direct descriptor bytes through
 fallback; discovered aliases remain separate from physical resource bindings.
 
 Class-File inspection validates public concrete handlers, public no-argument
-constructors, implemented interfaces and public instance setters. Static attribute
-contracts ignore the TLD type and use the actual setter type. Request-time attributes
-without a declared type default to Object and select that declared setter even
-for literal invocation values. Literal coercion supports String,
+constructors, implemented interfaces and public instance setters. Ordinary static
+and request-time attributes bind the handler's actual JavaBeans property, including
+inherited setters. Missing dynamic type metadata remains Object; it does not require
+a setValue(Object) method. Actual-property coercion also applies when an explicit
+ordinary TLD type differs from the handler. This compatibility interpretation is
+supported by the official fixtures and
+https://github.com/apache/tomcat/blob/main/java/org/apache/jasper/compiler/Generator.java[Jasper's property-based generation];
+it does not change deferred expected types or their mandated setter protocols.
+
+Class-File inspection selects the unique most-specific compatible write method,
+with boolean-getter precedence, getter/write type compatibility and reference-array
+covariance. Incomparable overloads and incompatible readable/writable properties
+fail translation. No runtime JavaBeans introspection is used. Attribute names retain
+identifier lexical validation; Java keywords such as boolean, byte and static are
+accepted because the generator emits setters rather than Java variables with those names.
+
+Literal coercion supports String,
 Object and primitive/boxed numeric, boolean and character setters. Java scripting
 expressions require rtexprvalue; immediate EL is compiled by Peano at build time.
 
@@ -91,7 +104,9 @@ scripting variables, TagExtraInfo, TagLibraryValidator and tag files
 remain follow-up work. Unsupported invoked metadata fails
 translation; no reflective fallback or handler pooling is enabled.
 
-Java-expression request values must match the declared runtime attribute type.
+Java-expression request values must be compatible with the selected ordinary setter
+parameter. Fragment, ValueExpression, MethodExpression and mixed Object setter
+contracts remain exact.
 Production packaging compiles immediate EL with Peano; runtime parsing is not
 enabled. Fixed-arity TLD functions use direct static invokers as described in
 xref:modules/compiled-el.adoc[Compiled EL]. Typed deferred-value/deferred-method
