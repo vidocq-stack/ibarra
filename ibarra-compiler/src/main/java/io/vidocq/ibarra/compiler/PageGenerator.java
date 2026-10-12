@@ -967,14 +967,7 @@ public final class PageGenerator {
                 if (!bool("autoFlush", true)) throw error(settingLocation("buffer"), "Unbuffered pages require autoFlush");
                 return 0;
             }
-            try {
-                if (!value.endsWith("kb")) throw new NumberFormatException();
-                int capacity = Math.multiplyExact(Integer.parseInt(value.substring(0, value.length() - 2)), 1024);
-                if (capacity <= 0) throw new NumberFormatException();
-                return capacity;
-            } catch (NumberFormatException | ArithmeticException failure) {
-                throw error(settingLocation("buffer"), "Invalid page buffer: " + value);
-            }
+            return TranslationUnit.bufferCapacity(value, settingLocation("buffer"));
         }
         private int scope(String scope, SourceLocation at) {
             if (scope.equals("session") && !bool("session", true)) throw error(at, "Session-scoped beans require session participation");

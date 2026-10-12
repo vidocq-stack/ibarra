@@ -41,11 +41,31 @@ public final class PagePrecompiler {
     public record Result(String moduleName, String indexClass, Set<String> pagePaths) {
         public Result { pagePaths = Set.copyOf(pagePaths); }
     }
+    /** Explicit deployment report; failed page paths stay routable as translation errors. */
+    public record DeploymentResult(Result pages, Map<String, String> failures) {
+        public DeploymentResult { Objects.requireNonNull(pages); failures = Map.copyOf(failures); }
+    }
     private record Owned(String provider, Map<String, String> files) { }
 
     public Result precompile(Path webRoot, Path output, List<Path> modulePath, String packageName,
             GenerationOptions options) throws IOException {
+        return precompile(webRoot, output, modulePath, packageName, options, false).pages();
+    }
+
+    /**
+     * Compiles valid pages and emits request-time error servlets for individual translation
+     * failures. Global deployment metadata, module and infrastructure failures still abort.
+     * Production packaging should use the fail-fast {@link #precompile} entry point.
+     */
+    public DeploymentResult precompileDeployment(Path webRoot, Path output, List<Path> modulePath, String packageName,
+            GenerationOptions options) throws IOException {
+        return precompile(webRoot, output, modulePath, packageName, options, true);
+    }
+
+    private DeploymentResult precompile(Path webRoot, Path output, List<Path> modulePath, String packageName,
+            GenerationOptions options, boolean retainFailures) throws IOException {
         if (options.allowStartupEl()) throw new IllegalArgumentException("Packaging cannot enable startup EL interpretation");
+        TranslationUnit.validateConfiguration(options, new SourceLocation("/WEB-INF/web.xml", 1, 1));
         output = output.toAbsolutePath().normalize();
         Path moduleFile = output.resolve("module-info.class");
         if (!Files.isRegularFile(moduleFile)) throw new IllegalArgumentException("Precompilation requires compiled module-info.class");
@@ -74,21 +94,46 @@ public final class PagePrecompiler {
                 throw new IllegalArgumentException("Conflicting supplied tag library: " + entry.getKey());
         }
         var configured = new GenerationOptions(options.propertyGroups(), options.sources(), false, bytes, libraries);
+        var failures = new TreeMap<String, String>();
+        var pagePaths = new TreeSet<String>();
         var units = new TreeMap<String, TranslationUnit.Result>();
         for (var entry : resources.entrySet()) if (entry.getKey().endsWith(".jsp") || entry.getKey().endsWith(".jspx")) {
             PageDescriptor.validatePath(entry.getKey());
-            units.put(entry.getKey(), new TranslationUnit(configured).read(entry.getKey(), entry.getValue()));
+            pagePaths.add(entry.getKey());
+            try { units.put(entry.getKey(), new TranslationUnit(configured).read(entry.getKey(), entry.getValue())); }
+            catch (PageParseException failure) {
+                if (!retainFailures) throw failure;
+                failures.put(entry.getKey(), failure.getMessage());
+            }
         }
-        var resolved = TldReferences.discover(units.values(), configured, options.tagLibraries());
+        TldReferences.Resolved resolved;
+        if (!retainFailures) resolved = TldReferences.discover(units.values(), configured, options.tagLibraries());
+        else {
+            var resolvedResources = new LinkedHashMap<String, TagLibraryDescriptor>();
+            var iterator = units.entrySet().iterator();
+            while (iterator.hasNext()) {
+                var entry = iterator.next();
+                try { resolvedResources.putAll(TldReferences.discover(List.of(entry.getValue()), configured, options.tagLibraries()).resources()); }
+                catch (PageParseException failure) { failures.put(entry.getKey(), failure.getMessage()); iterator.remove(); }
+            }
+            resolved = new TldReferences.Resolved(configured.tagLibraries(), resolvedResources);
+        }
         var referencedLibraries = new ArrayList<>(libraries.values()); referencedLibraries.addAll(resolved.resources().values());
         var listeners = TldListeners.referenced(catalog, referencedLibraries, paths);
         var generator = new PageGenerator(paths, descriptor);
         var sources = new ArrayList<GeneratedPage>();
         var pages = new TreeMap<String, String>();
-        for (var entry : units.entrySet()) {
-            String name = packageName + ".Page_" + hash(entry.getKey());
-            pages.put(entry.getKey(), name);
-            sources.add(generator.generate(entry.getValue(), name, configured, resolved));
+        for (String pagePath : pagePaths) {
+            String name = packageName + ".Page_" + hash(pagePath);
+            pages.put(pagePath, name);
+            if (!failures.containsKey(pagePath)) {
+                try { sources.add(generator.generate(units.get(pagePath), name, configured, resolved)); continue; }
+                catch (PageParseException failure) {
+                    if (!retainFailures) throw failure;
+                    failures.put(pagePath, failure.getMessage());
+                }
+            }
+            sources.add(translationError(name, failures.get(pagePath)));
         }
         String provider = pages.isEmpty() && listeners.isEmpty() ? null : packageName + ".GeneratedPageIndex";
         if (sources.stream().anyMatch(source -> !source.auxiliaryClasses().isEmpty())
@@ -114,10 +159,42 @@ public final class PagePrecompiler {
                         .andThen(ClassTransform.endHandler(builder -> builder.with(ModulePackagesAttribute.ofNames(
                                 originalPackages.stream().map(PackageDesc::of).toList())))));
                 Files.write(application.resolve("module-info.class"), bootstrap);
+                if (retainFailures) try (var files = Files.walk(output)) {
+                    for (Path file : files.filter(Files::isRegularFile).filter(f -> f.toString().endsWith(".class")).toList()) {
+                        String relative = output.relativize(file).toString().replace('\\', '/');
+                        if (relative.equals("module-info.class") || previous.files().containsKey(relative)) continue;
+                        Path target = application.resolve(relative); Files.createDirectories(target.getParent()); Files.copy(file, target);
+                    }
+                }
                 var compilePath = new ArrayList<>(modulePath); compilePath.add(application);
                 String path = compilePath.stream().map(Path::toString).collect(java.util.stream.Collectors.joining(File.pathSeparator));
-                new PageCompiler().compile(sources, compiledOutput, List.of("--module-path", path, "--add-modules", descriptor.name(),
+                if (!retainFailures) new PageCompiler().compile(sources, compiledOutput, List.of("--module-path", path, "--add-modules", descriptor.name(),
                         "--patch-module", descriptor.name() + "=" + output + File.pathSeparator + compiledOutput + File.pathSeparator + compiledOutput.resolve(".ibarra-sources")));
+                else {
+                    var sourcePaths = new HashMap<String, String>(); pages.forEach((key, value) -> sourcePaths.put(value, key));
+                    for (var source : sources) {
+                        Path isolated = Files.createTempDirectory(stage, "page-");
+                        var arguments = List.of("--module-path", path, "--add-modules", descriptor.name(), "--patch-module",
+                                descriptor.name() + "=" + application + File.pathSeparator + compiledOutput + File.pathSeparator + isolated + File.pathSeparator + isolated.resolve(".ibarra-sources"));
+                        try { new PageCompiler().compile(List.of(source), isolated, arguments); }
+                        catch (PageCompilationException failure) {
+                            String pagePath = sourcePaths.get(source.className());
+                            if (pagePath == null || failures.containsKey(pagePath)) throw failure;
+                            failures.put(pagePath, failure.getMessage());
+                            remove(isolated); Files.createDirectories(isolated);
+                            new PageCompiler().compile(List.of(translationError(source.className(), failure.getMessage())), isolated, arguments);
+                        }
+                        try (var files = Files.walk(isolated)) {
+                            for (Path file : files.filter(Files::isRegularFile).filter(f -> f.toString().endsWith(".class")).toList()) {
+                                Path target = compiledOutput.resolve(isolated.relativize(file));
+                                if (Files.exists(target) && !Arrays.equals(Files.readAllBytes(target), Files.readAllBytes(file)))
+                                    throw new IllegalArgumentException("Conflicting generated class: " + target);
+                                Files.createDirectories(target.getParent()); Files.copy(file, target, StandardCopyOption.REPLACE_EXISTING);
+                            }
+                        }
+                        remove(isolated);
+                    }
+                }
             }
             var compiled = new TreeSet<String>();
             try (var files = Files.walk(compiledOutput)) {
@@ -143,8 +220,22 @@ public final class PagePrecompiler {
             var lines = new ArrayList<String>(); lines.add(provider == null ? "" : provider);
             for (String relative : compiled) lines.add(relative + "\t" + digest(Files.readAllBytes(output.resolve(relative))));
             Files.write(manifest, lines, StandardCharsets.UTF_8);
-            return new Result(descriptor.name(), provider, pages.keySet());
+            return new DeploymentResult(new Result(descriptor.name(), provider, pages.keySet()), failures);
         } finally { remove(stage); }
+    }
+
+    private static GeneratedPage translationError(String name, String diagnostic) {
+        int dot = name.lastIndexOf('.');
+        int end = Math.min(diagnostic.length(), 8_192);
+        if (end < diagnostic.length() && end > 0 && Character.isHighSurrogate(diagnostic.charAt(end - 1))) end--;
+        String message = "Page translation failed: " + diagnostic.substring(0, end);
+        String source = "package " + name.substring(0, dot) + "; public final class " + name.substring(dot + 1)
+                + " extends jakarta.servlet.http.HttpServlet implements jakarta.servlet.jsp.HttpJspPage {"
+                + "public void jspInit(){} public void jspDestroy(){}"
+                + "public void service(jakarta.servlet.http.HttpServletRequest request,jakarta.servlet.http.HttpServletResponse response) throws jakarta.servlet.ServletException { _jspService(request,response); }"
+                + "public void _jspService(jakarta.servlet.http.HttpServletRequest request,jakarta.servlet.http.HttpServletResponse response) throws jakarta.servlet.ServletException { throw new jakarta.servlet.ServletException("
+                + JavaSource.quote(message) + "); }}";
+        return new GeneratedPage(name, source, Map.of());
     }
 
     private static Map<String, byte[]> resources(Path root) throws IOException {

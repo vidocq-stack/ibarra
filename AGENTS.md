@@ -55,6 +55,9 @@ of local divergence, the brick-specific sections further down take precedence.
 - Official Pages TCK coordinates: `jakarta.tck:jakarta-pages-tck:4.0.0`, verified
   from the distribution's embedded POM. The build-side Arquillian adapter
   precompiles WARs and launches modular Foy; see `ibarra-tck/README.md`.
+  Explicit `PagePrecompiler.precompileDeployment` may retain individual translation
+  failures as compiled error servlets for this harness. Production/plugin packaging
+  uses `precompile` and remains fail-fast; never enable a runtime parser fallback.
 - The build uses `git-commit-id-maven-plugin` (from `vidocq-parent`): it needs at least
   one commit in the repository.
 

@@ -3,7 +3,7 @@
 
 [.lead]
 The official Jakarta Pages 4.0.0 TCK now runs through a build-side Arquillian
-adapter on Foy. The four-test smoke subset passes. The full diagnostic attempt
+adapter on Foy. The eighteen-test smoke subset passes. The full diagnostic attempt
 is incomplete and failing; Ibarra is not certified.
 
 == Recorded baseline
@@ -17,13 +17,13 @@ Run date: 2026-10-12, Temurin Java 25 and Maven 3.9.16.
 
 The current reactor had already been installed and official artifacts prepared.
 The verified official binary contains 92 test classes and 682 declared JUnit
-`@Test` methods. The run records *174 passing methods* and *11 failing methods*,
-plus *54 class-level setup/deployment errors*. Surefire therefore reports 239
-entries, 65 errors, zero assertion failures and zero skips, and exits nonzero.
+`@Test` methods. The run records *427 passing methods* and *179 failing methods*,
+plus *8 class-level setup/deployment errors*. Surefire therefore reports 614
+entries, 187 errors, zero assertion failures and zero skips, and exits nonzero.
 The upstream HTTP assertion helper reports failures as exceptions.
 
-*174/682 = 25.5% confirmed passes*, a conservative floor, not a complete suite
-pass rate. Only 185 method entries ran. Class-level errors prevent whole groups
+*427/682 = 62.6% confirmed passes*, a conservative floor, not a complete suite
+pass rate. Only 606 method entries ran. Class-level errors prevent whole groups
 of methods from executing; they must not be counted as executed methods.
 
 The detailed command, binary inventory, counts and remaining categories are in
@@ -34,13 +34,15 @@ Peano's independent EL TCK result is not a Pages TCK result.
 
 Passing classes include JspFactory, JspEngineInfo, JspWriter, PageContext,
 ErrorData, BodyContent, DynamicAttributes, TagAdapter, VariableInfo, several
-EL/implicit-resolver API tests, implicit objects and scripting syntax.
+EL/implicit-resolver API tests, implicit objects, character-sequence/EL/encoding
+configuration, i18n and scripting syntax.
 Other classes pass partially; the full suite remains blocked by translation,
 tag metadata/files and WAR-adaptation gaps.
 
 `official-pages-tck-smoke` runs on pull requests and `main`. It clean-installs
-Ibarra, runs four adapter regression tests, then three official JspFactory
-tests and one JspEngineInfo test. This deliberately bounded regression check
+Ibarra, runs seven adapter regression tests, then three official JspFactory
+tests, one JspEngineInfo test and fourteen character-sequence/EL/encoding
+configuration tests. This deliberately bounded regression check
 does not claim 100% Pages coverage. Full-suite certification is milestone I8;
 100% PASS becomes the gate once that suite is green.
 
@@ -54,16 +56,20 @@ dependency, with mandatory SHA-256 checks.
 
 The adapter precompiles pages before launching modular Foy/Chappe; the server
 contains neither compiler nor `java.compiler` and retains reflection denial.
-It supports multiple isolated WARs and their filesystem resources.
-Libraries, Servlet component factories/annotations/initializers and JSP property
-groups that cannot yet be adapted fail explicitly. Intentionally invalid pages
-currently fail eager whole-WAR translation, blocking their request-time tests.
+It supports multiple isolated WARs and their filesystem resources. Root JSP
+property groups reach the compiler through build-side descriptor parsing.
+Explicit deployment precompilation retains genuine per-page translation failures
+as compiled error servlets, so valid pages and negative translation tests can
+coexist. No source is parsed in the server. Normal packaging still rejects errors.
+Libraries and Servlet component factories/annotations/initializers that cannot
+yet be adapted fail explicitly; invalid global metadata still aborts deployment.
 
 See xref:modules/official-tck-runner.adoc[Official TCK runner] for dependencies,
 commands, artifact preparation, retained logs and limits.
 
 == Tracking
 
-* Reproducible issues: link:{repo-ibarra}/src/branch/main/BUG.md[BUG.md], IBARRA-083–094.
+* Reproducible issues: link:{repo-ibarra}/src/branch/main/BUG.md[BUG.md], plus the
+  link:{repo-ibarra}/src/branch/main/ibarra-tck/FAILURES.md[remaining official failure inventory].
 * Plan and milestones: link:{repo-ibarra}/src/branch/main/PLAN.md[PLAN.md].
 * Challenges, if actually filed, belong in `TCK.md` with a specification citation.

@@ -16,9 +16,10 @@ Use Java 25, Maven 3.9.16 and Python 3 from the repository checkout:
 ```
 
 The script verifies/downloads the official artifacts, installs them locally,
-builds the current Ibarra reactor with `clean install`, runs four adapter
+builds the current Ibarra reactor with `clean install`, runs seven adapter
 regression tests, then runs the requested official classes. The default smoke
-selects three `JspFactory` tests and one `JspEngineInfo` test. CI runs this smoke
+selects three `JspFactory` tests, one `JspEngineInfo` test and fourteen descriptor
+character-sequence/EL/encoding tests (18 total). CI runs this smoke
 on pull requests and `main`; it does not claim full-suite certification.
 
 `--no-install` skips the reactor build only when its current artifacts have
@@ -76,10 +77,21 @@ preserves interruption. Work directories and `server.log` remain under
 `ibarra-tck/target/pages-deployments` for diagnosis, until the next runner clean.
 Surefire XML/text reports are under `ibarra-tck/target/surefire-reports`.
 
+`JspConfigurationParser` adapts root web.xml property groups to immutable compiler
+options, preserving patterns, scalar settings, preludes/codas and legacy EL defaults.
+Malformed global settings abort deployment even if no page matches the group.
+
+The runner calls explicit `PagePrecompiler.precompileDeployment`. Genuine per-page
+parse/generation/javac failures become compiled error servlets that throw the retained
+translation error on request, including precompile requests. Valid pages remain
+available. `translation-errors.txt` retains the complete build diagnostics;
+error servlet messages are bounded safely. Each javac invocation uses isolated
+outputs and a clean application view excluding previous generated classes.
+The ordinary precompile entry point and Maven plugin continue to reject page errors.
+
 Current adapter diagnostics explicitly reject WAR libraries, descriptor or
 annotated Servlet components requiring generated factories, ServletContainerInitializer
-providers, and JSP property groups. Bean/accessor adaptation and signature-test
-configuration remain incomplete. Invalid pages fail eager WAR precompilation;
-the runner cannot yet expose individual translation failures at request time.
+providers. Bean/accessor adaptation, runtime JSP descriptor exposure and signature-test
+configuration remain incomplete. Invalid global metadata still aborts deployment.
 Unsupported compiler semantics retain their existing diagnostics. None of
 these failures is silently skipped or converted into a passing test.

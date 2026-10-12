@@ -218,9 +218,11 @@ the runtime's packaging goal, after I8.
 - The TCK deploys WARs that contain **JSP sources**, so it exercises translation
   at deployment time. The implemented adapter precompiles each WAR with
   `ibarra-compiler` before launching Foy in a separate process. Neither compiler
-  nor `java.compiler` is present in that runtime. Eager translation currently
-  rejects whole WARs containing intentionally invalid negative-test pages;
-  supporting their request-time translation-error semantics remains runner work.
+  nor `java.compiler` is present in that runtime. Explicit deployment precompilation
+  retains real per-page parse/generation/javac failures as compiled error servlets,
+  allowing mixed positive/negative fixtures to deploy. Normal packaging still
+  rejects page errors; global metadata/module failures remain fatal. Root JSP
+  property groups now reach the compiler through a build-side descriptor adapter.
   Degraded runtime translation is not used as a fallback.
 - Script `run-official-tck-pages-4.0.sh` (`smoke` / `all` / `-Dtest=`), modelled
   on `foy/run-official-tck-servlet6.1.sh`.

@@ -37,6 +37,86 @@ class PagePrecompilerTest {
     private final List<Path> extraModules = new ArrayList<>();
 
     @Test
+    void deploymentCompilationCannotResolveRemovedOwnedClassesFromPreviousRuns() throws Exception {
+        prepare(false);
+        Files.writeString(web.resolve("b.jsp"), "<%! public static class Helper { public static String value(){return \"old\";} } %>");
+        new PagePrecompiler().precompileDeployment(web, classes, modulePaths(), "demo.generated", GenerationOptions.DEFAULT);
+        String type = "demo.generated.Page_" + java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest("/b.jsp".getBytes(java.nio.charset.StandardCharsets.UTF_8))).substring(0, 24);
+        Files.writeString(web.resolve("a.jsp"), "<%= " + type + ".Helper.value() %>");
+        Files.writeString(web.resolve("b.jsp"), "<%@ page session='perhaps' %>");
+        var result = new PagePrecompiler().precompileDeployment(web, classes, modulePaths(), "demo.generated", GenerationOptions.DEFAULT);
+        assertEquals(Set.of("/a.jsp", "/b.jsp"), result.failures().keySet());
+        assertFalse(Files.exists(classes.resolve(type.replace('.', '/') + "$Helper.class")));
+    }
+
+    @Test
+    void retainedDiagnosticTruncationPreservesSupplementaryCharacters() throws Exception {
+        prepare(false);
+        String supplementary = new String(Character.toChars(0x20000));
+        String name = "Missing" + supplementary;
+        Files.writeString(web.resolve("long.jsp"), "<%@ page pageEncoding='UTF-8' %><jsp:useBean id='bean' class='"+name+"'/>");
+        String initial = assertThrows(PageParseException.class, this::precompile).getMessage();
+        int prefix = initial.indexOf(name); assertTrue(prefix >= 0, initial);
+        name = "Missing" + "x".repeat(8191 - prefix - 7) + supplementary + "Tail";
+        Files.writeString(web.resolve("long.jsp"), "<%@ page pageEncoding='UTF-8' %><jsp:useBean id='bean' class='"+name+"'/>");
+        String diagnostic = assertThrows(PageParseException.class, this::precompile).getMessage();
+        assertTrue(Character.isHighSurrogate(diagnostic.charAt(8191)));
+        var result = new PagePrecompiler().precompileDeployment(web, classes, modulePaths(), "demo.generated", GenerationOptions.DEFAULT);
+        assertEquals(diagnostic, result.failures().get("/long.jsp"));
+    }
+
+    @Test
+    void deploymentCompilationDoesNotRetainInvalidGlobalConfigurationAsPageErrors() throws Exception {
+        prepare(false); Files.writeString(web.resolve("index.jsp"), "ready"); precompile();
+        byte[] descriptor = Files.readAllBytes(classes.resolve("module-info.class"));
+        byte[] manifest = Files.readAllBytes(classes.resolveSibling("classes.ibarra-manifest"));
+        var invalid = List.of(Map.of("el-ignored", "maybe"), Map.of("buffer", "bogus"), Map.of("buffer", "0kb"),
+                Map.of("buffer", "2147483647kb"), Map.of("page-encoding", "not-a-real-charset"), Map.of("unknown", "true"));
+        for (boolean empty : List.of(false, true)) {
+            if (empty) Files.delete(web.resolve("index.jsp"));
+            for (var properties : invalid) {
+                var options = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"), properties, List.of(), List.of())), Map.of());
+                assertThrows(PageParseException.class, () -> new PagePrecompiler().precompileDeployment(web, classes, modulePaths(), "demo.generated", options), properties.toString());
+                assertArrayEquals(descriptor, Files.readAllBytes(classes.resolve("module-info.class")));
+                assertArrayEquals(manifest, Files.readAllBytes(classes.resolveSibling("classes.ibarra-manifest")));
+            }
+        }
+    }
+
+    @Test
+    void deploymentCompilationRetainsParseGenerationAndJavacFailuresPerPage() throws Exception {
+        prepare(false, true);
+        Files.writeString(web.resolve("index.jsp"), "ready");
+        Files.writeString(web.resolve("broken.jsp"), "<%@ page session='perhaps' %>");
+        Files.writeString(web.resolve("missing.jsp"), "<%@ taglib prefix='m' uri='missing.tld' %><m:tag/>");
+        Files.writeString(web.resolve("javac.jsp"), "${1+1}<% int x = ; %>");
+        byte[] original = Files.readAllBytes(classes.resolve("module-info.class"));
+        assertThrows(PageParseException.class, this::precompile);
+        assertArrayEquals(original, Files.readAllBytes(classes.resolve("module-info.class")));
+        var result = new PagePrecompiler().precompileDeployment(web, classes, modulePaths(), "demo.generated", GenerationOptions.DEFAULT);
+        assertEquals(Set.of("/broken.jsp", "/missing.jsp", "/javac.jsp"), result.failures().keySet());
+        assertEquals(4, result.pages().pagePaths().size());
+        assertTrue(result.failures().get("/javac.jsp").contains("javac.jsp"));
+        assertThrows(UnsupportedOperationException.class, () -> result.failures().clear());
+        Path jar = directory.resolve("partial.jar"); jar(classes, jar); assertEquals("ready", render(jar, true));
+        Files.writeString(web.resolve("javac.jsp"), "fixed");
+        var repaired = new PagePrecompiler().precompileDeployment(web, classes, modulePaths(), "demo.generated", GenerationOptions.DEFAULT);
+        assertFalse(repaired.failures().containsKey("/javac.jsp"));
+    }
+
+    @Test
+    void deploymentCompilationAttributesIncludedFailureToEveryOwningPage() throws Exception {
+        prepare(false);
+        Files.writeString(web.resolve("broken.jspf"), "<%@ page session='perhaps' %>");
+        Files.writeString(web.resolve("a.jsp"), "<%@ include file='broken.jspf' %>");
+        Files.writeString(web.resolve("b.jsp"), "<%@ include file='broken.jspf' %>");
+        Files.writeString(web.resolve("index.jsp"), "ready");
+        var result = new PagePrecompiler().precompileDeployment(web, classes, modulePaths(), "demo.generated", GenerationOptions.DEFAULT);
+        assertEquals(Set.of("/a.jsp", "/b.jsp"), result.failures().keySet());
+        assertTrue(result.failures().get("/a.jsp").contains("broken.jspf"));
+    }
+
+    @Test
     void deferredValuesRemainLazyAndTypedForSimpleAndClassicTags() throws Exception {
         prepareDeferredTags();
         Files.writeString(web.resolve("index.jsp"), deferredPrefix()

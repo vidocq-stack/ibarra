@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 
 prepare=true
 install=true
-smoke_selection='-Dtest=ee.jakarta.tck.pages.api.jakarta_servlet.jsp.jspfactory.URLClientIT,ee.jakarta.tck.pages.api.jakarta_servlet.jsp.jspengineinfo.URLClientIT'
+smoke_selection='-Dtest=ee.jakarta.tck.pages.api.jakarta_servlet.jsp.jspfactory.URLClientIT,ee.jakarta.tck.pages.api.jakarta_servlet.jsp.jspengineinfo.URLClientIT,ee.jakarta.tck.pages.spec.configuration.charsequence.URLClientIT,ee.jakarta.tck.pages.spec.configuration.elevaluation.URLClientIT,ee.jakarta.tck.pages.spec.configuration.encoding.URLClientIT'
 selection="$smoke_selection"
 extra=()
 for arg in "$@"; do

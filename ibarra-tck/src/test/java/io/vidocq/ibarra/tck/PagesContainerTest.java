@@ -31,6 +31,64 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PagesContainerTest {
     @Test
+    void invalidPagesFailOnlyTheirRequestsWhileValidPagesKeepRendering() throws Exception {
+        var war = ShrinkWrap.create(WebArchive.class, "partial.war")
+                .addAsWebResource(new StringAsset("ready"), "index.jsp")
+                .addAsWebResource(new StringAsset("<%@ page session='perhaps' %>"), "parse.jsp")
+                .addAsWebResource(new StringAsset("${1+1}<% int x = ; %>"), "javac.jsp");
+        var container = new PagesContainer(); container.setup(new PagesConfiguration());
+        try {
+            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            try (var client = HttpClient.newHttpClient()) {
+                for (String path : java.util.List.of("parse.jsp", "javac.jsp", "parse.jsp?jsp_precompile=true")) {
+                    var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/partial/" + path)).build(), HttpResponse.BodyHandlers.ofString());
+                    assertEquals(500, response.statusCode(), path);
+                }
+                var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/partial/index.jsp")).build(), HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, response.statusCode()); assertEquals("ready", response.body());
+            }
+            container.undeploy(war);
+        } finally { container.stop(); }
+    }
+
+    @Test
+    void descriptorGroupsApplyPrecedenceAndImplicitIncludesBeforeServing() throws Exception {
+        var war = ShrinkWrap.create(WebArchive.class, "configuration.war")
+                .setWebXML(new StringAsset("<web-app xmlns='https://jakarta.ee/xml/ns/jakartaee' version='6.1'><jsp-config><jsp-property-group><url-pattern>*.jsp</url-pattern><el-ignored>true</el-ignored><include-prelude>/head.jspf</include-prelude><include-coda>/tail.jspf</include-coda></jsp-property-group><jsp-property-group><url-pattern>/index.jsp</url-pattern><el-ignored>false</el-ignored></jsp-property-group></jsp-config></web-app>"))
+                .addAsWebResource(new StringAsset("${param.name}"), "index.jsp")
+                .addAsWebResource(new StringAsset("${param.name}"), "literal.jsp")
+                .addAsWebResource(new StringAsset("head|"), "head.jspf")
+                .addAsWebResource(new StringAsset("|tail"), "tail.jspf");
+        var container = new PagesContainer(); container.setup(new PagesConfiguration());
+        try {
+            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            try (var client = HttpClient.newHttpClient()) {
+                for (String page : java.util.List.of("index.jsp", "literal.jsp")) {
+                    var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/configuration/" + page + "?name=compiled")).build(), HttpResponse.BodyHandlers.ofString());
+                    assertEquals(200, response.statusCode(), response.body());
+                    assertEquals(page.equals("index.jsp") ? "head|compiled|tail" : "head|${param.name}|tail", response.body());
+                }
+            }
+            container.undeploy(war);
+        } finally { container.stop(); }
+    }
+
+    @Test
+    void legacyDescriptorKeepsTemplateElLiteral() throws Exception {
+        var war = ShrinkWrap.create(WebArchive.class, "legacy.war")
+                .setWebXML(new StringAsset("<!DOCTYPE web-app PUBLIC '-//Sun Microsystems, Inc.//DTD Web Application 2.3//EN' 'http://127.0.0.1:1/never.dtd'><web-app><display-name>legacy</display-name></web-app>"))
+                .addAsWebResource(new StringAsset("${param.name}"), "index.jsp");
+        var container = new PagesContainer(); container.setup(new PagesConfiguration());
+        try {
+            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            try (var client = HttpClient.newHttpClient()) {
+                var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/legacy/index.jsp?name=compiled")).build(), HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, response.statusCode(), response.body()); assertEquals("${param.name}", response.body());
+            }
+            container.undeploy(war);
+        } finally { container.stop(); }
+    }
+    @Test
     void precompilesWarAndServesItInAnIsolatedNamedModule() throws Exception {
         var war = ShrinkWrap.create(WebArchive.class, "pages-probe.war")
                 .addAsWebResource(new StringAsset("<%@ page contentType=\"text/plain\" %><%= jakarta.servlet.jsp.JspFactory.getDefaultFactory().getEngineInfo().getSpecificationVersion() %>|${param.name}"), "index.jsp");
@@ -93,9 +151,9 @@ class PagesContainerTest {
             var unsupported = ShrinkWrap.create(WebArchive.class, "components.war").setWebXML(new StringAsset("<web-app xmlns=\"https://jakarta.ee/xml/ns/jakartaee\" version=\"6.1\"><servlet><servlet-name>probe</servlet-name><servlet-class>app.Probe</servlet-class></servlet></web-app>"));
             var failure = assertThrows(org.jboss.arquillian.container.spi.client.container.DeploymentException.class, () -> container.deploy(unsupported));
             assertTrue(failure.getCause().getMessage().contains("factories"));
-            var configured = ShrinkWrap.create(WebArchive.class, "configuration.war").setWebXML(new StringAsset("<web-app xmlns=\"https://jakarta.ee/xml/ns/jakartaee\" version=\"6.1\"><jsp-config><jsp-property-group><url-pattern>*.jsp</url-pattern><el-ignored>true</el-ignored></jsp-property-group></jsp-config></web-app>"));
+            var configured = ShrinkWrap.create(WebArchive.class, "configuration.war").setWebXML(new StringAsset("<web-app xmlns=\"https://jakarta.ee/xml/ns/jakartaee\" version=\"6.1\"><jsp-config><jsp-property-group><url-pattern>*.jsp</url-pattern><el-ignored>maybe</el-ignored></jsp-property-group></jsp-config></web-app>"));
             var configurationFailure = assertThrows(org.jboss.arquillian.container.spi.client.container.DeploymentException.class, () -> container.deploy(configured));
-            assertTrue(configurationFailure.getCause().getMessage().contains("property groups"));
+            assertTrue(configurationFailure.getCause().getMessage().contains("true or false"));
             var annotated = ShrinkWrap.create(WebArchive.class, "annotations.war").addClass(AnnotatedServlet.class);
             var annotationFailure = assertThrows(org.jboss.arquillian.container.spi.client.container.DeploymentException.class, () -> container.deploy(annotated));
             assertTrue(annotationFailure.getCause().getMessage().contains("annotations"));

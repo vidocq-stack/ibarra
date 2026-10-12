@@ -37,7 +37,28 @@ Peano reflection remains denied. Application packages have no added exports
 or opens. Multiple WARs have independent ports, lifecycles and resource roots.
 Retained server logs and Surefire reports are in `ibarra-tck/target`.
 
-The initial adapter explicitly rejects libraries, Servlet component factories,
-initializers and JSP property groups that it cannot yet adapt. Whole-WAR eager
-precompilation also blocks mixed positive/negative translation fixtures.
-Those are reported errors in the full suite, not omitted successes.
+Root web.xml property groups are parsed at build time, with matched scalar settings,
+ordered preludes/codas and legacy EL defaults. The runner explicitly selects
+`PagePrecompiler.precompileDeployment`: valid pages compile normally, while genuine
+parse/generation/javac failures produce direct error servlets that throw on request.
+The full diagnostic is retained in `translation-errors.txt`; error messages are
+bounded without splitting Unicode characters. Previous generated classes cannot
+satisfy new incremental dependencies. Normal packaging remains fail-fast.
+
+[source,java]
+----
+var groups = new JspConfigurationParser().parse(
+        "/WEB-INF/web.xml", Files.readAllBytes(webRoot.resolve("WEB-INF/web.xml")));
+var report = new PagePrecompiler().precompileDeployment(
+        webRoot, classes, modulePath, null, new GenerationOptions(groups, Map.of()));
+// report.pages() includes routable valid/error pages; report.failures() is immutable.
+----
+
+These APIs belong to the build-only `io.vidocq.ibarra.compiler` package.
+Global property keys, booleans, encoding and buffer capacity are validated before
+individual page recovery, even for an application with no pages. Invalid global
+settings leave previous generated output ownership intact.
+
+The adapter explicitly rejects libraries, Servlet component factories and
+initializers that it cannot yet adapt. Invalid global configuration and TLD
+metadata still abort deployment. These remain visible full-suite errors.

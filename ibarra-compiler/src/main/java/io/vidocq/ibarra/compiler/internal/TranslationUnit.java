@@ -235,23 +235,10 @@ public final class TranslationUnit {
     }
 
     private Map<String, String> properties(String path) {
+        validateConfiguration(options, new SourceLocation(path, 1, 1));
         var result = new LinkedHashMap<String, String>();
         var specificity = new HashMap<String, Match>();
         for (var group : options.propertyGroups()) {
-            for (String name : group.properties().keySet())
-                if (!Set.of("el-ignored", "is-xml", "scripting-invalid", "page-encoding",
-                        "deferred-syntax-allowed-as-literal", "trim-directive-whitespaces",
-                        "default-content-type", "buffer", "error-on-el-not-found", "error-on-undeclared-namespace").contains(name))
-                    throw new PageParseException(new SourceLocation(path, 1, 1), "Unknown JSP property: " + name);
-            if (group.properties().containsKey("page-encoding"))
-                charset(group.properties().get("page-encoding"), new SourceLocation(path, 1, 1));
-            for (String name : List.of("el-ignored", "is-xml", "scripting-invalid",
-                    "deferred-syntax-allowed-as-literal", "trim-directive-whitespaces",
-                    "error-on-el-not-found", "error-on-undeclared-namespace")) {
-                String value = group.properties().get(name);
-                if (value != null && !value.equals("true") && !value.equals("false"))
-                    throw new PageParseException(new SourceLocation(path, 1, 1), name + " must be true or false");
-            }
             Match best = null;
             for (String pattern : group.patterns()) {
                 var match = match(pattern, path);
@@ -266,6 +253,40 @@ public final class TranslationUnit {
             }
         }
         return result;
+    }
+
+    /** Configuration failures are deployment-wide, even if no page matches a group. */
+    public static void validateConfiguration(GenerationOptions options, SourceLocation at) {
+        for (var group : options.propertyGroups()) {
+            for (String name : group.properties().keySet())
+                if (!Set.of("el-ignored", "is-xml", "scripting-invalid", "page-encoding",
+                        "deferred-syntax-allowed-as-literal", "trim-directive-whitespaces",
+                        "default-content-type", "buffer", "error-on-el-not-found", "error-on-undeclared-namespace").contains(name))
+                    throw new PageParseException(at, "Unknown JSP property: " + name);
+            if (group.properties().containsKey("page-encoding"))
+                charset(group.properties().get("page-encoding"), at);
+            if (group.properties().containsKey("buffer")) bufferCapacity(group.properties().get("buffer"), at);
+            for (String name : List.of("el-ignored", "is-xml", "scripting-invalid",
+                    "deferred-syntax-allowed-as-literal", "trim-directive-whitespaces",
+                    "error-on-el-not-found", "error-on-undeclared-namespace")) {
+                String value = group.properties().get(name);
+                if (value != null && !value.equals("true") && !value.equals("false"))
+                    throw new PageParseException(at, name + " must be true or false");
+            }
+        }
+    }
+
+    /** Shared buffer validation for deployment defaults and page directives. */
+    public static int bufferCapacity(String value, SourceLocation at) {
+        if (value.equals("none")) return 0;
+        try {
+            if (!value.endsWith("kb")) throw new NumberFormatException();
+            int capacity = Math.multiplyExact(Integer.parseInt(value.substring(0, value.length() - 2)), 1024);
+            if (capacity <= 0) throw new NumberFormatException();
+            return capacity;
+        } catch (NumberFormatException | ArithmeticException failure) {
+            throw new PageParseException(at, "Invalid page buffer: " + value);
+        }
     }
 
     private record Match(int category, int length) implements Comparable<Match> {

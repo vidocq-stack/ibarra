@@ -21,6 +21,8 @@ package io.vidocq.ibarra.tck;
 
 import io.vidocq.ibarra.compiler.GenerationOptions;
 import io.vidocq.ibarra.compiler.PagePrecompiler;
+import io.vidocq.ibarra.compiler.JspConfigurationParser;
+import io.vidocq.ibarra.compiler.JspPropertyGroup;
 import java.io.*;
 import java.lang.module.ModuleFinder;
 import java.lang.classfile.ClassFile;
@@ -31,7 +33,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.jar.JarFile;
 import java.util.regex.Pattern;
 import javax.tools.ToolProvider;
-import javax.xml.stream.XMLInputFactory;
 import io.vidocq.foy.internal.webxml.WebXmlParser;
 import org.jboss.arquillian.container.spi.client.container.*;
 import org.jboss.arquillian.container.spi.client.protocol.ProtocolDescription;
@@ -84,17 +85,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
                 }
             }
             Path webXml = web.resolve("WEB-INF/web.xml");
-            if (Files.exists(webXml)) try (var input = Files.newInputStream(webXml)) {
-                var xml = XMLInputFactory.newFactory();
-                xml.setProperty(XMLInputFactory.SUPPORT_DTD, false);
-                xml.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
-                var reader = xml.createXMLStreamReader(input);
-                try {
-                    while (reader.hasNext()) if (reader.next() == javax.xml.stream.XMLStreamConstants.START_ELEMENT
-                            && reader.getLocalName().equals("jsp-property-group"))
-                        throw new IOException("WAR JSP property groups are not yet adapted by this runner");
-                } finally { reader.close(); }
-            }
+            var groups = Files.exists(webXml) ? new JspConfigurationParser().parse("/WEB-INF/web.xml", Files.readAllBytes(webXml)) : List.<JspPropertyGroup>of();
             if (Files.exists(webXml)) try (var input = Files.newInputStream(webXml)) {
                 var model = WebXmlParser.parse(input);
                 if (model.servlets().stream().anyMatch(s -> s.className() != null)
@@ -106,7 +97,10 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
             Files.writeString(descriptor, "module tck.application { requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; }");
             compile("--module-path", join(modules), "--patch-module", "tck.application=" + classes,
                     "-d", classes.toString(), descriptor.toString());
-            new PagePrecompiler().precompile(web, classes, modules, null, GenerationOptions.DEFAULT);
+            var result = new PagePrecompiler().precompileDeployment(web, classes, modules, null, new GenerationOptions(groups, Map.of()));
+            var diagnostics = new ArrayList<String>();
+            new TreeMap<>(result.failures()).forEach((page, failure) -> diagnostics.add(page + "\n" + failure + "\n"));
+            Files.write(work.resolve("translation-errors.txt"), diagnostics);
             Path hostSource = Files.createDirectories(work.resolve("host-source"));
             for (String file : List.of("module-info.java", "host/Main.java")) {
                 Path target = hostSource.resolve(file); Files.createDirectories(target.getParent());

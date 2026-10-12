@@ -32,6 +32,8 @@ import org.xml.sax.*;
 /** Secure build-only XML reader; external declarations are never resolved or expanded. */
 public final class DeploymentXml {
     private DeploymentXml() { }
+    /** Namespace-aware names also work for legacy descriptors without a namespace. */
+    public static String name(Element element) { return Objects.toString(element.getLocalName(), element.getTagName()); }
     public static Document read(String path, byte[] bytes) {
         try {
             var factory = DocumentBuilderFactory.newInstance();

@@ -106,19 +106,19 @@ public final class TldListeners {
         var at = new SourceLocation("/WEB-INF/web.xml", 1, 1);
         var root = DeploymentXml.read("/WEB-INF/web.xml", xml).getDocumentElement();
         String namespace = Objects.toString(root.getNamespaceURI(), "");
-        if (!root.getLocalName().equals("web-app") || !Set.of("", "https://jakarta.ee/xml/ns/jakartaee",
+        if (!DeploymentXml.name(root).equals("web-app") || !Set.of("", "https://jakarta.ee/xml/ns/jakartaee",
                 "http://xmlns.jcp.org/xml/ns/javaee", "http://java.sun.com/xml/ns/javaee", "http://java.sun.com/xml/ns/j2ee").contains(namespace))
             throw new PageParseException(at, "Expected a standard web-app root");
         var uris = new HashSet<String>();
-        for (var config : DeploymentXml.children(root)) if (config.getLocalName().equals("jsp-config")) {
+        for (var config : DeploymentXml.children(root)) if (DeploymentXml.name(config).equals("jsp-config")) {
             requireNamespace(config, namespace, at);
-            for (var entry : DeploymentXml.children(config)) if (entry.getLocalName().equals("taglib")) {
+            for (var entry : DeploymentXml.children(config)) if (DeploymentXml.name(entry).equals("taglib")) {
                 requireNamespace(entry, namespace, at);
                 var fields = new HashMap<String, String>();
                 for (var field : DeploymentXml.children(entry)) {
                     requireNamespace(field, namespace, at);
-                    if (!Set.of("taglib-uri", "taglib-location").contains(field.getLocalName())
-                            || fields.putIfAbsent(field.getLocalName(), field.getTextContent().trim()) != null)
+                    if (!Set.of("taglib-uri", "taglib-location").contains(DeploymentXml.name(field))
+                            || fields.putIfAbsent(DeploymentXml.name(field), field.getTextContent().trim()) != null)
                         throw new PageParseException(at, "Invalid or duplicate taglib mapping field");
                 }
                 String uri = fields.get("taglib-uri"), location = fields.get("taglib-location");

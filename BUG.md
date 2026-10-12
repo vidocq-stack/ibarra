@@ -1,5 +1,45 @@
 # BUG.md — Ibarra
 
+## IBARRA-098 · 2026-10-12 · Remaining official Pages assertions after deployment recovery
+
+- Symptom: the full official run reports 179 method errors and 8 class-level
+  setup/deployment errors after 427 passing methods.
+- Minimal repro: `./run-official-tck-pages-4.0.sh all`; individual classes and
+  failing method selectors are recorded under stable TCK ids in
+  [ibarra-tck/FAILURES.md](ibarra-tck/FAILURES.md).
+- Hypotheses: remaining tag files/metadata, bean/API access, translation validation,
+  response semantics and runner component/library adaptation. Established causes
+  retain their specific IBARRA-085–094 records; other cases need isolated responses.
+- Status: OPEN. The inventory tracks every currently failing class/method without
+  treating deployment error entries as executed methods or claiming certification.
+
+## IBARRA-095 · 2026-10-12 · Deployment translation mode masks invalid global properties
+
+- Symptom: invalid global el-ignored/buffer values produce page error servlets instead
+  of aborting deployment; a zero-page application ignores the configuration entirely.
+- Minimal repro: deploymentCompilationDoesNotRetainInvalidGlobalConfigurationAsPageErrors.
+- Cause: property validation originally runs inside each recoverable translation unit.
+- Status: FIXED by deployment-wide key/boolean/encoding/buffer validation before per-page recovery, preserving
+  the previous descriptor and manifest when configuration is invalid.
+
+## IBARRA-096 · 2026-10-12 · Incremental deployment compilation resolves stale generated classes
+
+- Symptom: a page compiles against a previous generated helper that another page
+  loses when replaced by an error servlet, then fails linkage at runtime.
+- Minimal repro: deploymentCompilationCannotResolveRemovedOwnedClassesFromPreviousRuns.
+- Cause: isolated javac still includes previous owned outputs on its patch path.
+- Status: FIXED by compiling against a clean original-application view and current
+  successful/error classes only. Previous owned helpers cannot satisfy new references.
+
+## IBARRA-097 · 2026-10-12 · Retained diagnostics split Unicode surrogate pairs
+
+- Symptom: a long genuine page error becomes UnmappableCharacterException while
+  writing its generated error servlet source in UTF-8.
+- Minimal repro: retainedDiagnosticTruncationPreservesSupplementaryCharacters.
+- Cause: bounded diagnostic text is cut after a high surrogate at UTF-16 unit 8192.
+- Status: FIXED by retaining complete surrogate pairs at the bound; the public
+  build report still preserves the complete original diagnostic.
+
 ## IBARRA-084 · 2026-10-12 · Eager TCK precompilation rejects mixed positive/negative WARs
 
 - Symptom: a whole official test class fails deployment on an intentionally
@@ -7,8 +47,9 @@
 - Minimal repro: `spec.core_syntax.directives.page.URLClientIT`, whose WAR contains
   `negativeDuplicateAutoFlushFatalTranslationError.jsp`; run with the official script.
 - Cause: PagePrecompiler translates every page atomically before starting Foy.
-- Status: OPEN, runner follow-up. Preserve per-page translation failures and expose
-  their request-time error semantics without placing a compiler in the server.
+- Status: FIXED for individual parse/generation/javac failures by explicit deployment
+  precompilation: valid pages compile, failed pages become direct error servlets
+  preserving request-time errors. Global invalid deployment metadata still aborts.
 
 ## IBARRA-085 · 2026-10-12 · Official BeanELResolver fixture fails in the private application module
 
@@ -101,9 +142,9 @@
 - Minimal repro: PagesContainerTest.unsupportedDeploymentFeaturesFailExplicitlyAndLeaveTheAdapterReusable,
   a WAR declaring `<jsp-property-group><el-ignored>true</el-ignored>`.
 - Cause: the initial adapter passes GenerationOptions.DEFAULT for every WAR.
-- Status: CONTAINED by an explicit deployment diagnostic. Mapping descriptor
-  property groups into compiler options is a runner follow-up; those tests are
-  excluded from the passing smoke subset and remain errors in the full baseline.
+- Status: FIXED by build-side property-group parsing and explicit compiler options,
+  preserving pattern precedence, implicit include order and legacy EL defaults.
+  Runtime ServletContext JSP descriptor exposure remains a separate Foy follow-up.
 
 ## IBARRA-082 · 2026-10-12 · Pages TCK adapter accepts only one active WAR
 
