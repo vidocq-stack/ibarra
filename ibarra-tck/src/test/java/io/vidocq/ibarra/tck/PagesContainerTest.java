@@ -70,6 +70,32 @@ class PagesContainerTest {
             container.undeploy(war);
         } finally { container.stop(); }
     }
+
+    @Test
+    void propertyEditorsKeepTheDesktopReadAfterCollectionProviderRegistration() throws Exception {
+        var war = ShrinkWrap.create(WebArchive.class, "editor-collections.war")
+                .addClasses(io.vidocq.ibarra.tck.fixtures.EditorBean.class,
+                        io.vidocq.ibarra.tck.fixtures.EditorBeanBeanInfo.class, io.vidocq.ibarra.tck.fixtures.EditorValue.class)
+                .addAsWebResource(new StringAsset("<jsp:useBean id='bean' class='io.vidocq.ibarra.tck.fixtures.EditorBean'/>"
+                        + "<jsp:useBean id='values' class='java.util.Vector'/>"
+                        + "<jsp:setProperty name='bean' property='value' value='text'/>"
+                        + "<jsp:getProperty name='bean' property='value'/>|${values.size()}|"
+                        + "<%=bean.getClass().getModule().getDescriptor().requires().stream().anyMatch(read -> read.name().equals(\"java.desktop\"))%>"
+                        + "<% var descriptor = bean.getClass().getModule().getDescriptor();"
+                        + " if (!descriptor.exports().isEmpty() || !descriptor.opens().isEmpty()) throw new AssertionError(\"Application packages must stay private\"); %>"), "index.jsp");
+        var container = new PagesContainer(); container.setup(new PagesConfiguration());
+        try {
+            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            try (var client = HttpClient.newHttpClient()) {
+                var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort()
+                        + "/editor-collections/index.jsp")).build(), HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, response.statusCode(), response.body());
+                assertEquals("edited:text|0|true", response.body());
+            }
+            container.undeploy(war);
+        } finally { container.stop(); }
+    }
+
     @Test
     void compiledForwardsDistinguishPendingBufferedOutputFromUnbufferedWritesAndRouteErrors() throws Exception {
         var war=ShrinkWrap.create(WebArchive.class,"forward-output.war")

@@ -339,8 +339,13 @@
 - Symptom: `spec.core_syntax.actions.setproperty.URLClientIT#positiveBeanPropertyEditorTest`
   reports Test FAILED.
 - Minimal repro: select that fully qualified class with the official script.
-- Hypothesis: generated bean-property conversion lacks the required custom editor path.
-- Status: OPEN, I3 conversion investigation; preserve direct build-time calls.
+- Cause: generated bean-property conversion always used EL coercion, ignoring
+  the property-specific editor classes declared by the bean's BeanInfo.
+- Status: FIXED (2026-10-13) for verified literal BeanInfo descriptors. Build-time
+  Class-File metadata selects the editor; generated code directly constructs it
+  and invokes `setAsText`/`getValue`. The unchanged official method passes with
+  no failures, errors or skips. Dynamic BeanInfo metadata remains explicitly
+  unsupported; no runtime introspection or editor-registration fallback is used.
 
 ## IBARRA-091 · 2026-10-12 · Official negative precompile query fails
 
@@ -1167,3 +1172,26 @@ Entry format: `short id · date · symptom · minimal repro · cause hypothesis 
   named attribute in the page context.
 - Status: fixed by resolving the current scoped bean, casting to its declared
   type, then calling the getter/setter directly without reflection.
+
+## IBARRA-125 · 2026-10-13 · Collection service registration drops application module reads
+
+- Symptom: an editor-using WAR loses its `java.desktop` read when collection
+  accessor services are added after page compilation.
+- Minimal repro: `PagesContainerTest.propertyEditorsKeepTheDesktopReadAfterCollectionProviderRegistration`
+  combines BeanInfo conversion and a Vector allocation, and inspects its named
+  module descriptor. The original reconstruction reports a missing desktop read.
+- Cause: the post-page descriptor reconstruction hardcoded three original reads
+  instead of retaining the compiled application descriptor's requirements.
+- Status: FIXED by preserving existing reads and their static/transitive modifiers
+  while merging generated collection services. Application packages stay private.
+
+## IBARRA-126 · 2026-10-13 · Literal BeanInfo metadata bypasses descriptor validity
+
+- Symptom: initial static editor selection accepts inaccessible BeanInfo constructors
+  and invalid unused descriptors that JavaBeans metadata construction would reject.
+- Minimal repro: `PageGeneratorTest.beanInfoNeedsAnAccessibleConstructorAndValidUnusedDescriptors`.
+- Cause: initial literal extraction retained editor bindings without checking
+  BeanInfo eligibility and every constructed descriptor's conventional accessors.
+- Status: FIXED with public concrete/no-argument BeanInfo validation and matching
+  getter/setter checks for all literal descriptors. Unsupported metadata is diagnosed
+  at the property action; application classes are never initialized.

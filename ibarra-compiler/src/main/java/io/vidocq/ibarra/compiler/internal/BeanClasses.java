@@ -35,6 +35,7 @@ public final class BeanClasses {
     public record Handler(String sourceName, boolean simple, boolean iteration, boolean buffered,
             boolean catchFinally, boolean dynamic, boolean jspIdConsumer) { }
     private final List<Path> paths;
+    private final Map<String, Map<String, String>> beanEditors = new HashMap<>();
     public BeanClasses(List<Path> paths) { this.paths = List.copyOf(paths); }
 
     /** Resolves public expression signature types from class files, without initialization. */
@@ -179,6 +180,47 @@ public final class BeanClasses {
 
     public Accessor setter(String type, String property, SourceLocation at) {
         return setter(type, property, at, false);
+    }
+
+    /** Selects a declared property editor entirely from build-time class-file metadata. */
+    public String propertyEditor(String type, String property, SourceLocation at) {
+        var editors = beanEditors.get(type);
+        if (editors == null) {
+            ClassModel info;
+            try { info = read(type + "BeanInfo", at); }
+            catch (PageParseException absent) {
+                if (!absent.getMessage().contains("absent from the build module path")) throw absent;
+                beanEditors.put(type, Map.of()); return null;
+            }
+            constructor(type + "BeanInfo", at, "BeanInfo");
+            if (!subtype(type + "BeanInfo", "java.beans.BeanInfo", at, new HashSet<>()))
+                throw new PageParseException(at, "BeanInfo must implement java.beans.BeanInfo: " + type);
+            boolean descriptors = info.methods().stream().anyMatch(method -> method.methodName().equalsString("getPropertyDescriptors")
+                    && method.methodType().equalsString("()[Ljava/beans/PropertyDescriptor;")
+                    && (method.flags().flagsMask() & (ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC)) == ClassFile.ACC_PUBLIC);
+            if (!descriptors) throw new PageParseException(at, "Unsupported build-time BeanInfo descriptor method on " + type);
+            try {
+                var metadata = BeanInfoEditors.read(type, info);
+                for (String name : metadata.properties()) {
+                    var getter = getter(type, name, at);
+                    var setter = setter(type, name, at);
+                    if (!getter.type().equals(setter.type()))
+                        throw new PageParseException(at, "Unsupported build-time BeanInfo property types for " + name);
+                }
+                editors = metadata.editors();
+            }
+            catch (RuntimeException unsupported) {
+                throw new PageParseException(at, "Unsupported build-time BeanInfo metadata for " + type
+                        + ": " + unsupported.getMessage(), unsupported);
+            }
+            beanEditors.put(type, editors);
+        }
+        String editor = editors.get(property);
+        if (editor == null) return null;
+        constructor(editor, at, "Property editor");
+        if (!subtype(editor, "java.beans.PropertyEditor", at, new HashSet<>()))
+            throw new PageParseException(at, "Property editor must implement java.beans.PropertyEditor: " + editor);
+        return sourceName(editor, at);
     }
 
     /** Ordinary tag values bind JavaBeans properties independently of TLD EL type defaults. */

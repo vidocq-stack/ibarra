@@ -708,6 +708,109 @@ class PageGeneratorTest {
 
     private PageGenerator generator() { return new PageGenerator(List.of(directory)); }
 
+    @Test
+    void beanInfoEditorsConvertLiteralsAndParametersButNotElValues() throws Exception {
+        preparePropertyEditor(false);
+        String source = "<%@ page session='false' %><jsp:useBean id='bean' class='fixture.EditedBean'/>"
+                + "<jsp:setProperty name='bean' property='name' value='literal'/><jsp:getProperty name='bean' property='name'/>:"
+                + "<jsp:setProperty name='bean' property='name' param='q'/><jsp:getProperty name='bean' property='name'/>:"
+                + "<jsp:setProperty name='bean' property='name' value='${param.q}'/><jsp:getProperty name='bean' property='name'/>:"
+                + "<jsp:setProperty name='bean' property='name' value='<%= \"scriptlet\" %>'/><jsp:getProperty name='bean' property='name'/>";
+        var generated = generator().generate("/editor.jsp", source, PAGE_CLASS, GenerationOptions.DEFAULT.withStartupEl(true));
+        assertTrue(generated.source().contains("new fixture.NameEditor()"));
+        assertFalse(generated.source().contains("Introspector"));
+        assertFalse(generated.source().contains("PropertyEditorManager"));
+        assertNull(System.getProperty("ibarra.editor.beaninfo.initialized"));
+        assertEquals("edited:literal:edited:query:query:scriptlet", run(generated,
+                "request.parameters.put(\"q\", new String[]{\"query\"});",
+                "if (System.getProperty(\"ibarra.editor.beaninfo.initialized\") != null) throw new AssertionError(\"BeanInfo was initialized\");"));
+    }
+
+    @Test
+    void missingOrEmptyRequestParametersDoNotInvokePropertyEditors() throws Exception {
+        preparePropertyEditor(false);
+        assertEquals("unset", render("<%@ page session='false' %><jsp:useBean id='bean' class='fixture.EditedBean'/>"
+                + "<jsp:setProperty name='bean' property='name' param='q'/><jsp:getProperty name='bean' property='name'/>",
+                "request.parameters.put(\"q\", new String[]{\"\"});", ""));
+    }
+
+    @Test
+    void dynamicBeanInfoIsRejectedAtThePropertyActionInsteadOfLoadingApplicationCode() throws Exception {
+        preparePropertyEditor(true);
+        var failure = assertThrows(PageParseException.class, () -> generator().generate("/dynamic.jsp",
+                "<jsp:useBean id='bean' class='fixture.EditedBean'/>\n<jsp:setProperty name='bean' property='name' value='x'/>",
+                PAGE_CLASS, GenerationOptions.DEFAULT));
+        assertEquals(2, failure.location().line());
+        assertTrue(failure.getMessage().contains("build-time BeanInfo"));
+        assertNull(System.getProperty("ibarra.editor.beaninfo.initialized"));
+    }
+
+    @Test
+    void editorFailuresUseNullForEmptyLiteralsAndPageErrorHandlingForNonemptyValues() throws Exception {
+        preparePropertyEditor(false);
+        String bean = "<jsp:useBean id='bean' class='fixture.EditedBean'/>";
+        assertEquals("null", render("<%@ page session='false' %>" + bean
+                + "<jsp:setProperty name='bean' property='name' value=''/><jsp:getProperty name='bean' property='name'/>", "", ""));
+        assertEquals("FORWARDED", render("<%@ page session='false' errorPage='/part.jsp' %>" + bean
+                + "<jsp:setProperty name='bean' property='name' value='reject'/>", dispatchSetup(), ""));
+    }
+
+    @Test
+    void beanInfoNeedsAnAccessibleConstructorAndValidUnusedDescriptors() throws Exception {
+        for (String shape : List.of("private-constructor", "invalid-descriptor")) {
+            preparePropertyEditor(shape);
+            var failure = assertThrows(PageParseException.class, () -> generator().generate("/metadata.jsp",
+                    "<jsp:useBean id='bean' class='fixture.EditedBean'/><jsp:setProperty name='bean' property='name' value='x'/>",
+                    PAGE_CLASS, GenerationOptions.DEFAULT));
+            assertTrue(failure.getMessage().contains(shape.equals("private-constructor")
+                    ? "public no-argument constructor" : "missing"), failure.getMessage());
+        }
+    }
+
+    private void preparePropertyEditor(boolean dynamic) throws Exception {
+        preparePropertyEditor(dynamic ? "dynamic" : "literal");
+    }
+
+    private void preparePropertyEditor(String shape) throws Exception {
+        compile(List.of(new GeneratedPage("fixture.EditedBean", """
+                package fixture;
+                public class EditedBean {
+                    private String name = "unset";
+                    public String getName() { return name; }
+                    public void setName(String name) { this.name = name; }
+                }
+                """, Map.of()), new GeneratedPage("fixture.NameEditor", """
+                package fixture;
+                public class NameEditor extends java.beans.PropertyEditorSupport {
+                    public void setAsText(String text) {
+                        if (text.isEmpty()) throw new IllegalStateException("empty editor value");
+                        if (text.equals("reject")) throw new IllegalArgumentException("rejected editor value");
+                        setValue("edited:" + text);
+                    }
+                }
+                """, Map.of()), new GeneratedPage("fixture.EditedBeanBeanInfo", """
+                package fixture;
+                public class EditedBeanBeanInfo extends java.beans.SimpleBeanInfo {
+                    %s
+                    static { System.setProperty("ibarra.editor.beaninfo.initialized", "yes"); }
+                    private java.beans.PropertyDescriptor[] descriptors;
+                    public java.beans.PropertyDescriptor[] getPropertyDescriptors() {
+                        if (descriptors == null) {
+                            try {
+                                descriptors = new java.beans.PropertyDescriptor[] {
+                                    new java.beans.PropertyDescriptor(%s, EditedBean.class)%s
+                                };
+                                descriptors[0].setPropertyEditorClass(NameEditor.class);
+                            } catch (java.beans.IntrospectionException failure) { throw new IllegalStateException(failure); }
+                        }
+                        return java.util.Arrays.copyOf(descriptors, descriptors.length);
+                    }
+                }
+                """.formatted(shape.equals("private-constructor") ? "private EditedBeanBeanInfo() {}" : "",
+                        shape.equals("dynamic") ? "System.getProperty(\"dynamic.property\")" : "\"name\"",
+                        shape.equals("invalid-descriptor") ? ", new java.beans.PropertyDescriptor(\"missing\", EditedBean.class)" : ""), Map.of())));
+    }
+
     private String render(String source, String setup, String after) throws Exception {
         return run(generator().generate("/fixture.jsp", source, PAGE_CLASS, GenerationOptions.DEFAULT.withStartupEl(true)), setup, after);
     }
@@ -745,7 +848,8 @@ class PageGeneratorTest {
         compile(List.of(generated, new GeneratedPage("io.vidocq.ibarra.core.internal.RenderMain", fixture, Map.of()),
                 new GeneratedPage("io.vidocq.ibarra.core.internal.ServletDoubles", doubles, Map.of())));
         var process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin/java").toString(),
-                "--module-path", modulePath(), "--add-modules", "io.vidocq.peano.core",
+                "--module-path", modulePath(), "--add-modules", "io.vidocq.peano.core,java.desktop",
+                "--add-reads", "io.vidocq.ibarra.core=java.desktop",
                 "--patch-module", "io.vidocq.ibarra.core=" + directory,
                 "-m", "io.vidocq.ibarra.core/io.vidocq.ibarra.core.internal.RenderMain")
                 .redirectErrorStream(true).redirectOutput(directory.resolve("result.log").toFile()).start();
@@ -758,7 +862,8 @@ class PageGeneratorTest {
 
     private void compile(List<GeneratedPage> sources) throws Exception {
         new PageCompiler().compile(sources, directory, List.of("--module-path", modulePath(),
-                "--add-modules", "io.vidocq.ibarra.core", "--patch-module", "io.vidocq.ibarra.core=" + directory));
+                "--add-modules", "io.vidocq.ibarra.core,java.desktop", "--add-reads", "io.vidocq.ibarra.core=java.desktop",
+                "--patch-module", "io.vidocq.ibarra.core=" + directory));
     }
 
     private String modulePath() {

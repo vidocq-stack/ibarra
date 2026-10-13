@@ -109,6 +109,11 @@ it at all.
 - **`jsp:useBean` / `getProperty` / `setProperty`:** the bean class is known at
   translation time — generated `new` and direct getter/setter calls; `property="*"`
   becomes a generated parameter-to-setter table.
+  Literal property-specific BeanInfo editor descriptors are read from class files;
+  generated String conversions call editor constructors and methods directly.
+  Dynamic BeanInfo/PropertyEditorManager metadata, array editors and custom
+  descriptor accessors remain unsupported. Editor-using application modules read
+  `java.desktop`; the runtime core and compiler retain their existing descriptors.
 
 ### Degraded mode: runtime translation
 

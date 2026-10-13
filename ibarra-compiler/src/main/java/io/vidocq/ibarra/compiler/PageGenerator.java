@@ -862,9 +862,29 @@ public final class PageGenerator {
             String temporary = "_jspxValue" + serial++;
             body.add("Object " + temporary + " = " + supplied + ";\n", node.location());
             if (!node.attributes().containsKey("value")) body.add("if (" + temporary + " != null && !\"\".equals(" + temporary + ")) {\n");
-            needsFactory = true;
-            body.add("((" + beanType(node) + ") _jspxBean(pageContext, " + JavaSource.quote(node.attributes().get("name")) + "))." + setter.name() + "(_jspxExpressionFactory.coerceToType("
-                    + temporary + ", " + setter.type() + ".class));\n", node.location());
+            String raw = node.attributes().get("value");
+            boolean scriptlet = raw != null && raw.startsWith("<%=") && raw.endsWith("%>");
+            boolean el = raw != null && !scriptlet && new PageNormalizer(sourceSyntaxes.getOrDefault(node.location().source(), Page.Syntax.STANDARD),
+                    new ParserOptions(bool("isELIgnored", false), bool("deferredSyntaxAllowedAsLiteral", false)), Map.of())
+                    .normalizeStructured(List.of(new PageNode.Text(raw, node.location()))).stream().anyMatch(PageNode.Expression.class::isInstance);
+            String editor = scriptlet || el ? null : classes.propertyEditor(beanType(node), property, node.location());
+            String converted;
+            if (editor != null) {
+                if (setter.type().endsWith("[]")) throw error(node.location(), "Array property editors are not supported at build time");
+                converted = "_jspxConverted" + serial++;
+                String local = "_jspxEditor" + serial++;
+                body.add("Object " + converted + ";\ntry {\njava.beans.PropertyEditor " + local + " = new " + editor + "();\n"
+                        + local + ".setAsText((String) " + temporary + ");\n" + converted + " = " + local + ".getValue();\n"
+                        + "} catch (Exception _jspxConversionFailure) {\nif (!\"\".equals(" + temporary + ")) throw _jspxConversionFailure;\n"
+                        + converted + " = null;\n}\n", node.location());
+                converted = "(" + setter.type() + ") " + converted;
+            } else if (scriptlet) converted = "(" + setter.type() + ") " + temporary;
+            else {
+                needsFactory = true;
+                converted = "_jspxExpressionFactory.coerceToType(" + temporary + ", " + setter.type() + ".class)";
+            }
+            body.add("((" + beanType(node) + ") _jspxBean(pageContext, " + JavaSource.quote(node.attributes().get("name")) + "))."
+                    + setter.name() + "(" + converted + ");\n", node.location());
             if (!node.attributes().containsKey("value")) body.add("}\n");
         }
 

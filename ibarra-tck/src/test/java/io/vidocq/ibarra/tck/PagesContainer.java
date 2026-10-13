@@ -97,7 +97,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
             List<Path> modules = modulePaths(true);
             Path descriptor = work.resolve("module-info.java");
             String service = providers.isEmpty() ? "" : "provides io.vidocq.foy.spi.gen.WebComponent with " + String.join(",", providers) + ";";
-            Files.writeString(descriptor, "module tck.application { requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; requires io.vidocq.foy.api; " + service + " }");
+            Files.writeString(descriptor, "module tck.application { requires java.desktop; requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; requires io.vidocq.foy.api; " + service + " }");
             compile("--module-path", join(modules), "--patch-module", "tck.application=" + classes,
                     "-d", classes.toString(), descriptor.toString());
             var beanAccessors = BeanAccessors.generate(classes, modules);
@@ -106,7 +106,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
             new TreeMap<>(beanAccessors.unsupported()).forEach((type, reason) -> beanDiagnostics.add(type+"\n"+reason+"\n"));
             Files.write(work.resolve("bean-accessor-errors.txt"),beanDiagnostics);
             if (!beanProviders.isEmpty()) {
-                Files.writeString(descriptor, "module tck.application { requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; requires io.vidocq.foy.api; " + service
+                Files.writeString(descriptor, "module tck.application { requires java.desktop; requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; requires io.vidocq.foy.api; " + service
                         + "provides io.vidocq.peano.spi.AccessorProvider with " + String.join(",", beanProviders) + "; }");
                 compile("--module-path", join(modules), "--patch-module", "tck.application=" + classes,
                         "-d", classes.toString(), descriptor.toString());
@@ -124,7 +124,15 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
                 var services=new TreeMap<String,List<String>>();
                 compiled.provides().forEach(p->services.put(p.service(),new ArrayList<>(p.providers())));
                 services.computeIfAbsent("io.vidocq.peano.spi.AccessorProvider",ignored->new ArrayList<>()).addAll(collections.providers());
-                var text=new StringBuilder("module tck.application { requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; requires io.vidocq.foy.api; ");
+                var text=new StringBuilder("module tck.application { ");
+                compiled.requires().stream().sorted(java.util.Comparator.comparing(java.lang.module.ModuleDescriptor.Requires::name))
+                        .filter(read -> !read.modifiers().contains(java.lang.module.ModuleDescriptor.Requires.Modifier.MANDATED))
+                        .forEach(read -> {
+                            text.append("requires ");
+                            if (read.modifiers().contains(java.lang.module.ModuleDescriptor.Requires.Modifier.STATIC)) text.append("static ");
+                            if (read.modifiers().contains(java.lang.module.ModuleDescriptor.Requires.Modifier.TRANSITIVE)) text.append("transitive ");
+                            text.append(read.name()).append(";");
+                        });
                 services.forEach((type,implementations)->text.append("provides ").append(type).append(" with ").append(String.join(",",implementations)).append(";"));
                 Files.writeString(descriptor,text.append(" }").toString());
                 compile("--module-path",join(modules),"--patch-module","tck.application="+classes,"-d",classes.toString(),descriptor.toString());

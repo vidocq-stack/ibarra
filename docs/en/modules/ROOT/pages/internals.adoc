@@ -130,6 +130,36 @@ named attribute/body capture. Bean construction and property calls are direct;
 metadata comes from the Class-File API. Javac checks module accessibility.
 Property actions resolve the current scoped attribute rather than a stale local.
 
+=== Property editors
+
+String literals and request parameters may use an editor declared in the bean's
+same-package `<BeanClass>BeanInfo` class. The compiler reads that class with the
+Class-File API; it never loads or initializes BeanInfo or bean classes. The
+supported metadata subset is a public concrete BeanInfo with a public no-argument
+constructor and public `getPropertyDescriptors()`, constructing literal
+`PropertyDescriptor(String, Class)` values for that bean and assigning literal
+editor classes through `setPropertyEditorClass`. Descriptor arrays, local aliases,
+instance-array caching with null guards, and equal-length `Arrays.copyOf` are
+supported. Every descriptor must name matching conventional public getter/setter
+types, including descriptors unused by the page. Dynamic calls/branches,
+custom accessor names, inherited BeanInfo metadata and other descriptor shapes
+fail at translation with a page diagnostic rather than partially applying metadata.
+
+The selected editor must be public, concrete, implement `PropertyEditor`, and
+have a public no-argument constructor. Generated request code calls its constructor,
+`setAsText` and `getValue` directly, then calls the bean setter. Empty/missing
+request parameters do not invoke it. Failed empty-string literal conversion
+produces null; other conversion failures follow page error handling. EL uses
+EL coercion, while scripting expressions are directly assigned without automatic
+conversion. Array editors, dynamic `PropertyEditorManager` registration/search
+and bean-accepting editor constructors remain unsupported.
+
+Applications using editors must read `java.desktop`; this JDK module is not
+added to Ibarra's runtime core or compiler descriptor. The official WAR adapter
+declares the read on its generated application module and preserves it when
+registering collection accessor services. Editor support adds no external runtime
+dependency, exports, or opens.
+
 `PageCompiler` is build-only. It writes Java 25 classes and retains generated
 source under `.ibarra-sources`; compile errors map back to page locations.
 Fixtures run generated classes on the module path with direct construction.
