@@ -135,14 +135,19 @@ whitespace before `>`. Opening tags, comments and quoted text inside the body do
 not change this delimiter rule. Same-named opening text is literal and does not
 introduce nested actions. JSPX remains well-formed XML: nested markup is balanced,
 character entities and CDATA become character data, and nested markup is retained
-as literal body output. An initial `jsp:attribute` or `jsp:body` envelope is currently
-rejected explicitly rather than treated as raw output; that envelope support remains
-follow-up work.
+as literal body output. Initial `jsp:attribute` envelopes follow the ordinary scalar,
+fragment or deferred attribute contract, independently of the dependent body. An
+explicit `jsp:body` contains only opaque payload; its whitespace is retained while
+whitespace between envelopes is ignored. Named attributes without an explicit body
+are an empty-body invocation. XML aliases for the JSP namespace are supported.
+Duplicate/misordered envelopes, attributes on `jsp:body`, unwrapped content after
+named attributes and missing delimiters fail translation. Payload that resembles
+bean declarations, directives or actions creates no page variables or metadata.
 
 == Current boundary
 
 This is an initial I6 implementation. Broader standard-action named-attribute
-support, namespaced dynamic attributes, tagdependent named/explicit-body envelopes,
+support, namespaced dynamic attributes,
 scripting variables, TagExtraInfo, TagLibraryValidator and tag files
 remain follow-up work. Unsupported invoked metadata fails
 translation; no reflective fallback or handler pooling is enabled.

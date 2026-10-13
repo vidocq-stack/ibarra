@@ -313,7 +313,13 @@ public final class PageGenerator {
                 case "setProperty" -> setProperty(node);
                 case "output" -> {
                     allowed(node, Set.of("omit-xml-declaration"));
-                    if (!boolValue(node.attributes().getOrDefault("omit-xml-declaration", "false"), node.location()))
+                    String omission = node.attributes().getOrDefault("omit-xml-declaration", "false");
+                    boolean omit = switch (omission) {
+                        case "yes", "true" -> true;
+                        case "no", "false" -> false;
+                        default -> throw error(node.location(), "omit-xml-declaration requires yes, no, true or false");
+                    };
+                    if (!omit)
                         write("<?xml version=\"1.0\" encoding=\"" + settings.getOrDefault("pageEncoding", "UTF-8") + "\"?>", node.location());
                 }
                 default -> throw error(node.location(), "Unsupported standard action: " + node.name());

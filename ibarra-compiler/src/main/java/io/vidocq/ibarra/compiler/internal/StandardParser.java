@@ -73,7 +73,7 @@ public final class StandardParser {
     public List<PageNode.Directive> encodingDirectives() {
         var result = new ArrayList<PageNode.Directive>();
         while (cursor < source.text.length()) {
-            if (skipRawTag()) continue;
+            if (skipRawTag(result)) continue;
             if (skipExpression()) continue;
             if (starts("<%--")) comment();
             else if (starts("<%@")) {
@@ -133,7 +133,7 @@ public final class StandardParser {
             addText(result, textStart, cursor);
             int start = cursor;
             if (starts("<%--")) comment();
-            else if (starts("<%@")) result.add(directive());
+            else if (starts("<%@")) { var directive = directive(); binding(directive); result.add(directive); }
             else if (starts("<%")) result.add(script());
             else {
                 boolean end = starts("</");
@@ -148,7 +148,7 @@ public final class StandardParser {
                 var attributes = attributes(false);
                 boolean selfClosing = starts("/>");
                 expect(selfClosing ? "/>" : ">");
-                var children = selfClosing ? List.<PageNode>of() : raw(name, start) ? rawNodes(name, start) : nodes(name, start);
+                var children = selfClosing ? List.<PageNode>of() : raw(name, start) ? dependentNodes(name, start) : nodes(name, start);
                 result.add(new PageNode.Element(name, bindings.get(name.substring(0, name.indexOf(':'))),
                         attributes, children, selfClosing, source.at(start)));
             }
@@ -185,6 +185,10 @@ public final class StandardParser {
     }
 
     private boolean skipRawTag() {
+        return skipRawTag(null);
+    }
+
+    private boolean skipRawTag(List<PageNode.Directive> directives) {
         if (rawBodies == null || !starts("<") || starts("</") || starts("<%") || starts("<!")) return false;
         int saved = cursor; cursor++;
         String name;
@@ -192,16 +196,48 @@ public final class StandardParser {
         if (!raw(name, saved)) { cursor = saved; return false; }
         attributes(false);
         boolean empty = starts("/>"); expect(empty ? "/>" : ">");
-        if (!empty) rawNodes(name, saved);
+        if (!empty) probeDirectives(dependentNodes(name, saved), directives);
         return true;
+    }
+
+    private void probeDirectives(List<PageNode> nodes, List<PageNode.Directive> result) {
+        for (var node : nodes) {
+            if (node instanceof PageNode.Directive directive) {
+                binding(directive);
+                if (result != null) result.add(directive);
+                if (directive.attributes().containsKey("isELIgnored")) elIgnored = Boolean.parseBoolean(directive.attributes().get("isELIgnored"));
+                if (directive.attributes().containsKey("deferredSyntaxAllowedAsLiteral"))
+                    deferredLiteral = Boolean.parseBoolean(directive.attributes().get("deferredSyntaxAllowedAsLiteral"));
+            } else if (node instanceof PageNode.Element element) probeDirectives(element.children(), result);
+        }
+    }
+
+    private List<PageNode> dependentNodes(String name, int opening) {
+        int first = cursor;
+        while (first < source.text.length() && rawSpace(source.text.charAt(first))) first++;
+        if (!rawEnvelope(first, "jsp:attribute") && !rawEnvelope(first, "jsp:body")) return rawNodes(name, opening);
+        cursor = first;
+        var result = new ArrayList<PageNode>();
+        while (cursor < source.text.length()) {
+            space();
+            int start = cursor;
+            if (starts("</")) {
+                cursor += 2; String closing = identifier(); space(); expect(">");
+                if (!closing.equals(name)) throw error(start, "Unexpected closing element: " + closing);
+                return result;
+            }
+            if (!rawEnvelope(cursor, "jsp:attribute") && !rawEnvelope(cursor, "jsp:body"))
+                throw error(cursor, "Named attributes and explicit bodies require jsp:body around content");
+            cursor++; String wrapper = identifier(); var attributes = attributes(false);
+            boolean empty = starts("/>"); expect(empty ? "/>" : ">");
+            var children = empty ? List.<PageNode>of() : wrapper.equals("jsp:body") ? rawNodes(wrapper, start) : nodes(wrapper, start);
+            result.add(new PageNode.Element(wrapper, PageParser.JSP_NAMESPACE, attributes, children, empty, source.at(start)));
+        }
+        throw error(opening, "Unclosed tag-dependent element: " + name);
     }
 
     private List<PageNode> rawNodes(String name, int opening) {
         int bodyStart = cursor;
-        int first = cursor;
-        while (first < source.text.length() && rawSpace(source.text.charAt(first))) first++;
-        if (rawEnvelope(first, "jsp:attribute") || rawEnvelope(first, "jsp:body"))
-            throw error(first, "Tag-dependent named attributes and explicit jsp:body are not supported");
         while (cursor < source.text.length()) {
             int tag = source.text.indexOf("</" + name, cursor);
             if (tag < 0) break;

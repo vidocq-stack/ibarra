@@ -74,7 +74,12 @@ class TagGenerationTest {
         var options = options();
         var library = options.tagLibraries().get("urn:test");
         var tags = new LinkedHashMap<>(library.tags());
-        tags.put("raw", new TagDescriptor("raw", "fixture.Tags$Echo", "tagdependent", Map.of(), false, false));
+        tags.put("raw", new TagDescriptor("raw", "fixture.Tags$Echo", "tagdependent", Map.of(
+                "label", new TagAttribute("label", "java.lang.String", false, true, false),
+                "count", new TagAttribute("count", "int", false, false, false)), false, false));
+        tags.put("rawBuffer", new TagDescriptor("rawBuffer", "fixture.Tags$Buffer", "tagdependent", Map.of(), false, false));
+        tags.put("rawFragment", new TagDescriptor("rawFragment", "fixture.Tags$Fragment", "tagdependent",
+                library.tags().get("fragment").attributes(), false, false));
         return options.withTagLibraries(Map.of("urn:test", new TagLibraryDescriptor(library.resourcePath(), library.uri(), library.listenerClasses(), tags,
                 library.validationRequired(), library.functions())));
     }
@@ -99,12 +104,82 @@ class TagGenerationTest {
     }
 
     @Test
-    void tagDependentExplicitEnvelopesFailRatherThanRenderingAsRawData() throws Exception {
+    void tagDependentExplicitEnvelopesEvaluateNamedAttributesAndEchoTheBodyVerbatim() throws Exception {
         var options = rawOptions();
         String envelope = "<x:raw><jsp:attribute name='label'>named</jsp:attribute><jsp:body>${missing}<% unfinished</jsp:body></x:raw>";
-        assertTrue(assertThrows(PageParseException.class, () -> render(envelope, false, options)).getMessage().contains("explicit jsp:body"));
+        assertEquals("[named:${missing}<% unfinished]", render(envelope, false, options));
         String head = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:x='urn:test' version='4.0'><jsp:directive.page session='false'/>";
-        assertTrue(assertThrows(PageParseException.class, () -> render(head + envelope.replace("${missing}<% unfinished", "<![CDATA[${missing}<% unfinished]]>") + "</jsp:root>", false, options)).getMessage().contains("explicit jsp:body"));
+        assertEquals("[named:${missing}<% unfinished]", render(head + envelope.replace("${missing}<% unfinished", "<![CDATA[${missing}<% unfinished]]>") + "</jsp:root>", false, options));
+    }
+
+    @Test
+    void tagDependentExplicitBodiesRetainWhitespaceAndDoNotCreateBeanVariables() throws Exception {
+        var options = rawOptions();
+        String raw = "  ${unknown}<jsp:useBean id='bean' class='missing.Bean'/><%@ include file='absent.jsp' %>  ";
+        assertEquals("[null:" + raw + "]", render("<x:raw>\n<jsp:body>" + raw + "</jsp:body>\t</x:raw>", false, options));
+        assertEquals("[${UNKNOWN}]", render("<x:rawBuffer><jsp:body>${unknown}</jsp:body></x:rawBuffer>", false, options));
+        assertEquals("[3:]", render("<x:raw><jsp:attribute name='label'>${1+2}</jsp:attribute></x:raw>", false, options));
+        assertEquals("[named:]", render("<x:raw><jsp:attribute name='label'> named </jsp:attribute><jsp:body/></x:raw>", false, options));
+        assertEquals("[script:${literal}]", render("<x:raw><jsp:attribute name='label'><%= \"script\" %></jsp:attribute><jsp:body>${literal}</jsp:body></x:raw>", false, options));
+        assertEquals("<P>P${literal}", render("<x:rawFragment><jsp:attribute name='piece'><x:fragmentParent/></jsp:attribute><jsp:body>${literal}</jsp:body></x:rawFragment>", false, options));
+    }
+
+    @Test
+    void tagDependentExplicitEnvelopeFailuresKeepTheirSourceLocations() throws Exception {
+        prepare();
+        var options = rawOptions();
+        for (String content : List.of("<jsp:body>a</jsp:body><jsp:body>b</jsp:body>",
+                "<jsp:body>a</jsp:body><jsp:attribute name='label'>late</jsp:attribute>",
+                "<jsp:attribute name='label'>a</jsp:attribute><jsp:attribute name='label'>b</jsp:attribute>",
+                "<jsp:attribute name='label'>a</jsp:attribute>unwrapped", "<jsp:body>missing")) {
+            var failure = assertThrows(PageParseException.class, () -> generator().generate("/bad.jsp",
+                    prefix() + "\n<x:raw>" + content + "</x:raw>", "fixture.GeneratedPage", options));
+            assertEquals("/bad.jsp", failure.location().source()); assertEquals(2, failure.location().line());
+            assertFalse(failure.getMessage().contains("absent from the build module path"), failure.getMessage());
+        }
+    }
+
+    @Test
+    void xmlTagDependentEnvelopesRecognizeJspAliasesAndKeepPayloadNamespacesLiteral() throws Exception {
+        var options = rawOptions();
+        String head = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:j='http://java.sun.com/JSP/Page' xmlns:x='urn:test' version='4.0'><jsp:directive.page session='false'/>";
+        String payload = "${missing}<j:attribute name='label'>literal</j:attribute><j:body>nested</j:body>";
+        assertEquals("[3:" + payload + "]", render(head + "<x:raw>\n<j:attribute name='label'>${1+2}</j:attribute>\n<j:body>" + payload + "</j:body>\n</x:raw></jsp:root>", false, options));
+        assertEquals("[null:  literal  ]", render(head + "<x:raw><j:body><![CDATA[  literal  ]]></j:body></x:raw></jsp:root>", false, options));
+        assertEquals("[3:]", render(head + "<x:raw><j:attribute name='label'>${1+2}</j:attribute></x:raw></jsp:root>", false, options));
+        for (String content : List.of("<j:body>a</j:body><j:body>b</j:body>", "<j:attribute name='label'>a</j:attribute>unwrapped",
+                "<j:body invalid='x'>a</j:body>"))
+            assertThrows(PageParseException.class, () -> render(head + "<x:raw>" + content + "</x:raw></jsp:root>", false, options));
+    }
+
+    @Test
+    void explicitDependentPayloadDoesNotLeakEncodingDirectivesOrBeanDeclarations() throws Exception {
+        prepare();
+        var options = rawOptions();
+        String source = prefix() + "<x:raw><jsp:attribute name='label'>named</jsp:attribute><jsp:body><%@ page pageEncoding='UTF-8' %>é</jsp:body></x:raw>";
+        assertTrue(generator().generate("/bytes.jsp", source.getBytes(StandardCharsets.ISO_8859_1), "fixture.GeneratedPage", options).source().contains("é"));
+        String namedEncoding = prefix() + "<x:raw><jsp:attribute name='label'><%@ page pageEncoding='UTF-8' %>é</jsp:attribute>"
+                + "<jsp:body><%@ page pageEncoding='ISO-8859-1' %></jsp:body></x:raw>";
+        assertTrue(generator().generate("/named-bytes.jsp", namedEncoding.getBytes(StandardCharsets.UTF_8),
+                "fixture.GeneratedPage", options).source().contains("é"));
+        var failure = assertThrows(PageParseException.class, () -> generator().generate("/scope.jsp", prefix()
+                + "<x:raw><jsp:body><jsp:useBean id='bean' class='missing.Bean'/></jsp:body></x:raw>"
+                + "<jsp:getProperty name='bean' property='value'/>", "fixture.GeneratedPage", options));
+        assertTrue(failure.getMessage().contains("bean"));
+    }
+
+    @Test
+    void xmlOutputOmissionAcceptsItsSpecifiedStringAliasesWithoutChangingPageBooleans() throws Exception {
+        String head = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page session='false'/>";
+        for (String value : List.of("true", "yes", "false", "no"))
+            assertEquals(value.equals("true") || value.equals("yes") ? "body" : "<?xml version=\"1.0\" encoding=\"UTF-8\"?>body",
+                    render(head + "<jsp:output omit-xml-declaration='" + value + "'/><jsp:text>body</jsp:text></jsp:root>", false, options()));
+        for (String value : List.of("YES", "False", "1", ""))
+            assertThrows(PageParseException.class, () -> generator().generate("/output.jspx", head
+                    + "<jsp:output omit-xml-declaration='" + value + "'/></jsp:root>", "fixture.GeneratedPage", options()));
+        assertThrows(PageParseException.class, () -> generator().generate("/boolean.jspx",
+                "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page session='yes'/></jsp:root>",
+                "fixture.GeneratedPage", options()));
     }
 
     @Test
@@ -505,7 +580,8 @@ class TagGenerationTest {
         compile(List.of(generated,new GeneratedPage("io.vidocq.ibarra.core.internal.TagMain",main,Map.of()),
                 new GeneratedPage("io.vidocq.ibarra.core.internal.ServletDoubles",doubles,Map.of())));
         var process=new ProcessBuilder(Path.of(System.getProperty("java.home"),"bin/java").toString(),
-                "--limit-modules","io.vidocq.ibarra.core","--module-path",modulePath(),
+                "--limit-modules","io.vidocq.ibarra.core,io.vidocq.peano.core","--add-modules","io.vidocq.peano.core",
+                "--add-reads","io.vidocq.ibarra.core=io.vidocq.peano.api","--module-path",modulePath(),
                 "--patch-module","io.vidocq.ibarra.core="+directory,"-m","io.vidocq.ibarra.core/io.vidocq.ibarra.core.internal.TagMain")
                 .redirectErrorStream(true).redirectOutput(directory.resolve("tags.log").toFile()).start();
         assertTrue(process.waitFor(30,TimeUnit.SECONDS));
@@ -514,11 +590,12 @@ class TagGenerationTest {
         return new String(Base64.getDecoder().decode(output.substring(7)),StandardCharsets.UTF_8);
     }
     private void compile(List<GeneratedPage> sources) throws Exception {
-        new PageCompiler().compile(sources,directory,List.of("--module-path",modulePath(),"--add-modules","io.vidocq.ibarra.core",
+        new PageCompiler().compile(sources,directory,List.of("--module-path",modulePath(),"--add-modules","io.vidocq.ibarra.core,io.vidocq.peano.api",
+                "--add-reads","io.vidocq.ibarra.core=io.vidocq.peano.api",
                 "--patch-module","io.vidocq.ibarra.core="+directory));
     }
     private String modulePath() {
-        var names=Set.of("io.vidocq.ibarra.api","io.vidocq.ibarra.core","jakarta.servlet","jakarta.servlet.jsp","jakarta.el");
+        var names=Set.of("io.vidocq.ibarra.api","io.vidocq.ibarra.core","io.vidocq.peano.api","io.vidocq.peano.core","jakarta.servlet","jakarta.servlet.jsp","jakarta.el");
         String available=System.getProperty("jdk.module.path","")+File.pathSeparator+System.getProperty("surefire.test.class.path","");
         var paths=Arrays.stream(available.split(java.util.regex.Pattern.quote(File.pathSeparator))).filter(s->!s.isEmpty()).map(Path::of)
                 .filter(p->p.toString().endsWith(".jar")||Files.isRegularFile(p.resolve("module-info.class"))).distinct().toArray(Path[]::new);

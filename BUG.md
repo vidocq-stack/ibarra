@@ -1,5 +1,31 @@
 # BUG.md — Ibarra
 
+## IBARRA-135 · 2026-10-13 · XML output rejects specified yes/no omission values
+
+- Symptom: unchanged `jspdocument.general.URLClientIT#tagDependentTest` cannot
+  render its envelope fixture because `jsp:output omit-xml-declaration='yes'`
+  fails translation with Expected true or false.
+- Minimal repro: `TagGenerationTest.xmlOutputOmissionAcceptsItsSpecifiedStringAliasesWithoutChangingPageBooleans`.
+- Cause: the String-valued Pages 4.0 section 5.13 attribute uses the ordinary
+  Boolean-directive parser instead of its four specified spellings.
+- Status: FIXED. Only this attribute accepts yes/no/true/false; other spellings
+  and yes/no on ordinary Boolean directives still fail. The unchanged official
+  tag-dependent fixture and three nearby XML-identification methods pass.
+
+## IBARRA-136 · 2026-10-13 · Broader XML output prolog semantics remain incomplete
+
+- Symptom: the neighboring official actions.output class still reports seven
+  method errors after omission aliases are accepted.
+- Minimal repro: `actions.output.URLClientIT` methods `simpleDefaultTest`,
+  `jspOutputJspRootOmitDeclDefaultTest`, `jspOutputOmitDeclValidValuesTest`,
+  `jspOutputUsageContextTest`, `jspOutputBodyTest`, `doctypeSystemTest` and
+  `doctypeSystemPublicTest` in the unchanged official archive.
+- Cause: the initial generator emits explicit declarations at action position;
+  full translation-unit prolog defaults, context/body validation and DOCTYPE
+  output are not yet implemented.
+- Status: OPEN. The alias fix is intentionally bounded; full section 5.13 support
+  needs separate prolog collection and validation. No official fixtures are rewritten.
+
 ## IBARRA-118 · 2026-10-13 · Valid precompile queries still execute the JSP body
 
 - Symptom: bare, empty, true and false jsp_precompile parameters execute user code;
@@ -70,13 +96,15 @@
 
 - Symptom: accepting initial `jsp:attribute`/`jsp:body` wrappers as raw content would
   ignore setter/body semantics and silently render the wrapper markup.
-- Minimal repro: `TagGenerationTest.tagDependentExplicitEnvelopesFailRatherThanRenderingAsRawData`,
+- Minimal repro: `TagGenerationTest.tagDependentExplicitEnvelopesEvaluateNamedAttributesAndEchoTheBodyVerbatim`,
   for both standard syntax and JSPX.
 - Cause: the bounded raw-body implementation does not yet split those envelopes
   from the handler-dependent body payload.
-- Status: OPEN. Both forms now fail explicitly at translation; ordinary literal
-  actions inside a raw body remain unparsed. Follow-up requires envelope parsing
-  with separate ordinary named-attribute and raw explicit-body contracts.
+- Status: FIXED. Outer named attributes use ordinary scalar/fragment/deferred
+  contracts; explicit-body payload is opaque before directive/encoding probes,
+  include expansion and EL normalization. Standard closing delimiters, XML aliases,
+  whitespace, empty-body invocations and malformed envelope diagnostics are covered.
+  The unchanged official `jspdocument.general.URLClientIT#tagDependentTest` passes.
 
 ## IBARRA-116 · 2026-10-13 · Partial unbuffered writes remain eligible for forwarding
 
