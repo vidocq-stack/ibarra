@@ -1,5 +1,15 @@
 # BUG.md — Ibarra
 
+## IBARRA-115 · 2026-10-13 · Collection property pass-through accepts a null ELContext
+
+- Symptom: generated method-only tables silently accept null context in their
+  property operations, contrary to the ELResolver contract.
+- Minimal repro: CollectionAccessorsTest.privateModuleTablesPreserveResolutionMetadataCoercionAndFailureContracts;
+  the isolated application JVM failed with Null context accepted before the fix.
+- Cause: unresolved property stubs return without validating the supplied context.
+- Status: FIXED by validating context in all five pass-through operations while
+  preserving unresolved property flags and native collection resolvers.
+
 ## IBARRA-113 · 2026-10-13 · Deferred signatures reject simple java.lang names
 
 - Symptom: valid TLD types such as Object, Integer and String[][] fail translation
@@ -20,11 +30,15 @@
   and spec.el.jsp.URLClientIT#positiveELDeferredMethodValueTest; a compiled page
   creating java.util.Vector and passing #{vect.add} with boolean add(Object)
   reproduces the metadata failure with peano.reflection=deny.
-- Hypothesis: Peano CompiledMethodExpression.metadata finds no registered direct
-  method table for Vector and reaches its denied reflection fallback. Invocation
-  support also requires verification once metadata is available.
-- Status: OPEN; simple-name translation is fixed separately in IBARRA-113.
-  No reflection fallback or fixture rewrite is enabled.
+- Cause: the application has no registered direct method table for Vector;
+  Peano CompiledMethodExpression.metadata reaches its denied reflection fallback.
+- Status: FIXED in the unpublished runner by generating method-only tables for
+  public java.base collections allocated by compiled WAR/page bytecode. Metadata,
+  overload selection and invocation use Peano's existing SPI with direct calls;
+  native collection property resolution remains untouched. Both official methods
+  pass. Production applications still supply their own accessor providers.
+  Simple-name translation is fixed separately in IBARRA-113; no reflection fallback
+  or fixture rewrite is enabled.
 
 ## IBARRA-108 · 2026-10-13 · Interface-first bean lookup widens a covariant getter
 
@@ -183,8 +197,8 @@
 
 ## IBARRA-098 · 2026-10-12 · Remaining official Pages assertions after deployment recovery
 
-- Symptom: the current full official run reports 178 method errors and no class-level
-  setup/deployment errors after 504 passing methods; the previous baseline was 488 passes.
+- Symptom: the current full official run reports 176 method errors and no class-level
+  setup/deployment errors after 506 passing methods; the previous baseline was 504 passes.
 - Minimal repro: `./run-official-tck-pages-4.0.sh all`; individual classes and
   failing method selectors are recorded under stable TCK ids in
   [ibarra-tck/FAILURES.md](ibarra-tck/FAILURES.md).

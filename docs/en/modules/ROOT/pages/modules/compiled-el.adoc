@@ -152,8 +152,10 @@ in `java.lang`: for example, `Object`, `Integer` and `String[][]` have the same
 meaning as their fully qualified forms. Array dimensions are preserved. Other
 reference types must use qualified names; page imports do not qualify TLD types.
 This translation support does not supply direct method metadata for arbitrary
-receiver classes. In particular, deferred `Vector.add` remains blocked with
-Peano reflection disabled (IBARRA-114).
+receiver classes. Production applications register complete Peano accessor
+providers for their method targets. The unpublished official TCK runner now
+generates method-only tables for allocated java.base collections, allowing
+deferred `Vector.add` with Peano reflection disabled (IBARRA-114).
 
 [source,xml]
 ----

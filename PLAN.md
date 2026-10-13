@@ -230,8 +230,12 @@ the runtime's packaging goal, after I8.
   Explicit modular/multi-release libraries, fragments, classpath services,
   annotations and initializer providers remain unsupported.
   Legacy private WAR bean properties receive Class-File-generated Peano accessor
-  services, with module visibility checks and reflection denial preserved. General
-  methods/static members remain separate capabilities. The TEI fixture lifecycle
+  services, with module visibility checks and reflection denial preserved. Public
+  java.base collections allocated by compiled WAR/page bytecode also receive
+  method-only tables after page compilation, retaining existing module services
+  and native property resolvers. Varargs/runtime-annotated method names receive
+  explicit omission diagnostics. General methods/static members remain separate
+  capabilities. The TEI fixture lifecycle
   constraint and remaining metadata design are recorded in
   [studies/tag-extra-info-aot.md](studies/tag-extra-info-aot.md).
   Degraded runtime translation is not used as a fallback.

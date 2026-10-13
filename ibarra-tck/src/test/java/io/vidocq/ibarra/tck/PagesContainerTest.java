@@ -34,6 +34,30 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PagesContainerTest {
     @Test
+    void compiledCollectionMethodsExposeMetadataAndInvokeWithoutShadowingListProperties() throws Exception {
+        var war=ShrinkWrap.create(WebArchive.class,"collection-methods.war")
+                .addClass(io.vidocq.ibarra.tck.fixtures.DeferredCollectionTag.class)
+                .addAsWebResource(new StringAsset("<taglib xmlns='https://jakarta.ee/xml/ns/jakartaee' version='3.0'>"
+                        + "<tlib-version>1.0</tlib-version><short-name>methods</short-name><uri>urn:methods</uri>"
+                        + "<tag><name>probe</name><tag-class>io.vidocq.ibarra.tck.fixtures.DeferredCollectionTag</tag-class>"
+                        + "<body-content>empty</body-content><attribute><name>action</name><required>true</required>"
+                        + "<deferred-method><method-signature>boolean add(Object)</method-signature></deferred-method>"
+                        + "</attribute></tag></taglib>"),"WEB-INF/methods.tld")
+                .addAsWebResource(new StringAsset("<%@ taglib prefix='m' uri='urn:methods' %>"
+                        + "<jsp:useBean id='values' class='java.util.Vector'/>"
+                        + "<m:probe action='#{values.add}'/>|${values[0]}|${values.add(0,'first')}|${values[0]}"),"index.jsp");
+        var container=new PagesContainer();container.setup(new PagesConfiguration());
+        try {
+            var http=container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            try(var client=HttpClient.newHttpClient()) {
+                var response=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+http.getPort()+"/collection-methods/index.jsp")).build(),HttpResponse.BodyHandlers.ofString());
+                assertEquals(200,response.statusCode(),response.body());
+                assertEquals("add:boolean:java.lang.Object:0:true:1|x||first",response.body());
+            }
+            container.undeploy(war);
+        } finally { container.stop(); }
+    }
+    @Test
     void everyPrimitivePropertyBoxesReadsAndCoercesWritesThroughTheEvaluationContext() throws Exception {
         var war=ShrinkWrap.create(WebArchive.class,"primitive-beans.war")
                 .addClass(io.vidocq.ibarra.tck.fixtures.PrimitiveBean.class)

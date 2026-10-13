@@ -20,23 +20,23 @@ and exact preparation commands are in [README.md](README.md).
 | Official classes selected | 92 |
 | Declared runtime-visible JUnit `@Test` methods in the official binary | 682 |
 | Official Surefire entries reported | 682 |
-| Passing test methods | 504 |
-| Failing method entries | 178 |
+| Passing test methods | 506 |
+| Failing method entries | 176 |
 | Class-level setup/deployment errors | 0 |
-| Total reported errors | 178 |
+| Total reported errors | 176 |
 | Assertion failures reported as Surefire `failure` | 0 |
 | Skipped entries | 0 |
-| Adapter regression tests (separate invocation) | 26/26 |
+| Adapter regression tests (separate invocation) | 30/30 |
 | CI smoke subset (factory/engine + character sequence/EL/encoding configuration) | 18/18 |
 
-Surefire reports `Tests run: 682, Failures: 0, Errors: 178, Skipped: 0` and exits
+Surefire reports `Tests run: 682, Failures: 0, Errors: 176, Skipped: 0` and exits
 nonzero. The TCK's HTTP assertion helper reports failures as exceptions, hence
 `errors` rather than `failures`; zero in the failure column does not mean success.
 
-**504/682 = 73.9% measured full-suite pass rate**. All 682 declared method entries
+**506/682 = 74.2% measured full-suite pass rate**. All 682 declared method entries
 now execute across the 92 official classes; there are no class-level setup errors
 or skipped entries. This records complete method execution for this distribution,
-not certification: 178 methods still report errors.
+not certification: 176 methods still report errors.
 
 The deferred-signature simple-name fix was rechecked with the full suite on
 2026-10-13: the same 504 methods pass and the same 178 methods fail, with no
@@ -44,6 +44,15 @@ regression. The two deferred Vector method scenarios now pass translation but
 remain blocked by direct EL method metadata (IBARRA-113/114), so this fix adds no
 official passing method. The clean default reactor passes 285 tests; adapter
 regressions remain 26/26 and the independent Maven example packages successfully.
+
+Direct collection method tables then restore methodInfoTest and
+positiveELDeferredMethodValueTest on the same date: 506 passes and 176 method
+errors, zero setup errors/skips and no regression among previous passes. Public
+java.base collection allocations discovered in compiled WAR/page bytecode receive
+method-only application providers. All existing module services and native list
+properties are preserved. The adapter passes 30 regressions, including a real HTTP
+deferred/overloaded call and isolated-module metadata, conversion, exception,
+resolution-flag, null-context and collision checks. No production dependency changes.
 
 The denominator was inventoried from the verified official jar with Java 25:
 

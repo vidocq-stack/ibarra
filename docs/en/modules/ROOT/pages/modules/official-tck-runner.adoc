@@ -120,3 +120,24 @@ This unpublished runner feature covers properties. General method invocation,
 static members, conversions/functional adapters and explicit BeanELResolver calls
 remain follow-up capabilities. Production compilation and dependency contracts
 remain unchanged; no runtime parser, compiler or new SPI is introduced.
+
+== Collection method tables
+
+After pages compile, Class-File allocation metadata selects public concrete
+java.util Collection types from java.base. Method-only tables stay in the private
+application module; their provider is appended while preserving all compiled
+PageIndex, Foy component and bean services. No WAR fixture is rewritten.
+
+Peano's existing MethodDescriptor and MethodSelection provide direct metadata and
+overload selection. Invocation converts through the supplied ELContext and retains
+primitive/void/null results and exception causes. Metadata does not invoke methods;
+argument arrays are copied. Exact runtime types are required. Unknown targets/names
+and all property operations stay unresolved, preserving native list indexing.
+
+Signature visibility is checked from the helper package using actual module
+reads/exports. Names with varargs, runtime annotations or inaccessible signature
+types are omitted with bean-accessor-errors.txt diagnostics. Inherited Object and
+static methods remain outside this capability. Discovery does not initialize
+application classes; generated-name collisions abort without overwriting originals.
+This adaptation is confined to the unpublished runner; production applications
+still provide their own complete Peano accessors.

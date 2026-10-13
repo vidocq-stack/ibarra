@@ -1,8 +1,9 @@
 # Official Pages failure inventory
 
 Date: 2026-10-13, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-This inventory records the remaining 178 method errors and no setup errors
-after legacy WAR library, JspIdConsumer and direct property-accessor generation. All 682 official methods now execute. Each class keeps its previous stable id.
+This inventory records the remaining 176 method errors and no setup errors
+after legacy WAR library, JspIdConsumer, direct property and collection-method
+accessor generation. All 682 official methods now execute. Each class keeps its previous stable id.
 Resolved method entries remain as a trace; other causes still need investigation.
 Append new ids when discovering new failing classes, without renumbering records.
 
@@ -37,14 +38,13 @@ for explicit root web.xml components without application exports/opens.
 ## TCK-003 — ee.jakarta.tck.pages.api.jakarta_el.methodinfo.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_el.methodinfo.URLClientIT` and any method below.
-- Diagnosis: Object in the deferred signature now resolves at build time
-  (IBARRA-113); Vector.add method metadata reaches Peano's denied reflection
-  fallback (IBARRA-114). Direct method support remains open.
+- Status: RESOLVED; the official class now passes.
+- Symptom: the previous official HTTP/signature assertion error is resolved.
+- Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_el.methodinfo.URLClientIT`.
+- Cause: unqualified Object prevented signature translation (IBARRA-113), then
+  Vector lacked direct method metadata (IBARRA-114).
 
-Failing methods:
+Resolved methods (2026-10-13, direct collection method tables):
 
 - `methodInfoTest`
 
@@ -638,13 +638,16 @@ Resolved methods (2026-10-13, direct WAR bean property access):
 
 Failing methods:
 
-- `positiveELDeferredMethodValueTest`
 - `implicitImportTest`
 - `allowedDynamicAttributeValueTypesTest`
 
 Resolved methods (2026-10-12, ordinary setter binding):
 
 - `positiveELDeferredValueValueTest`
+
+Resolved methods (2026-10-13, direct collection method tables):
+
+- `positiveELDeferredMethodValueTest`
 
 ## TCK-044 — ee.jakarta.tck.pages.spec.el.language.URLClientIT
 

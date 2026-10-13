@@ -43,7 +43,7 @@ final class BeanAccessors {
     private final Map<String,ModuleReference> modules = new TreeMap<>();
     private final Set<String> readable = new HashSet<>();
     private final Map<String, ClassModel> models = new HashMap<>();
-    private BeanAccessors(Path classes, List<Path> paths) throws IOException {
+    BeanAccessors(Path classes, List<Path> paths) throws IOException {
         this.classes=classes;
         try(var input=Files.newInputStream(classes.resolve("module-info.class"))) { application=ModuleDescriptor.read(input); }
         for(var reference:ModuleFinder.ofSystem().findAll()) modules.put(reference.descriptor().name(),reference);
@@ -153,7 +153,7 @@ final class BeanAccessors {
         for (var parent : model.interfaces()) collect(parent.asInternalName().replace('/', '.'), result, visited);
         if (model.superclass().isPresent()) collect(model.superclass().get().asInternalName().replace('/', '.'),result,visited);
     }
-    private boolean assignable(ClassDesc value, ClassDesc target, Set<String> visited) throws IOException {
+    boolean assignable(ClassDesc value, ClassDesc target, Set<String> visited) throws IOException {
         if (value.equals(target)) return true;
         if (value.isPrimitive() || target.isPrimitive()) return false;
         if (target.equals(CD_Object)) return true;
@@ -166,7 +166,7 @@ final class BeanAccessors {
         for (var parent : model.interfaces()) if (assignable(parent.asSymbol(),target,visited)) return true;
         return model.superclass().isPresent() && assignable(model.superclass().get().asSymbol(),target,visited);
     }
-    private ClassModel read(String binary) throws IOException {
+    ClassModel read(String binary) throws IOException {
         if (models.containsKey(binary)) return models.get(binary);
         String relative = binary.replace('.','/') + ".class";
         if(Files.isRegularFile(classes.resolve(relative))) {
@@ -189,7 +189,7 @@ final class BeanAccessors {
         if(inaccessible!=null) throw new UnavailableType(inaccessible);
         throw new UnavailableType("Bean type absent from build module path: "+binary);
     }
-    private void signatureType(ClassDesc type,String bean) throws IOException {
+    void signatureType(ClassDesc type,String bean) throws IOException {
         while(type.isArray()) type=type.componentType();
         if(type.isPrimitive()) return;
         String binary=type.descriptorString().substring(1,type.descriptorString().length()-1).replace('/','.');
@@ -260,7 +260,7 @@ final class BeanAccessors {
             });
         });
     }
-    private static void accepts(CodeBuilder code, ClassDesc bean, Label fallback, boolean property) {
+    static void accepts(CodeBuilder code, ClassDesc bean, Label fallback, boolean property) {
         code.aload(1).invokestatic(ClassDesc.of("java.util.Objects"),"requireNonNull",MethodTypeDesc.of(CD_Object,CD_Object)).pop();
         code.aload(2).ifnull(fallback).aload(2).invokevirtual(CD_Object,"getClass",MethodTypeDesc.of(CD_Class)).ldc(bean).if_acmpne(fallback);
         if(property) code.aload(3).instanceOf(CD_String).ifeq(fallback);
@@ -268,7 +268,7 @@ final class BeanAccessors {
     private static void fallback(CodeBuilder code,ClassDesc type) {
         if(type.equals(CD_void)) code.return_(); else if(type.equals(CD_boolean)) code.iconst_0().ireturn(); else code.aconst_null().areturn();
     }
-    private static void fail(CodeBuilder code,String type,String message) {
+    static void fail(CodeBuilder code,String type,String message) {
         var exception=ClassDesc.of(type); code.new_(exception).dup().ldc(message).invokespecial(exception,"<init>",MethodTypeDesc.of(CD_void,CD_String)).athrow();
     }
     private static ClassDesc wrapper(ClassDesc type) {
@@ -278,20 +278,21 @@ final class BeanAccessors {
             case "F" -> "java.lang.Float"; case "D" -> "java.lang.Double"; default -> throw new IllegalArgumentException("Unsupported primitive "+type);
         });
     }
-    private static void classLiteral(CodeBuilder code,ClassDesc type) {
-        if(type.isPrimitive()) code.getstatic(wrapper(type),"TYPE",CD_Class); else code.ldc(type);
+    static void classLiteral(CodeBuilder code,ClassDesc type) {
+        if(type.equals(CD_void)) code.getstatic(ClassDesc.of("java.lang.Void"),"TYPE",CD_Class);
+        else if(type.isPrimitive()) code.getstatic(wrapper(type),"TYPE",CD_Class); else code.ldc(type);
     }
-    private static void box(CodeBuilder code,ClassDesc type) {
+    static void box(CodeBuilder code,ClassDesc type) {
         if(type.isPrimitive()) code.invokestatic(wrapper(type),"valueOf",MethodTypeDesc.of(wrapper(type),type));
     }
-    private static void unbox(CodeBuilder code,ClassDesc type) {
+    static void unbox(CodeBuilder code,ClassDesc type) {
         if(!type.isPrimitive()) { code.checkcast(type); return; }
         var boxed=wrapper(type);
         String method=switch(type.descriptorString()) {case "I" -> "intValue";case "C" -> "charValue";case "Z" -> "booleanValue";
             case "B" -> "byteValue";case "S" -> "shortValue";case "J" -> "longValue";case "F" -> "floatValue";case "D" -> "doubleValue";default -> throw new IllegalArgumentException();};
         code.checkcast(boxed).invokevirtual(boxed,method,MethodTypeDesc.of(type));
     }
-    private static byte[] provider(ClassDesc owner,List<ClassDesc> tables) {
+    static byte[] provider(ClassDesc owner,List<ClassDesc> tables) {
         return ClassFile.of().build(owner,builder -> {
             builder.withFlags(ACC_PUBLIC|ACC_FINAL|ACC_SUPER).withInterfaceSymbols(ClassDesc.of("io.vidocq.peano.spi.AccessorProvider"));
             builder.withMethodBody("<init>",MethodTypeDesc.of(CD_void),ACC_PUBLIC,

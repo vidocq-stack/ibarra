@@ -145,6 +145,30 @@ handwritten BeanELResolver instances remain separate capabilities. Production
 applications continue to use Peano's processor or their own complete accessor
 providers; neither Ibarra core nor its Maven plugin gains this automatic feature.
 
+## Collection method access
+
+After page compilation the runner scans WAR/application class-file allocations
+for public concrete java.util Collection classes from java.base. It emits direct
+method-only tables in the private tck.generated.collections package and appends
+their Peano provider, preserving all compiled PageIndex, component and bean services.
+Original WAR class bytes remain unchanged; compiler output is never needed at runtime.
+
+MethodDescriptor constants and MethodSelection supply signatures and overload
+selection. Metadata does not invoke the method, arguments are defensively copied,
+and actual invocation converts operands through the supplied ELContext. Primitive
+and void returns, resolved null results and target exception causes are preserved.
+Property operations remain unresolved, so native list indexing retains precedence.
+Only exact runtime target classes are claimed; unknown names/targets remain unresolved.
+
+Discovery follows the existing readable/exported module checks, inspects signatures
+from the actual helper package, and does not initialize application classes. Names
+with varargs, runtime method annotations or inaccessible signature types are omitted
+as a whole, with bean-accessor-errors.txt diagnostics, preserving real page failures.
+Object's inherited methods and static methods are outside this bounded adaptation.
+Generated class/provider collisions fail before overwriting application bytes.
+This is an unpublished runner capability; production applications continue to
+generate/register their own complete Peano accessor providers.
+
 Current adapter diagnostics explicitly reject unadapted library metadata,
 annotated Servlet components requiring generated metadata, ServletContainerInitializer
 providers. Bean/accessor adaptation, runtime JSP descriptor exposure and signature-test

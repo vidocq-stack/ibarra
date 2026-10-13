@@ -115,6 +115,20 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
             var diagnostics = new ArrayList<String>();
             new TreeMap<>(result.failures()).forEach((page, failure) -> diagnostics.add(page + "\n" + failure + "\n"));
             Files.write(work.resolve("translation-errors.txt"), diagnostics);
+            var collections=CollectionAccessors.generate(classes,modules);
+            new TreeMap<>(collections.unsupported()).forEach((type,reason)->beanDiagnostics.add(type+"\n"+reason+"\n"));
+            Files.write(work.resolve("bean-accessor-errors.txt"),beanDiagnostics);
+            if(!collections.providers().isEmpty()) {
+                java.lang.module.ModuleDescriptor compiled;
+                try(var input=Files.newInputStream(classes.resolve("module-info.class"))) { compiled=java.lang.module.ModuleDescriptor.read(input); }
+                var services=new TreeMap<String,List<String>>();
+                compiled.provides().forEach(p->services.put(p.service(),new ArrayList<>(p.providers())));
+                services.computeIfAbsent("io.vidocq.peano.spi.AccessorProvider",ignored->new ArrayList<>()).addAll(collections.providers());
+                var text=new StringBuilder("module tck.application { requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; requires io.vidocq.foy.api; ");
+                services.forEach((type,implementations)->text.append("provides ").append(type).append(" with ").append(String.join(",",implementations)).append(";"));
+                Files.writeString(descriptor,text.append(" }").toString());
+                compile("--module-path",join(modules),"--patch-module","tck.application="+classes,"-d",classes.toString(),descriptor.toString());
+            }
             Path hostSource = Files.createDirectories(work.resolve("host-source"));
             for (String file : List.of("module-info.java", "host/Main.java")) {
                 Path target = hostSource.resolve(file); Files.createDirectories(target.getParent());
