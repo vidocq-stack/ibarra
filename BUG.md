@@ -23,12 +23,11 @@
 - Cause: JSP inclusion redirects output to the ancestor writer through a response
   wrapper. Forward clears only the child buffer and forwards through the container's
   include response; ancestor buffers and generated-page continuation remain active.
-- Status: fixed. Typed inclusion wrappers retain their request-owned parent contexts.
-  Forward validates every ancestor before discarding buffered output, preserves the
-  original application response wrapper, dispatches outside the JSP include wrappers,
-  and records successful completion through `PageDispatchContext`. Generated including
-  pages stop execution and suppress their final writer flush. Failed forwards never
-  acquire the completion state; initialize/release reset it.
+- Status: OPEN. The signed prototype in the fix-include-forward worktree restores
+  the official scenario, but bypasses application wrappers added during inclusion
+  (IBARRA-130). It is withheld from the publication branch pending a typed container
+  dispatch boundary that preserves those wrappers. See
+  [studies/include-forward-wrapper-dispatch.md](studies/include-forward-wrapper-dispatch.md).
 - Validation: original official method reproduced red, plus two focused core failures
   and HTTP `beforetargetafter`. Under Temurin 25, `./mvnw -o -ntp -Ptck -pl ibarra-tck
   -am test` passes all selected reactor and adapter tests. The unchanged official
@@ -37,6 +36,21 @@
   -Dsurefire.failIfNoSpecifiedTests=false test`. Additional regressions cover nested
   includes, parent scriptlet suppression, committed/flushed ancestor rejection,
   application wrapper preservation, failed target dispatch and context reuse.
+
+## IBARRA-130 · 2026-10-13 · Include-forward prototype bypasses child response wrappers
+
+- Symptom: an application response wrapper added during included dispatch is not
+  passed to the forward target; its uppercase transformation changes from TARGET
+  to target. The outer original application wrapper is retained.
+- Minimal repro: the isolated core test and exact command recorded in
+  [studies/include-forward-wrapper-dispatch.md](studies/include-forward-wrapper-dispatch.md),
+  against signed prototype 8d9c54ac98a99b1df1042bbacc9e6702ceac79b3.
+- Cause: forwarding through the saved outer response bypasses application and
+  container include wrappers together; core cannot safely distinguish opaque
+  container wrappers from application wrappers through ServletResponseWrapper alone.
+- Status: OPEN; prototype withheld from this branch. The original include/forward
+  scenario remains failing. Follow-up requires container-aware typed dispatch,
+  preserving wrapper identity/delegation and include/forward response semantics.
 
 ## IBARRA-120 · 2026-10-13 · Tag-dependent body content is parsed as JSP
 

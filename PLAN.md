@@ -278,15 +278,6 @@ is discarded. Partial write failures retain possible output. Error pages include
 after emitted output and retain the original exception. All seven official forward
 scenarios pass; the full measured baseline is recorded in ibarra-tck/BASELINE.md.
 
-Included-page forwarding correction (2026-10-13): core inclusion wrappers retain
-request-owned ancestor PageContexts without container-specific dependencies.
-Successful forward clears ancestor buffers and uses the original application
-response; `PageDispatchContext` lets generated ancestors stop execution and skip
-their final flush. Ancestor output is validated before any buffer mutation, failed
-dispatch remains incomplete, and release drops the ancestry and completion state.
-Nested HTTP includes and the unchanged official include/forward classes exercise
-this path; the complete TCK baseline is maintained separately.
-
 Application resolvers freeze atomically on first use. The EL provider is created
 once, lazily, through `ExpressionFactory.newInstance()`. Context listeners can
 retrieve the page's context during their callback. Tests use an EL factory

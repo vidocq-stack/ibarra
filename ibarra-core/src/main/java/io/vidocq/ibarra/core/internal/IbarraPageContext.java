@@ -35,8 +35,7 @@ import jakarta.servlet.jsp.*;
 import jakarta.servlet.jsp.tagext.BodyContent;
 
 /** Per-request page state. No thread-local storage or context pooling. */
-final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.spi.BeanScopeContext,
-        io.vidocq.ibarra.spi.PageDispatchContext {
+final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.spi.BeanScopeContext {
     private final IbarraApplicationContext application;
     private final Map<String, Object> attributes = new HashMap<>();
     private final ArrayDeque<JspWriter> bodies = new ArrayDeque<>();
@@ -50,8 +49,6 @@ final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.sp
     private JspWriter out;
     private BufferedJspWriter base;
     private ELContext elContext;
-    private IbarraPageContext includingPage;
-    private boolean forwarded;
 
     IbarraPageContext() { this(new IbarraApplicationContext()); }
     IbarraPageContext(IbarraApplicationContext application) { this.application = Objects.requireNonNull(application); }
@@ -75,8 +72,6 @@ final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.sp
         this.servlet = servlet;
         this.request = request;
         this.response = response;
-        this.includingPage = includingPage(response);
-        this.forwarded = false;
         this.config = config;
         this.context = context;
         this.session = session;
@@ -101,7 +96,6 @@ final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.sp
         bodies.clear();
         servlet = null; request = null; response = null; config = null; context = null;
         session = null; errorPage = null; out = null; base = null; elContext = null;
-        includingPage = null; forwarded = false;
     }
 
     private static String name(String name) { return Objects.requireNonNull(name, "attribute name"); }
@@ -117,8 +111,6 @@ final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.sp
         else if (scope != APPLICATION_SCOPE) throw new IllegalArgumentException("Not a shared scope: " + scope);
         return application.beanScopeLock;
     }
-
-    @Override public boolean isForwarded() { return forwarded; }
 
     @Override public Object getAttribute(String name) { return attributes.get(name(name)); }
     @Override
@@ -254,22 +246,12 @@ final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.sp
 
     @Override
     public void forward(String path) throws ServletException, IOException {
-        var pages = new ArrayDeque<IbarraPageContext>();
-        for (var page = this; page != null; page = page.includingPage) {
-            if (page.response.isCommitted()) throw new IllegalStateException("Response is already committed");
-            if (page.base.hasFlushed()) throw new IllegalStateException("Page output has already been flushed");
-            pages.addLast(page);
-        }
+        if (response.isCommitted()) throw new IllegalStateException("Response is already committed");
+        if (base.hasFlushed()) throw new IllegalStateException("Page output has already been flushed");
         var target = dispatcher(path);
-        for (var page : pages) {
-            if (page.base.getBufferSize() != JspWriter.NO_BUFFER) page.base.clearBuffer();
-            if (page.out instanceof BodyContent body) body.clearBody();
-            for (var writer : page.bodies) if (writer instanceof BodyContent body) body.clearBody();
-        }
-        var destination = pages.getLast().response;
-        destination.resetBuffer();
-        target.forward(request, destination);
-        for (var page : pages) page.forwarded = true;
+        if (base.getBufferSize() != JspWriter.NO_BUFFER) base.clearBuffer();
+        response.resetBuffer();
+        target.forward(request, response);
     }
 
     @Override public void include(String path) throws ServletException, IOException { include(path, true); }
@@ -282,44 +264,22 @@ final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.sp
         };
         ServletResponse included;
         if (response instanceof HttpServletResponse http) {
-            included = new HttpInclusion(http, writer);
+            included = new HttpServletResponseWrapper(http) {
+                @Override public PrintWriter getWriter() { return writer; }
+                @Override public ServletOutputStream getOutputStream() {
+                    throw new IllegalStateException("JSP inclusion uses character output");
+                }
+            };
         } else {
-            included = new GenericInclusion(response, writer);
+            included = new ServletResponseWrapper(response) {
+                @Override public PrintWriter getWriter() { return writer; }
+                @Override public ServletOutputStream getOutputStream() {
+                    throw new IllegalStateException("JSP inclusion uses character output");
+                }
+            };
         }
         dispatcher(path).include(request, included);
         if (writer.checkError()) throw new IOException("Failed to write included output");
-    }
-
-    private interface Inclusion {
-        IbarraPageContext includingPage();
-    }
-
-    private static IbarraPageContext includingPage(ServletResponse response) {
-        while (response instanceof ServletResponseWrapper wrapper) {
-            if (response instanceof Inclusion inclusion) return inclusion.includingPage();
-            response = wrapper.getResponse();
-        }
-        return null;
-    }
-
-    private final class HttpInclusion extends HttpServletResponseWrapper implements Inclusion {
-        private final PrintWriter writer;
-        HttpInclusion(HttpServletResponse response, PrintWriter writer) { super(response); this.writer = writer; }
-        public IbarraPageContext includingPage() { return IbarraPageContext.this; }
-        @Override public PrintWriter getWriter() { return writer; }
-        @Override public ServletOutputStream getOutputStream() {
-            throw new IllegalStateException("JSP inclusion uses character output");
-        }
-    }
-
-    private final class GenericInclusion extends ServletResponseWrapper implements Inclusion {
-        private final PrintWriter writer;
-        GenericInclusion(ServletResponse response, PrintWriter writer) { super(response); this.writer = writer; }
-        public IbarraPageContext includingPage() { return IbarraPageContext.this; }
-        @Override public PrintWriter getWriter() { return writer; }
-        @Override public ServletOutputStream getOutputStream() {
-            throw new IllegalStateException("JSP inclusion uses character output");
-        }
     }
 
     @Override

@@ -74,22 +74,6 @@ their TLD metadata is available during the build.
 Boolean group properties and page attributes accept only `true` or `false`;
 invalid values fail translation with `PageParseException` source diagnostics.
 
-[[included-forwards]]
-== Forwards from included pages
-
-`io.vidocq.ibarra.spi.PageDispatchContext` exposes only `boolean isForwarded()`.
-Ibarra's PageContext implements this request-owned completion flag: it becomes true
-for a successfully forwarded page and its including ancestors, and resets on context
-initialization/release. Generated include actions stop the including page when the
-flag is true; generated cleanup does not flush its discarded output.
-
-The core follows only its own typed inclusion wrappers, validates all ancestor JSP
-writers before changing buffers, and preserves the original application response
-wrappers. A failed target dispatch leaves completion false. No runtime reflection,
-container dependency, request-attribute marker or additional module export is needed.
-Legacy PageContext implementations without this optional contract retain their
-existing generated-page behavior.
-
 [[scoped-beans]]
 == Scoped beans
 
