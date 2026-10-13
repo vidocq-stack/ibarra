@@ -1,5 +1,18 @@
 # BUG.md — Ibarra
 
+## IBARRA-118 · 2026-10-13 · Valid precompile queries still execute the JSP body
+
+- Symptom: bare, empty, true and false jsp_precompile parameters execute user code;
+  arbitrary values also return 200. Three official positive tests appeared to pass
+  because their unexpected-response text uses Request but the page writes request.
+- Minimal repro: PagesContainerTest.precompileRequestsValidateDecodedValuesAndNeverExecuteThePageThroughRoutesOrAliases;
+  the initial bare query returned executed-1 rather than an empty response.
+- Cause: generated servlet service dispatches every request to _jspService without
+  implementing the Pages 4.0 section 11.4.2 precompilation protocol.
+- Status: FIXED by validating all decoded parameter values before dispatch;
+  valid requests suppress the JSP body and invalid values send HTTP 500. Both
+  generic JSP routing and explicit jsp-file aliases use the generated service.
+
 ## IBARRA-116 · 2026-10-13 · Partial unbuffered writes remain eligible for forwarding
 
 - Symptom: after a response writer sends partial output and throws, forwarding
@@ -334,8 +347,10 @@
 - Symptom: `spec.misc.precompilation.URLClientIT#precompileNegativeTest` fails;
   the three other precompile query tests pass.
 - Minimal repro: select that fully qualified class with the official script.
-- Hypothesis: the Foy page-engine route does not reject an invalid jsp_precompile value.
-- Status: OPEN, verify the HTTP response against the Pages precompilation contract.
+- Cause: generated servlet service does not validate jsp_precompile values.
+- Status: FIXED with IBARRA-118: decoded invalid values send HTTP 500 and every
+  valid precompilation request suppresses the body before PageContext acquisition.
+  Existing translation-error servlets continue reporting their build failure.
 
 ## IBARRA-092 · 2026-10-12 · Official Pages signature test is not configured
 

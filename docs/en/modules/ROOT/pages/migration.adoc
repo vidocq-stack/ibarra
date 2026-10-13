@@ -17,6 +17,14 @@ Standard pages, standard actions, custom tags with TLDs, tag files and `jsp-conf
 * **`jsp:useBean beanName`** (serialized beans) — support is an open question.
 * **Tag handler pooling** — Ibarra does not pool handlers; a handler that relied on reuse between invocations must not.
 
+== Precompilation requests
+
+`jsp_precompile` now follows the Pages 4.0 protocol for generic JSP routes and
+explicit `jsp-file` aliases. A bare/empty value, `true` or `false` suppresses the
+page body; invalid decoded values return HTTP 500. Repeated values must all be
+valid. Normal requests without this parameter still execute the page. Existing
+translation failures remain HTTP 500 even for a precompilation request.
+
 == Forwarding and page output
 
 Forward before writing output when using `buffer="none"`. Ibarra now rejects a

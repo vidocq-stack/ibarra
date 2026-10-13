@@ -51,6 +51,14 @@ after Servlet commitment or JSP output they are included without discarding outp
 Release drops request state without pooling.
 Page code flushes or closes output before releasing its context.
 
+Generated servlet service validates `jsp_precompile` before invoking `_jspService`.
+Bare/empty values, `true` and `false` suppress the page body; every other decoded
+value produces HTTP 500. Every value in a repeated parameter must be valid.
+This applies to both generic JSP routes and explicit `jsp-file` aliases, before
+PageContext/session acquisition. Translation-error servlets still report their
+retained build failure. This follows
+https://jakarta.ee/specifications/pages/4.0/jakarta-server-pages-spec-4.0.html#precompilation-protocol[Pages 4.0 section 11.4.2].
+
 `IbarraJspFactory` allocates fresh request contexts and shared application contexts.
 The future container binding installs it with `JspFactory.setDefaultFactory()`
 and removes application contexts only after requests have drained.

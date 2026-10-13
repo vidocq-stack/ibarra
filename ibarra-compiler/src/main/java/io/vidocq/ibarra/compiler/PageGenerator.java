@@ -192,7 +192,11 @@ public final class PageGenerator {
             result.add("@Override public final void init() throws jakarta.servlet.ServletException { super.init(); _jspxInitialize(); jspInit(); }\n");
             result.add("@Override public final void init(jakarta.servlet.ServletConfig config) throws jakarta.servlet.ServletException { super.init(config); }\n");
             result.add("@Override public final void destroy() { try { jspDestroy(); } finally { super.destroy(); } }\n");
-            result.add("@Override protected final void service(jakarta.servlet.http.HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) throws jakarta.servlet.ServletException, java.io.IOException { _jspService(request, response); }\n");
+            result.add("@Override protected final void service(jakarta.servlet.http.HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) throws jakarta.servlet.ServletException, java.io.IOException {\n");
+            result.add("var _jspxPrecompile = request.getParameterValues(\"jsp_precompile\");\n");
+            result.add("if (_jspxPrecompile != null) {\nfor (var value : _jspxPrecompile) {\n");
+            result.add("if (!(\"\".equals(value) || \"true\".equals(value) || \"false\".equals(value))) { response.sendError(500, \"Invalid jsp_precompile value\"); return; }\n}\nreturn;\n}\n");
+            result.add("_jspService(request, response);\n}\n");
             result.add("@Override public final void service(jakarta.servlet.ServletRequest request, jakarta.servlet.ServletResponse response) throws jakarta.servlet.ServletException, java.io.IOException { super.service(request, response); }\n");
             if (settings.containsKey("info")) result.add("@Override public String getServletInfo() { return " + JavaSource.quote(settings.get("info")) + "; }\n");
             result.add("}\n");

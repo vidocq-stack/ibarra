@@ -34,6 +34,43 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PagesContainerTest {
     @Test
+    void precompileRequestsValidateDecodedValuesAndNeverExecuteThePageThroughRoutesOrAliases() throws Exception {
+        var war=ShrinkWrap.create(WebArchive.class,"precompile-protocol.war")
+                .setWebXML(new StringAsset("<web-app xmlns='https://jakarta.ee/xml/ns/jakartaee' version='6.1'>"
+                        + "<servlet><servlet-name>alias</servlet-name><jsp-file>/index.jsp</jsp-file></servlet>"
+                        + "<servlet-mapping><servlet-name>alias</servlet-name><url-pattern>/alias</url-pattern></servlet-mapping></web-app>"))
+                .addAsWebResource(new StringAsset("<%@ page session='false' %><%int count=application.getAttribute(\"executions\")==null?0:(Integer)application.getAttribute(\"executions\");"
+                        + "application.setAttribute(\"executions\",count+1);out.print(\"executed-\"+(count+1));%>"),"index.jsp")
+                .addAsWebResource(new StringAsset("<%@ page session='false' %><%=application.getAttribute(\"executions\")==null?0:application.getAttribute(\"executions\")%>"),"count.jsp")
+                .addAsWebResource(new StringAsset("secret"),"WEB-INF/private.jsp");
+        var container=new PagesContainer();container.setup(new PagesConfiguration());
+        try {
+            var http=container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            String base="http://127.0.0.1:"+http.getPort()+"/precompile-protocol/";
+            try(var client=HttpClient.newHttpClient()) {
+                for(String path:java.util.List.of("index.jsp","alias")) {
+                    for(String query:java.util.List.of("jsp_precompile","jsp_precompile=","jsp_precompile=true","jsp_precompile=false",
+                            "test=other&jsp_precompile=true","jsp_precompile=%74rue","jsp%5Fprecompile=true","jsp_precompile=true&jsp_precompile=false")) {
+                        var response=client.send(HttpRequest.newBuilder(URI.create(base+path+"?"+query)).build(),HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200,response.statusCode(),path+"?"+query);assertEquals("",response.body(),path+"?"+query);
+                    }
+                    for(String query:java.util.List.of("jsp_precompile=invalid","jsp_precompile=TRUE","jsp_precompile=true%20","jsp_precompile=true&jsp_precompile=invalid")) {
+                        var response=client.send(HttpRequest.newBuilder(URI.create(base+path+"?"+query)).build(),HttpResponse.BodyHandlers.ofString());
+                        assertEquals(500,response.statusCode(),path+"?"+query);
+                    }
+                }
+                var response=client.send(HttpRequest.newBuilder(URI.create(base+"count.jsp")).build(),HttpResponse.BodyHandlers.ofString());
+                assertEquals("0",response.body());
+                for(String path:java.util.List.of("missing.jsp?jsp_precompile=true","WEB-INF/private.jsp?jsp_precompile=invalid")) {
+                    response=client.send(HttpRequest.newBuilder(URI.create(base+path)).build(),HttpResponse.BodyHandlers.ofString());assertEquals(404,response.statusCode(),path);
+                }
+                response=client.send(HttpRequest.newBuilder(URI.create(base+"index.jsp")).build(),HttpResponse.BodyHandlers.ofString());assertEquals("executed-1",response.body());
+                response=client.send(HttpRequest.newBuilder(URI.create(base+"alias")).build(),HttpResponse.BodyHandlers.ofString());assertEquals("executed-2",response.body());
+            }
+            container.undeploy(war);
+        } finally { container.stop(); }
+    }
+    @Test
     void compiledForwardsDistinguishPendingBufferedOutputFromUnbufferedWritesAndRouteErrors() throws Exception {
         var war=ShrinkWrap.create(WebArchive.class,"forward-output.war")
                 .addAsWebResource(new StringAsset("<%@ page buffer='none' %><jsp:forward page='target.jsp'/>"),"empty.jsp")
