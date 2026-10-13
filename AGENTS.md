@@ -132,8 +132,12 @@ ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
     is prohibited. Libraries must be reachable named modules with listener
     packages accessible to the generated application module. Initial I6 handlers
     use fresh instances and direct calls, including custom-tag named/fragment
-    attributes and explicit bodies. Namespaced dynamic attributes, tagdependent
-    bodies, variables, TEI/TLV and tag files remain unsupported
+    attributes and explicit bodies. Tagdependent bodies are opaque to directive,
+    EL and scripting interpretation; resolve their TLD contracts before encoding
+    and directive probes. Standard bodies use the first exact closing delimiter;
+    XML preserves structural nesting and decoded character data. Initial named
+    jsp:attribute/jsp:body envelopes remain explicitly unsupported for these bodies.
+    Namespaced dynamic attributes, variables, TEI/TLV and tag files remain unsupported
     with translation diagnostics; do not silently ignore their semantics.
     Deferred named attributes accept text/EL; executable body capture and custom
     literal method return conversion remain explicit follow-up boundaries.

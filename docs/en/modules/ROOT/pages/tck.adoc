@@ -18,14 +18,14 @@ Run date: 2026-10-13, Temurin Java 25 and Maven 3.9.16.
 
 Official artifacts had already been prepared; the smoke command clean-installs the reactor.
 The verified official binary contains 92 test classes and 682 declared JUnit
-`@Test` methods. The run records *507 passing methods* and *175 failing methods*,
+`@Test` methods. The run records *510 passing methods* and *172 failing methods*,
 with *zero class-level setup/deployment errors*. Surefire therefore reports 682
-entries, 175 errors, zero assertion failures and zero skips, and exits nonzero.
+entries, 172 errors, zero assertion failures and zero skips, and exits nonzero.
 The upstream HTTP assertion helper reports failures as exceptions.
 
-*507/682 = 74.3% measured full-suite pass rate*. All 682 declared test methods
+*510/682 = 74.8% measured full-suite pass rate*. All 682 declared test methods
 execute across 92 official classes, with no skipped methods or deployment blockers.
-The suite remains failing and uncertified because 175 methods report errors.
+The suite remains failing and uncertified because 172 methods report errors.
 
 The detailed command, binary inventory, counts and remaining categories are in
 link:{repo-ibarra}/src/branch/main/ibarra-tck/BASELINE.md[the recorded baseline].
@@ -68,8 +68,20 @@ uncommitted; it includes error pages after emitted output. The original exceptio
 is retained, unwritten pages still forward, and no previous pass regressed.
 See xref:internals.adoc[Runtime internals] for the output-state rules.
 
+The parallel compiler batch restores three methods through direct literal BeanInfo
+editor conversion, opaque tagdependent bodies and precompilation request validation.
+The resulting run has 44 completely passing classes and no regression against main.
+Valid precompile requests now suppress the page body, including through jsp-file
+aliases; invalid decoded values send HTTP 500. The stronger HTTP counter test
+checks suppression beyond the official positive tests' text assertion.
+
+The include-forward prototype is withheld after a reproduced child response-wrapper
+regression. Its original official method remains failing (IBARRA-119/130); no
+prototype pass is credited here. The source evidence and follow-up are in
+link:{repo-ibarra}/src/branch/main/studies/include-forward-wrapper-dispatch.md[the dispatch study].
+
 `official-pages-tck-smoke` runs on pull requests and `main`. It clean-installs
-Ibarra, runs 31 adapter regression tests, then three official JspFactory
+Ibarra, runs 33 adapter regression tests, then three official JspFactory
 tests, one JspEngineInfo test and fourteen character-sequence/EL/encoding
 configuration tests. This deliberately bounded regression check
 does not claim 100% Pages coverage. Full-suite certification is milestone I8;

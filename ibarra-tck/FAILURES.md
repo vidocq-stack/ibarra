@@ -1,10 +1,13 @@
 # Official Pages failure inventory
 
 Date: 2026-10-13, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-This inventory records the remaining 175 method errors and no setup errors
+This inventory records the remaining 172 method errors and no setup errors
 after legacy WAR library, JspIdConsumer, direct property and collection-method
 accessor generation and JSP forwarding output-state checks. All 682 official methods
 now execute. Each class keeps its previous stable id.
+The parallel compiler batch restores literal editor conversion, opaque tagdependent
+bodies and invalid precompile handling. Include-forward stays open: its prototype
+was withheld after the wrapper regression recorded in IBARRA-130.
 Resolved method entries remain as a trace; other causes still need investigation.
 Append new ids when discovering new failing classes, without renumbering records.
 
@@ -548,12 +551,13 @@ Failing methods:
 ## TCK-037 — ee.jakarta.tck.pages.spec.core_syntax.actions.setproperty.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.spec.core_syntax.actions.setproperty.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Status: RESOLVED; all 22 official methods now pass.
+- Symptom: the previous custom property-editor assertion error is resolved.
+- Minimal repro: select `ee.jakarta.tck.pages.spec.core_syntax.actions.setproperty.URLClientIT`.
+- Cause: literal BeanInfo editor metadata was ignored. Verified class-file
+  metadata now selects direct editor construction/conversion (IBARRA-090/125–127).
 
-Failing methods:
+Resolved methods (2026-10-13, direct literal BeanInfo editors):
 
 - `positiveBeanPropertyEditorTest`
 
@@ -612,13 +616,14 @@ Failing methods:
 ## TCK-042 — ee.jakarta.tck.pages.spec.core_syntax.scripting.el.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.spec.core_syntax.scripting.el.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Status: RESOLVED; all six official methods now pass.
+- Symptom: the previous tagdependent-body translation error is resolved.
+- Minimal repro: select `ee.jakarta.tck.pages.spec.core_syntax.scripting.el.URLClientIT`.
+- Cause: raw tagdependent EL text was interpreted as JSP. Early TLD contracts
+  preserve opaque payload through parsing, encoding and generation (IBARRA-120).
 - The previous TLD setup blocker was resolved by IBARRA-093/094 on 2026-10-12.
 
-Failing methods:
+Resolved methods (2026-10-13, opaque tagdependent bodies):
 
 - `elInvocationAndUsageTest`
 
@@ -703,12 +708,13 @@ Failing methods:
 ## TCK-047 — ee.jakarta.tck.pages.spec.misc.precompilation.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.spec.misc.precompilation.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Status: RESOLVED; all four official methods now pass.
+- Symptom: the previous invalid jsp_precompile response error is resolved.
+- Minimal repro: select `ee.jakarta.tck.pages.spec.misc.precompilation.URLClientIT`.
+- Cause: generated service did not implement the request protocol (IBARRA-091/118).
+  All decoded valid values suppress the body; invalid values send HTTP 500.
 
-Failing methods:
+Resolved methods (2026-10-13, generated precompile service gate):
 
 - `precompileNegativeTest`
 

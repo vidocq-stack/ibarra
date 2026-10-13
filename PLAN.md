@@ -414,6 +414,28 @@ without initialization. Named-attribute/text wrappers retain local bindings and
 source trimming, including explicit-body wrappers. IBARRA-068 and IBARRA-071
 through IBARRA-075 are fixed.
 
+## Parallel compatibility batch (2026-10-13)
+
+Three compiler corrections are delivered together: the Pages 4.0 precompile
+protocol gate, opaque tagdependent body translation and direct literal BeanInfo
+editor conversion. Independent worktrees and cross-reviews keep source/test changes
+isolated until integration. The final measured suite is 510/682 (74.8%), with
+172 method errors, zero setup/skips and no regression against main. The ordinary
+reactor passes 303 tests, the adapter 33 and the independent example packages.
+
+Raw body contracts must be resolved before directive/encoding probes; standard
+bodies terminate at the first exact end tag and XML retains balanced markup and
+decoded character data. Initial named envelopes remain explicitly unsupported.
+Literal BeanInfo editors are selected from verified class files without metadata
+execution; dynamic/inherited metadata and unsupported shapes fail with diagnostics.
+The harness preserves actual module reads, including java.desktop, when adding
+collection providers. Production core/API/binding descriptors remain unchanged.
+
+The include-forward prototype remains isolated in fix-include-forward because
+it bypasses response wrappers introduced during inclusion (IBARRA-119/130).
+The next dispatch design must preserve those wrappers through a typed container
+boundary; the source evidence is in studies/include-forward-wrapper-dispatch.md.
+
 ## Initial I4 implementation
 
 Initial I4 proof (2026-10-10): `examples/precompiled-pages` builds with the real

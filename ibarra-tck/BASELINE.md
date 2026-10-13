@@ -20,23 +20,23 @@ and exact preparation commands are in [README.md](README.md).
 | Official classes selected | 92 |
 | Declared runtime-visible JUnit `@Test` methods in the official binary | 682 |
 | Official Surefire entries reported | 682 |
-| Passing test methods | 507 |
-| Failing method entries | 175 |
+| Passing test methods | 510 |
+| Failing method entries | 172 |
 | Class-level setup/deployment errors | 0 |
-| Total reported errors | 175 |
+| Total reported errors | 172 |
 | Assertion failures reported as Surefire `failure` | 0 |
 | Skipped entries | 0 |
-| Adapter regression tests (separate invocation) | 31/31 |
+| Adapter regression tests (separate invocation) | 33/33 |
 | CI smoke subset (factory/engine + character sequence/EL/encoding configuration) | 18/18 |
 
-Surefire reports `Tests run: 682, Failures: 0, Errors: 175, Skipped: 0` and exits
+Surefire reports `Tests run: 682, Failures: 0, Errors: 172, Skipped: 0` and exits
 nonzero. The TCK's HTTP assertion helper reports failures as exceptions, hence
 `errors` rather than `failures`; zero in the failure column does not mean success.
 
-**507/682 = 74.3% measured full-suite pass rate**. All 682 declared method entries
+**510/682 = 74.8% measured full-suite pass rate**. All 682 declared method entries
 now execute across the 92 official classes; there are no class-level setup errors
 or skipped entries. This records complete method execution for this distribution,
-not certification: 175 methods still report errors.
+not certification: 172 methods still report errors.
 
 The deferred-signature simple-name fix was rechecked with the full suite on
 2026-10-13: the same 504 methods pass and the same 178 methods fail, with no
@@ -62,6 +62,21 @@ Maven example packages. Forwarding rejects emitted unbuffered output or a JSP fl
 even when the Servlet response remains uncommitted. Error pages include after such
 output, retaining the original exception; unwritten unbuffered and pending buffered
 pages still forward. Partial write failures preserve the emitted-output state.
+
+The parallel compiler batch restores positiveBeanPropertyEditorTest,
+elInvocationAndUsageTest and precompileNegativeTest: 510 passes, 172 method
+errors, zero setup/skips, 44 completely passing classes and no regression against
+main's previously passing methods. The clean ordinary reactor passes 303 tests,
+adapter 33/33, smoke 18/18 and the independent Maven example packages. Final
+verification did not skip build provenance generation.
+
+The delivered scope is direct literal BeanInfo editor selection, opaque
+tagdependent bodies and the complete valid/invalid precompile request gate.
+The three positive precompile methods already passed the official assertion before
+the fix, but its case-sensitive unexpected text did not prove body suppression;
+the new HTTP counter/alias regression does. The include-forward prototype is
+withheld after a concrete child response-wrapper regression (IBARRA-119/130),
+so positiveIncludeForwardTest is still an error and receives no coverage credit.
 
 The denominator was inventoried from the verified official jar with Java 25:
 
