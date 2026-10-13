@@ -38,6 +38,32 @@
   includes, parent scriptlet suppression, committed/flushed ancestor rejection,
   application wrapper preservation, failed target dispatch and context reuse.
 
+## IBARRA-120 · 2026-10-13 · Tag-dependent body content is parsed as JSP
+
+- Symptom: the official `URLClientIT#elInvocationAndUsageTest` receives a translation
+  failure; EL/actions/directives or unfinished scripting inside tag-dependent bodies
+  are interpreted before the generator rejects the handler body contract.
+- Minimal repro: `TagGenerationTest.tagDependentBodiesPreserveElActionsDirectivesAndUnfinishedScriptingAsLiteral`
+  and the unchanged official HTTP scenario.
+- Cause: page parsing and directive/encoding probes have no early TLD body contract.
+- Status: FIXED. Early build-only TLD resolution preserves opaque standard body text,
+  XML raw markup/decoded character data and binding origins across includes/preludes.
+  The first exact standard closing delimiter matches Jasper's unparsed-body rule;
+  XML structural nesting remains governed by XML. Compiler/core reactor tests and
+  the genuine official HTTP scenario pass without runtime parsing or reflection.
+
+## IBARRA-121 · 2026-10-13 · Tag-dependent explicit envelopes lack translation support
+
+- Symptom: accepting initial `jsp:attribute`/`jsp:body` wrappers as raw content would
+  ignore setter/body semantics and silently render the wrapper markup.
+- Minimal repro: `TagGenerationTest.tagDependentExplicitEnvelopesFailRatherThanRenderingAsRawData`,
+  for both standard syntax and JSPX.
+- Cause: the bounded raw-body implementation does not yet split those envelopes
+  from the handler-dependent body payload.
+- Status: OPEN. Both forms now fail explicitly at translation; ordinary literal
+  actions inside a raw body remain unparsed. Follow-up requires envelope parsing
+  with separate ordinary named-attribute and raw explicit-body contracts.
+
 ## IBARRA-116 · 2026-10-13 · Partial unbuffered writes remain eligible for forwarding
 
 - Symptom: after a response writer sends partial output and throws, forwarding

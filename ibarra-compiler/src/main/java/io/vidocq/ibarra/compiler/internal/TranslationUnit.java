@@ -39,20 +39,49 @@ public final class TranslationUnit {
     private Page.Syntax syntax;
     private final Map<String, Page.Syntax> sourceSyntaxes = new HashMap<>();
     private final Map<String, SourceDecoder.Decoded> decodedSources = new HashMap<>();
+    private final Set<String> decodingSources = new HashSet<>();
     private final Map<String, String> unitBindings = new LinkedHashMap<>();
     private ParserOptions unitOptions;
     private boolean strictNamespaces;
     private final Set<TldReferences.Reference> tagLibraries = new LinkedHashSet<>();
 
-    public TranslationUnit(GenerationOptions options) { this.options = options; }
+    private final TagDependentBodies rawBodies;
+    public TranslationUnit(GenerationOptions options) {
+        this.options = options;
+        rawBodies = new TagDependentBodies(options, this::bodySource,
+                document -> fileSyntax(document.name, document.text, properties(document.name)));
+    }
+
+    private SourceDocument bodySource(String path) {
+        if (decodingSources.contains(path)) return null; // Normal include expansion diagnoses the cycle.
+        String text = options.sources().get(path);
+        if (text == null) {
+            byte[] bytes = options.byteSource(path);
+            if (bytes != null) text = decode(path, bytes).text();
+        }
+        return text == null ? null : new SourceDocument(path, text);
+    }
 
     public Result read(String path, byte[] bytes) {
+        rawBodies.resetBindings();
+        for (var group : options.propertyGroups()) if (matches(group, path))
+            for (String prelude : group.preludes()) rawBodies.includeBindings(
+                    new PageNode.Directive("include", Map.of("file", prelude), new SourceLocation(path, 1, 1)),
+                    rawBodies.bindings(), rawBodies.origins(), new ParserOptions(bool(properties(path).get("el-ignored"), false),
+                            bool(properties(path).get("deferred-syntax-allowed-as-literal"), false)));
         var decoded = decode(path, bytes);
         return read(path, decoded.text());
     }
 
     private SourceDecoder.Decoded decode(String path, byte[] bytes) {
-        return decodedSources.computeIfAbsent(path, key -> SourceDecoder.decode(key, bytes, properties(key)));
+        var cached = decodedSources.get(path);
+        if (cached != null) return cached;
+        decodingSources.add(path);
+        try {
+            var decoded = SourceDecoder.decode(path, bytes, properties(path), rawBodies);
+            decodedSources.put(path, decoded);
+            return decoded;
+        } finally { decodingSources.remove(path); }
     }
 
     public Result read(String path, String source) {
@@ -75,6 +104,7 @@ public final class TranslationUnit {
     }
 
     private List<PageNode> readRoot(String path, String source, Map<String, String> properties) {
+        rawBodies.resetBindings();
         var raw = new ArrayList<PageNode>();
         for (var group : options.propertyGroups()) if (matches(group, path))
             for (String prelude : group.preludes()) raw.addAll(included(prelude, new SourceLocation(path, 1, 1), properties));
@@ -141,10 +171,10 @@ public final class TranslationUnit {
             sourceSyntaxes.put(path, fileSyntax);
             List<PageNode> raw;
             if (fileSyntax == Page.Syntax.XML) {
-                var parser = new XmlParser(document); raw = parser.parse(); origins.putAll(parser.origins());
+                var parser = new XmlParser(document, rawBodies); raw = parser.parse(); origins.putAll(parser.origins());
             } else raw = new StandardParser(document, unitOptions == null
                     ? new ParserOptions(bool(properties.get("el-ignored"), false), bool(properties.get("deferred-syntax-allowed-as-literal"), false))
-                    : unitOptions, unitBindings, strictNamespaces).parse();
+                    : unitOptions, unitBindings, strictNamespaces, rawBodies, Map.of()).parse();
             tagLibraries(raw);
             validateEncoding(raw, properties(path), new HashSet<>());
             raw = new PageNormalizer(fileSyntax, ParserOptions.DEFAULT, origins).structure(raw);

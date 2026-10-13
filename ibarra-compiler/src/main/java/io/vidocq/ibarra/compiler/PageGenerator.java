@@ -246,7 +246,8 @@ public final class PageGenerator {
 
         private void emit(List<PageNode> nodes) {
             for (var node : nodes) {
-                if (node instanceof PageNode.Text text) {
+                if (node instanceof PageNode.RawText text) write(text.value(), text.location());
+                else if (node instanceof PageNode.Text text) {
                     if (!bool("trimDirectiveWhitespaces", false) || !text.value().chars().allMatch(c -> c == ' ' || c == '\t' || c == '\r' || c == '\n'))
                         write(text.value(), text.location());
                 } else if (node instanceof PageNode.Expression expression) {
@@ -326,7 +327,6 @@ public final class PageGenerator {
             if (tag == null) throw error(node.location(), "Unknown tag " + local + " in " + library.resourcePath());
             if (library.validationRequired() || tag.unsupportedMetadata())
                 throw error(node.location(), "Tag validators, scripting variables and tag files are not supported yet");
-            if (tag.bodyContent().equals("tagdependent")) throw error(node.location(), "Tag-dependent bodies require raw-source translation support");
             var kind = classes.handler(tag.handlerClass(), node.location());
             if (kind.simple() && tag.bodyContent().equals("JSP")) throw error(node.location(), "SimpleTag cannot have JSP body-content");
             if (tag.dynamicAttributes() && !kind.dynamic()) throw error(node.location(), "Handler does not implement DynamicAttributes");

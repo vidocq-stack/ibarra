@@ -35,13 +35,25 @@ public final class StandardParser {
     private boolean elIgnored;
     private boolean deferredLiteral;
     private final boolean strictNamespaces;
+    private final TagDependentBodies rawBodies;
+    private final Map<String, SourceLocation> bindingOrigins = new LinkedHashMap<>();
 
     public StandardParser(SourceDocument source, ParserOptions options) {
         this(source, options, Map.of(), false);
     }
 
     public StandardParser(SourceDocument source, ParserOptions options, Map<String, String> unitBindings, boolean strictNamespaces) {
+        this(source, options, unitBindings, strictNamespaces, null, Map.of());
+    }
+
+    public StandardParser(SourceDocument source, ParserOptions options, Map<String, String> unitBindings, boolean strictNamespaces,
+            TagDependentBodies rawBodies, Map<String, SourceLocation> unitOrigins) {
         this.source = source;
+        this.rawBodies = rawBodies;
+        if (rawBodies != null) {
+            bindings.putAll(rawBodies.bindings()); bindingOrigins.putAll(rawBodies.origins());
+        }
+        bindingOrigins.putAll(unitOrigins);
         this.strictNamespaces = strictNamespaces;
         elIgnored = options.elIgnored();
         deferredLiteral = options.deferredSyntaxAllowedAsLiteral();
@@ -52,6 +64,7 @@ public final class StandardParser {
     public List<PageNode> parse() {
         // Taglib directives apply to the complete translation unit, including earlier tags.
         directivesOnly();
+        if (rawBodies != null) rawBodies.remember(bindings, bindingOrigins);
         cursor = 0;
         return nodes(null, 0);
     }
@@ -60,10 +73,12 @@ public final class StandardParser {
     public List<PageNode.Directive> encodingDirectives() {
         var result = new ArrayList<PageNode.Directive>();
         while (cursor < source.text.length()) {
+            if (skipRawTag()) continue;
             if (skipExpression()) continue;
             if (starts("<%--")) comment();
             else if (starts("<%@")) {
                 var directive = directive();
+                binding(directive);
                 result.add(directive);
                 if (directive.attributes().containsKey("isELIgnored"))
                     elIgnored = Boolean.parseBoolean(directive.attributes().get("isELIgnored"));
@@ -77,10 +92,12 @@ public final class StandardParser {
 
     private void directivesOnly() {
         while (cursor < source.text.length()) {
+            if (skipRawTag()) continue;
             if (skipExpression()) continue;
             if (starts("<%--")) { comment(); continue; }
             if (starts("<%@")) {
                 var directive = directive();
+                binding(directive);
                 if (directive.name().equals("page") || directive.name().equals("tag")) {
                     if (directive.attributes().containsKey("isELIgnored"))
                         elIgnored = Boolean.parseBoolean(directive.attributes().get("isELIgnored"));
@@ -99,6 +116,7 @@ public final class StandardParser {
                     String previous = bindings.putIfAbsent(prefix, namespace);
                     if (previous != null && !previous.equals(namespace))
                         throw error(cursor, "Conflicting taglib prefix: " + prefix);
+                    bindingOrigins.put(prefix, directive.location());
                 }
             } else if (starts("<%")) script();
             else cursor++;
@@ -130,7 +148,7 @@ public final class StandardParser {
                 var attributes = attributes(false);
                 boolean selfClosing = starts("/>");
                 expect(selfClosing ? "/>" : ">");
-                var children = selfClosing ? List.<PageNode>of() : nodes(name, start);
+                var children = selfClosing ? List.<PageNode>of() : raw(name, start) ? rawNodes(name, start) : nodes(name, start);
                 result.add(new PageNode.Element(name, bindings.get(name.substring(0, name.indexOf(':'))),
                         attributes, children, selfClosing, source.at(start)));
             }
@@ -140,6 +158,72 @@ public final class StandardParser {
         if (closing != null) throw error(opening, "Unclosed element: " + closing);
         return result;
     }
+
+    /** Exposes only lexical library bindings for a translation-time included file. */
+    void scanBindings(Map<String, String> target, Map<String, SourceLocation> origins) {
+        directivesOnly(); target.putAll(bindings); origins.putAll(bindingOrigins);
+    }
+
+    private void binding(PageNode.Directive directive) {
+        if (directive.name().equals("taglib") && directive.attributes().containsKey("uri")) {
+            String prefix = directive.attributes().get("prefix");
+            if (prefix != null) {
+                String previous = bindings.putIfAbsent(prefix, directive.attributes().get("uri"));
+                if (previous != null && !previous.equals(directive.attributes().get("uri"))) throw error(cursor, "Conflicting taglib prefix: " + prefix);
+                bindingOrigins.put(prefix, directive.location());
+            }
+        } else if (rawBodies != null && directive.name().equals("include"))
+            rawBodies.includeBindings(directive, bindings, bindingOrigins, new ParserOptions(elIgnored, deferredLiteral));
+    }
+
+    private boolean raw(String name, int start) {
+        int colon = name.indexOf(':');
+        if (rawBodies == null || colon < 1) return false;
+        String prefix = name.substring(0, colon);
+        String uri = bindings.get(prefix);
+        return uri != null && rawBodies.raw(name, uri, bindingOrigins.getOrDefault(prefix, source.at(start)), true);
+    }
+
+    private boolean skipRawTag() {
+        if (rawBodies == null || !starts("<") || starts("</") || starts("<%") || starts("<!")) return false;
+        int saved = cursor; cursor++;
+        String name;
+        try { name = identifier(); } catch (PageParseException ignored) { cursor = saved; return false; }
+        if (!raw(name, saved)) { cursor = saved; return false; }
+        attributes(false);
+        boolean empty = starts("/>"); expect(empty ? "/>" : ">");
+        if (!empty) rawNodes(name, saved);
+        return true;
+    }
+
+    private List<PageNode> rawNodes(String name, int opening) {
+        int bodyStart = cursor;
+        int first = cursor;
+        while (first < source.text.length() && rawSpace(source.text.charAt(first))) first++;
+        if (rawEnvelope(first, "jsp:attribute") || rawEnvelope(first, "jsp:body"))
+            throw error(first, "Tag-dependent named attributes and explicit jsp:body are not supported");
+        while (cursor < source.text.length()) {
+            int tag = source.text.indexOf("</" + name, cursor);
+            if (tag < 0) break;
+            int finish = tag + name.length() + 2;
+            while (finish < source.text.length() && rawSpace(source.text.charAt(finish))) finish++;
+            if (finish < source.text.length() && source.text.charAt(finish) == '>') {
+                String value = source.text.substring(bodyStart, tag); cursor = finish + 1;
+                return value.isEmpty() ? List.of() : List.of(new PageNode.RawText(value, source.at(bodyStart)));
+            }
+            cursor = tag + 2;
+        }
+        throw error(opening, "Unclosed tag-dependent element: " + name);
+    }
+
+    private boolean rawEnvelope(int start, String name) {
+        if (!source.text.startsWith("<" + name, start)) return false;
+        int end = start + name.length() + 1;
+        return end < source.text.length() && (rawSpace(source.text.charAt(end))
+                || source.text.charAt(end) == '>' || source.text.charAt(end) == '/');
+    }
+
+    private static boolean rawSpace(int c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
 
     private boolean recognizedTag() {
         if (!starts("<")) return false;

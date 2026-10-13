@@ -34,6 +34,80 @@ class TagGenerationTest {
     @TempDir Path directory;
 
     @Test
+    void tagDependentBodiesPreserveElActionsDirectivesAndUnfinishedScriptingAsLiteral() throws Exception {
+        var options = rawOptions();
+        String body = "${missing} #{missing}<jsp:include page='absent.jsp'/><%@ include file='absent.jsp' %><% unfinished";
+        assertEquals("[null:" + body + "]", render("<x:raw>" + body + "</x:raw>", false, options));
+    }
+
+    @Test
+    void standardTagDependentBodiesEndAtFirstExactClosingDelimiterAndReportOpeningLocation() throws Exception {
+        var options = rawOptions();
+        assertEquals("[null:a<x:raw>inside]b", render("<x:raw>a<x:raw>inside</x:raw >b", false, options));
+        assertEquals("[null:<!-- literal]tail -->", render("<x:raw><!-- literal</x:raw>tail -->", false, options));
+        var failure = assertThrows(PageParseException.class, () -> generator().generate("/raw.jsp",
+                prefix()+"\n<x:raw>missing", "fixture.GeneratedPage", options));
+        assertEquals(2, failure.location().line());
+        assertTrue(failure.getMessage().contains("Unclosed"));
+    }
+
+    @Test
+    void tagDependentBindingCanComeFromTranslationTimeInclude() throws Exception {
+        var options = rawOptions();
+        var included = new GenerationOptions(options.propertyGroups(), Map.of("/binding.jspf", "<%@ taglib prefix='r' uri='urn:test' %>"),
+                false, options.byteSources(), options.tagLibraries());
+        assertEquals("[null:<% unfinished]", render("<%@ include file='binding.jspf' %><r:raw><% unfinished</r:raw>", false, included));
+    }
+
+    @Test
+    void tagDependentBindingsFlowFromPreludeAndIntoIncludedBodies() throws Exception {
+        var options = rawOptions();
+        var configured = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"), Map.of(), List.of("/binding.jspf"), List.of())),
+                Map.of("/binding.jspf", "<%@ taglib prefix='r' uri='urn:test' %>", "/raw.jspf", "<r:raw><% unfinished</r:raw>"),
+                false, options.byteSources(), options.tagLibraries());
+        assertEquals("[null:<% unfinished]", render("<%@ include file='raw.jspf' %>", false, configured));
+        String bytes = "<r:raw><%@ page pageEncoding='UTF-8' %>é</r:raw>";
+        assertTrue(generator().generate("/page.jsp", bytes.getBytes(StandardCharsets.ISO_8859_1), "fixture.GeneratedPage", configured).source().contains("é"));
+    }
+
+    private GenerationOptions rawOptions() throws Exception {
+        var options = options();
+        var library = options.tagLibraries().get("urn:test");
+        var tags = new LinkedHashMap<>(library.tags());
+        tags.put("raw", new TagDescriptor("raw", "fixture.Tags$Echo", "tagdependent", Map.of(), false, false));
+        return options.withTagLibraries(Map.of("urn:test", new TagLibraryDescriptor(library.resourcePath(), library.uri(), library.listenerClasses(), tags,
+                library.validationRequired(), library.functions())));
+    }
+
+    @Test
+    void xmlTagDependentBodiesPreserveLiteralMarkupAndDecodedCdata() throws Exception {
+        var options = rawOptions();
+        String head = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:x='urn:test' version='4.0'><jsp:directive.page session='false'/>";
+        String markup = "${missing}<jsp:include page='missing.jsp'/><x:raw>nested</x:raw>";
+        assertEquals("[null:" + markup + "]", render(head+"<x:raw>"+markup+"</x:raw></jsp:root>", false, options));
+        String text = "${missing}<%@ include file='missing.jsp' %><% unfinished";
+        assertEquals("[null:"+text+"]", render(head+"<x:raw><![CDATA["+text+"]]></x:raw></jsp:root>", false, options));
+    }
+
+    @Test
+    void tagDependentByteBodyDoesNotChangeSourceEncoding() throws Exception {
+        prepare();
+        var options = rawOptions();
+        String source = prefix()+"<x:raw><%@ page pageEncoding='UTF-8' %>é</x:raw>";
+        var generated = generator().generate("/raw.jsp", source.getBytes(StandardCharsets.ISO_8859_1), "fixture.GeneratedPage", options);
+        assertTrue(generated.source().contains("é"));
+    }
+
+    @Test
+    void tagDependentExplicitEnvelopesFailRatherThanRenderingAsRawData() throws Exception {
+        var options = rawOptions();
+        String envelope = "<x:raw><jsp:attribute name='label'>named</jsp:attribute><jsp:body>${missing}<% unfinished</jsp:body></x:raw>";
+        assertTrue(assertThrows(PageParseException.class, () -> render(envelope, false, options)).getMessage().contains("explicit jsp:body"));
+        String head = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:x='urn:test' version='4.0'><jsp:directive.page session='false'/>";
+        assertTrue(assertThrows(PageParseException.class, () -> render(head + envelope.replace("${missing}<% unfinished", "<![CDATA[${missing}<% unfinished]]>") + "</jsp:root>", false, options)).getMessage().contains("explicit jsp:body"));
+    }
+
+    @Test
     void jspIdsAreUniqueStableAndInitializedForInheritedClassicAndSimpleConsumers() throws Exception {
         var options = jspIdOptions();
         String output = render("<x:simple label='one'/>|<x:classic/>|<x:simple label='two'/>;", false, options, 2);

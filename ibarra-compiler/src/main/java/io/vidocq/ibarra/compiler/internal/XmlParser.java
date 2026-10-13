@@ -34,12 +34,16 @@ public final class XmlParser {
     private final SourceDocument source;
     private final Map<PageNode.Text, List<SourceLocation>> origins = new IdentityHashMap<>();
     private final LexicalCursor lexical;
+    private final TagDependentBodies rawBodies;
 
-    public XmlParser(SourceDocument source) { this.source = source; lexical = new LexicalCursor(); }
+    public XmlParser(SourceDocument source) { this(source, null); }
+    public XmlParser(SourceDocument source, TagDependentBodies rawBodies) {
+        this.source = source; this.rawBodies = rawBodies; lexical = new LexicalCursor();
+    }
     public Map<PageNode.Text, List<SourceLocation>> origins() { return origins; }
 
     private record Frame(String name, String namespace, Map<String, String> attributes,
-            List<PageNode> children, boolean empty, SourceLocation location) { }
+            List<PageNode> children, boolean empty, SourceLocation location, boolean raw, boolean literalMarkup) { }
 
     public List<PageNode> parse() {
         var factory = XMLInputFactory.newDefaultFactory();
@@ -61,7 +65,14 @@ public final class XmlParser {
                         int start = lexical.tag();
                         String name = qualified(reader.getPrefix(), reader.getLocalName());
                         String namespace = reader.getNamespaceURI() == null ? "" : reader.getNamespaceURI();
-                        if (namespace.equals(PageParser.JSP_NAMESPACE) && reader.getLocalName().equals("root")) {
+                        boolean parentRaw = !stack.isEmpty() && stack.peek().raw();
+                        if (parentRaw && !stack.peek().literalMarkup()
+                                && stack.peek().children().stream().allMatch(node -> node instanceof PageNode.RawText text
+                                        && text.value().chars().allMatch(c -> c == ' ' || c == '\t' || c == '\r' || c == '\n'))
+                                && namespace.equals(PageParser.JSP_NAMESPACE)
+                                && (reader.getLocalName().equals("attribute") || reader.getLocalName().equals("body")))
+                            throw new PageParseException(source.at(start), "Tag-dependent named attributes and explicit jsp:body are not supported");
+                        if (!parentRaw && namespace.equals(PageParser.JSP_NAMESPACE) && reader.getLocalName().equals("root")) {
                             if (!stack.isEmpty()) throw new PageParseException(source.at(start), "jsp:root must be the document root");
                             if (reader.getAttributeValue(null, "version") == null)
                                 throw new PageParseException(source.at(start), "jsp:root requires a version");
@@ -74,12 +85,21 @@ public final class XmlParser {
                         }
                         for (int i = 0; i < reader.getAttributeCount(); i++)
                             attributes.put(qualified(reader.getAttributePrefix(i), reader.getAttributeLocalName(i)), reader.getAttributeValue(i));
+                        if (parentRaw) stack.peek().children().add(new PageNode.RawText(
+                                source.text.substring(start, lexical.cursor), source.at(start)));
+                        boolean raw = parentRaw || rawBodies != null && rawBodies.raw(name, namespace, source.at(start), false);
                         stack.push(new Frame(name, namespace, attributes, new ArrayList<>(),
-                                source.text.charAt(lexical.cursor - 2) == '/', source.at(start)));
+                                source.text.charAt(lexical.cursor - 2) == '/', source.at(start), raw, parentRaw));
                     }
                     case XMLStreamConstants.END_ELEMENT -> {
                         var frame = stack.pop();
-                        if (!frame.empty()) lexical.tag();
+                        int end = frame.empty() ? lexical.cursor : lexical.tag();
+                        if (frame.literalMarkup()) {
+                            stack.peek().children().addAll(frame.children());
+                            if (!frame.empty()) stack.peek().children().add(new PageNode.RawText(
+                                    source.text.substring(end, lexical.cursor), source.at(end)));
+                            break;
+                        }
                         var node = new PageNode.Element(frame.name(), frame.namespace(), frame.attributes(),
                                 frame.children(), frame.empty(), frame.location());
                         if (stack.isEmpty()) roots.add(node);
@@ -89,6 +109,10 @@ public final class XmlParser {
                         String value = reader.getText();
                         var positions = lexical.text(value);
                         if (!stack.isEmpty() && !value.isEmpty()) {
+                            if (stack.peek().raw()) {
+                                stack.peek().children().add(new PageNode.RawText(value, positions.getFirst()));
+                                break;
+                            }
                             var text = new PageNode.Text(value, positions.getFirst());
                             origins.put(text, positions);
                             stack.peek().children().add(text);

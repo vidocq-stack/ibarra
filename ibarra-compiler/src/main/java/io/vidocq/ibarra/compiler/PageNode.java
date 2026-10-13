@@ -34,6 +34,11 @@ public sealed interface PageNode {
         public Text { Objects.requireNonNull(value); Objects.requireNonNull(location); }
     }
 
+    /** Uninterpreted tag-dependent body data; quoting, EL and directives stay literal. */
+    record RawText(String value, SourceLocation location) implements PageNode {
+        public RawText { Objects.requireNonNull(value); Objects.requireNonNull(location); }
+    }
+
     record Expression(String code, boolean deferred, SourceLocation location) implements PageNode {
         public Expression { Objects.requireNonNull(code); Objects.requireNonNull(location); }
     }

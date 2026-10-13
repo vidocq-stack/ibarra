@@ -122,10 +122,27 @@ Local XML namespace bindings on jsp:attribute, jsp:body and nested jsp:text wrap
 to both scalar captures and fragments, then restore the enclosing prefix bindings.
 Trimming changes source boundary text while retaining namespace-bearing wrappers.
 
+== Tag-dependent bodies
+
+For `body-content=tagdependent`, translation preserves the body without interpreting
+EL, scripting, directives or actions. Library contracts are resolved before directive
+and encoding probes, including bindings supplied by static includes and preludes.
+Handlers receive the body through their ordinary classic or simple lifecycle;
+no runtime parser or compiler is introduced.
+
+In standard syntax, the first exact closing tag terminates the body, allowing
+whitespace before `>`. Opening tags, comments and quoted text inside the body do
+not change this delimiter rule. Same-named opening text is literal and does not
+introduce nested actions. JSPX remains well-formed XML: nested markup is balanced,
+character entities and CDATA become character data, and nested markup is retained
+as literal body output. An initial `jsp:attribute` or `jsp:body` envelope is currently
+rejected explicitly rather than treated as raw output; that envelope support remains
+follow-up work.
+
 == Current boundary
 
 This is an initial I6 implementation. Broader standard-action named-attribute
-support, namespaced dynamic attributes, tagdependent bodies,
+support, namespaced dynamic attributes, tagdependent named/explicit-body envelopes,
 scripting variables, TagExtraInfo, TagLibraryValidator and tag files
 remain follow-up work. Unsupported invoked metadata fails
 translation; no reflective fallback or handler pooling is enabled.

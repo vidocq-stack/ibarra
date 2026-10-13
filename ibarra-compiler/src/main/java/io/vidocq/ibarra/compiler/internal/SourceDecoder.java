@@ -37,6 +37,10 @@ public final class SourceDecoder {
     private SourceDecoder() { }
 
     public static Decoded decode(String path, byte[] bytes, Map<String, String> properties) {
+        return decode(path, bytes, properties, null);
+    }
+
+    static Decoded decode(String path, byte[] bytes, Map<String, String> properties, TagDependentBodies rawBodies) {
         Objects.requireNonNull(bytes);
         var start = new SourceLocation(path, 1, 1);
         var mark = mark(bytes);
@@ -56,7 +60,7 @@ public final class SourceDecoder {
                 throw new PageParseException(start, "XML encoding conflicts with byte signature");
             if (declared != null && unicode(initial) && generic(declared)) detected = initial;
             String text = strict(path, bytes, offset, detected);
-            var parser = new XmlParser(new SourceDocument(path, text));
+            var parser = new XmlParser(new SourceDocument(path, text), rawBodies);
             var directives = new ArrayList<PageNode.Directive>();
             xmlDirectives(parser.parse(), directives);
             check(start, directives, configured, declared, null);
@@ -66,7 +70,8 @@ public final class SourceDecoder {
             probe = new String(bytes, configured);
         var parserOptions = new ParserOptions(TranslationUnit.bool(properties.get("el-ignored"), false),
                 TranslationUnit.bool(properties.get("deferred-syntax-allowed-as-literal"), false));
-        var directives = new StandardParser(new SourceDocument(path, probe), parserOptions).encodingDirectives();
+        var directives = new StandardParser(new SourceDocument(path, probe), parserOptions,
+                Map.of(), false, rawBodies, Map.of()).encodingDirectives();
         Charset directiveEncoding = null;
         String contentEncoding = null;
         for (var directive : directives) if (directive.name().equals("page") || directive.name().equals("tag")) {
@@ -80,7 +85,8 @@ public final class SourceDecoder {
         Charset detected = mark != null ? initial : configured != null ? configured : directiveEncoding != null
                 ? directiveEncoding : contentEncoding != null ? charset(contentEncoding, start) : StandardCharsets.ISO_8859_1;
         String text = strict(path, bytes, offset, detected);
-        directives = new StandardParser(new SourceDocument(path, text), parserOptions).encodingDirectives();
+        directives = new StandardParser(new SourceDocument(path, text), parserOptions,
+                Map.of(), false, rawBodies, Map.of()).encodingDirectives();
         check(start, directives, configured, null, mark == null ? null : detected);
         return new Decoded(text, syntax, mark == null ? null : detected.name());
     }
