@@ -67,6 +67,10 @@ public final class PageNormalizer {
             if (node instanceof PageNode.Element element) {
                 String local = element.name().substring(element.name().lastIndexOf(':') + 1);
                 boolean jsp = element.namespace().equals(PageParser.JSP_NAMESPACE);
+                if (jsp && local.equals("output")) {
+                    if (syntax != Page.Syntax.XML) throw new PageParseException(element.location(), "jsp:output requires XML syntax");
+                    if (!element.children().isEmpty()) throw new PageParseException(element.location(), "jsp:output requires an empty body");
+                }
                 if (jsp && local.startsWith("directive.")) {
                     String name = local.substring("directive.".length());
                     if (!DIRECTIVES.contains(name)) throw new PageParseException(element.location(), "Unknown directive: " + name);

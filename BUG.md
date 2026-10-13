@@ -1,5 +1,19 @@
 # BUG.md — Ibarra
 
+## IBARRA-137 · 2026-10-13 · Output omission aliases expose missing body validation
+
+- Symptom: accepting the legal yes/no aliases makes unchanged
+  `actions.output.URLClientIT#jspOutputBodyTest` fail; its invalid nonempty
+  `jsp:output` now translates instead of failing as required by section 5.13.
+- Minimal repro: `TagGenerationTest.xmlOutputRejectsNonemptyBodiesBeforeWritingADeclaration`
+  and original `JspOutputBodyTest1.jspx` containing Test FAILED in the action body.
+- Cause: the old omission-value rejection accidentally masked missing empty-body
+  validation; generation ignored the action's children.
+- Status: FIXED. Validate XML-only context and empty bodies before normalization
+  can discard whitespace, retaining action-source diagnostics. Empty paired and
+  self-closing forms remain accepted; legal omission aliases and tag-dependent
+  payload envelopes remain supported. The genuine official body method passes.
+
 ## IBARRA-135 · 2026-10-13 · XML output rejects specified yes/no omission values
 
 - Symptom: unchanged `jspdocument.general.URLClientIT#tagDependentTest` cannot
@@ -14,11 +28,11 @@
 
 ## IBARRA-136 · 2026-10-13 · Broader XML output prolog semantics remain incomplete
 
-- Symptom: the neighboring official actions.output class still reports seven
+- Symptom: the neighboring official actions.output class still reports six
   method errors after omission aliases are accepted.
 - Minimal repro: `actions.output.URLClientIT` methods `simpleDefaultTest`,
   `jspOutputJspRootOmitDeclDefaultTest`, `jspOutputOmitDeclValidValuesTest`,
-  `jspOutputUsageContextTest`, `jspOutputBodyTest`, `doctypeSystemTest` and
+  `jspOutputUsageContextTest`, `doctypeSystemTest` and
   `doctypeSystemPublicTest` in the unchanged official archive.
 - Cause: the initial generator emits explicit declarations at action position;
   full translation-unit prolog defaults, context/body validation and DOCTYPE

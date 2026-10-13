@@ -183,6 +183,22 @@ class TagGenerationTest {
     }
 
     @Test
+    void xmlOutputRejectsNonemptyBodiesBeforeWritingADeclaration() {
+        String head = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'>";
+        for (String body : List.of("Test FAILED", "${1+2}", "<jsp:text>payload</jsp:text>", "<b/>", " ", "\n")) {
+            var failure = assertThrows(PageParseException.class, () -> generator().generate("/output-body.jspx",
+                    head + "\n<jsp:output omit-xml-declaration='yes'>" + body + "</jsp:output></jsp:root>",
+                    "fixture.GeneratedPage", options()));
+            assertEquals(2, failure.location().line());
+            assertTrue(failure.getMessage().contains("empty body"));
+        }
+        assertThrows(PageParseException.class, () -> generator().generate("/standard.jsp",
+                "<jsp:output omit-xml-declaration='yes'/>", "fixture.GeneratedPage", options()));
+        assertDoesNotThrow(() -> generator().generate("/empty.jspx",
+                head + "<jsp:output omit-xml-declaration='yes'></jsp:output></jsp:root>", "fixture.GeneratedPage", options()));
+    }
+
+    @Test
     void jspIdsAreUniqueStableAndInitializedForInheritedClassicAndSimpleConsumers() throws Exception {
         var options = jspIdOptions();
         String output = render("<x:simple label='one'/>|<x:classic/>|<x:simple label='two'/>;", false, options, 2);
