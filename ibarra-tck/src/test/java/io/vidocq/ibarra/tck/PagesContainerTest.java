@@ -200,6 +200,36 @@ class PagesContainerTest {
         } finally { container.stop(); }
     }
     @Test
+    void forwardingAnIncludedPageDiscardsAncestorOutputAndStopsAncestorExecution() throws Exception {
+        var war = ShrinkWrap.create(WebArchive.class, "include-forward.war")
+                .addAsWebResource(new StringAsset("before<jsp:include page='included.jsp'/><% application.setAttribute(\"continued\", \"yes\"); %>after"), "index.jsp")
+                .addAsWebResource(new StringAsset("outer-before<jsp:include page='index.jsp'/>outer-after"), "nested.jsp")
+                .addAsWebResource(new StringAsset("included-before<jsp:forward page='target.html'/>included-after"), "included.jsp")
+                .addAsWebResource(new StringAsset("target"), "target.html")
+                .addAsWebResource(new StringAsset("before<jsp:include page='relative-included.jsp'/>after"), "relative.jsp")
+                .addAsWebResource(new StringAsset("<jsp:forward page='targets/target.jsp'/>"), "relative-included.jsp")
+                .addAsWebResource(new StringAsset("<jsp:include page='part.jsp'/>"), "targets/target.jsp")
+                .addAsWebResource(new StringAsset("target"), "targets/part.jsp")
+                .addAsWebResource(new StringAsset("wrong include base"), "part.jsp")
+                .addAsWebResource(new StringAsset("<%= application.getAttribute(\"continued\") == null %>"), "continued.jsp");
+        var container = new PagesContainer(); container.setup(new PagesConfiguration());
+        try {
+            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            try (var client = HttpClient.newHttpClient()) {
+                String base = "http://127.0.0.1:" + http.getPort() + "/include-forward/";
+                for (String page : java.util.List.of("index.jsp", "nested.jsp", "relative.jsp")) {
+                    var response = client.send(HttpRequest.newBuilder(URI.create(base + page)).build(), HttpResponse.BodyHandlers.ofString());
+                    assertEquals(200, response.statusCode(), response.body());
+                    assertEquals("target", response.body());
+                    var continued = client.send(HttpRequest.newBuilder(URI.create(base + "continued.jsp")).build(), HttpResponse.BodyHandlers.ofString());
+                    assertEquals("true", continued.body());
+                }
+            }
+            container.undeploy(war);
+        } finally { container.stop(); }
+    }
+
+    @Test
     void warLibrariesShareThePrivateApplicationModuleAndDiscoverTheirTlds() throws Exception {
         var library = ShrinkWrap.create(org.jboss.shrinkwrap.api.spec.JavaArchive.class, "tags.jar")
                 .addClass(LibraryTag.class)

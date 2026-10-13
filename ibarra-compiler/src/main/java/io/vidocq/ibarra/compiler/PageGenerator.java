@@ -169,7 +169,7 @@ public final class PageGenerator {
             if (needsFactory) result.add("var _jspxExpressionFactory = _jspxFactory.getJspApplicationContext(application).getExpressionFactory();\n");
             result.add(body);
             result.add("} catch (Throwable failure) { if (!(failure instanceof jakarta.servlet.jsp.SkipPageException)) { _jspxFailed = true; pageContext.handlePageException(failure); _jspxHandled = true; } } finally {\n");
-            result.add("try { if (!_jspxForwarded[0] && (!_jspxFailed || (_jspxHandled && out.getRemaining() < out.getBufferSize()))) out.flush(); } finally { _jspxFactory.releasePageContext(pageContext); }\n}\n}\n");
+            result.add("try { if (!_jspxForwarded[0] && !(pageContext instanceof io.vidocq.ibarra.spi.PageDispatchContext _jspxDispatch && _jspxDispatch.isForwarded()) && (!_jspxFailed || (_jspxHandled && out.getRemaining() < out.getBufferSize()))) out.flush(); } finally { _jspxFactory.releasePageContext(pageContext); }\n}\n}\n");
             result.add("private static String _jspxText(Object value) { return value == null ? \"\" : String.valueOf(value); }\n");
             result.add("private static Object _jspxBean(jakarta.servlet.jsp.PageContext context, String name) throws jakarta.servlet.ServletException { Object bean = context.findAttribute(name); if (bean == null) throw new jakarta.servlet.ServletException(\"No bean named \" + name); return bean; }\n");
             result.add("private static String _jspxAttribute(String value) { return value.replace(\"&\", \"&amp;\").replace(\"\\\"\", \"&quot;\").replace(\"<\", \"&lt;\"); }\n");
@@ -788,7 +788,9 @@ public final class PageGenerator {
             }
             if (forward) body.add("pageContext.forward(" + variable + "); _jspxForwarded[0] = true; if (true) "
                     + (fragmentDepth > 0 ? "throw new jakarta.servlet.jsp.SkipPageException();" : "return;") + "\n", node.location());
-            else body.add("pageContext.include(" + variable + ", " + boolValue(node.attributes().getOrDefault("flush", "false"), node.location()) + ");\n", node.location());
+            else body.add("pageContext.include(" + variable + ", " + boolValue(node.attributes().getOrDefault("flush", "false"), node.location()) + ");\n"
+                    + "if (pageContext instanceof io.vidocq.ibarra.spi.PageDispatchContext _jspxDispatch && _jspxDispatch.isForwarded()) { _jspxForwarded[0] = true; "
+                    + (fragmentDepth > 0 ? "throw new jakarta.servlet.jsp.SkipPageException();" : "return;") + " }\n", node.location());
         }
 
         private void bean(PageNode.Element node) {

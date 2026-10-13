@@ -13,6 +13,31 @@
   valid requests suppress the JSP body and invalid values send HTTP 500. Both
   generic JSP routing and explicit jsp-file aliases use the generated service.
 
+## IBARRA-119 · 2026-10-13 · A forward from an included JSP retains ancestor output
+
+- Symptom: the unchanged official `actions.include.URLClientIT#positiveIncludeForwardTest`
+  returns the including JSP's unexpected text around the forward target instead of
+  returning only the target. Including pages also continue executing after the forward.
+- Minimal repro: a buffered JSP writes `before`, includes a JSP that forwards to a
+  static `target` resource, then writes `after`. The HTTP body is `beforetargetafter`.
+- Cause: JSP inclusion redirects output to the ancestor writer through a response
+  wrapper. Forward clears only the child buffer and forwards through the container's
+  include response; ancestor buffers and generated-page continuation remain active.
+- Status: fixed. Typed inclusion wrappers retain their request-owned parent contexts.
+  Forward validates every ancestor before discarding buffered output, preserves the
+  original application response wrapper, dispatches outside the JSP include wrappers,
+  and records successful completion through `PageDispatchContext`. Generated including
+  pages stop execution and suppress their final writer flush. Failed forwards never
+  acquire the completion state; initialize/release reset it.
+- Validation: original official method reproduced red, plus two focused core failures
+  and HTTP `beforetargetafter`. Under Temurin 25, `./mvnw -o -ntp -Ptck -pl ibarra-tck
+  -am test` passes all selected reactor and adapter tests. The unchanged official
+  include and forward classes pass 19 methods with `-Ptck,tck-official -pl ibarra-tck
+  -am -Dtest=ee.jakarta.tck.pages.spec.core_syntax.actions.include.URLClientIT,ee.jakarta.tck.pages.spec.core_syntax.actions.forward.URLClientIT
+  -Dsurefire.failIfNoSpecifiedTests=false test`. Additional regressions cover nested
+  includes, parent scriptlet suppression, committed/flushed ancestor rejection,
+  application wrapper preservation, failed target dispatch and context reuse.
+
 ## IBARRA-116 · 2026-10-13 · Partial unbuffered writes remain eligible for forwarding
 
 - Symptom: after a response writer sends partial output and throws, forwarding

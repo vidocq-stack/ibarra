@@ -149,6 +149,103 @@ class PageRuntimeTest {
     }
 
     @Test
+    void includedForwardUsesOriginalResponseAndDiscardsAncestorBuffers() throws Exception {
+        var web = new Web();
+        var target = web.dispatch("/target.jsp");
+        var included = web.dispatch("/included.jsp");
+        var originalResponse = new HttpServletResponseWrapper(web.response);
+        var parent = new IbarraPageContext();
+        parent.initialize(web.page, web.request, originalResponse, null, false, 64, true);
+        parent.getOut().write("parent");
+        var captured = parent.pushBody();
+        captured.write("captured parent");
+        included.action = (request, response) -> {
+            var child = new IbarraPageContext();
+            child.initialize(web.page, request, new HttpServletResponseWrapper((HttpServletResponse) response) {
+                @Override public void resetBuffer() { }
+            }, null, false, 64, true);
+            try {
+                child.getOut().write("child");
+                child.forward("/target.jsp");
+                assertTrue(child.isForwarded());
+                assertEquals(child.getOut().getBufferSize(), child.getOut().getRemaining());
+            } finally { child.release(); }
+        };
+        parent.include("/included.jsp", false);
+        assertSame(originalResponse, target.response);
+        assertTrue(parent.isForwarded());
+        assertEquals("", captured.getString());
+        parent.popBody();
+        assertEquals(parent.getOut().getBufferSize(), parent.getOut().getRemaining());
+        parent.release();
+        assertFalse(parent.isForwarded());
+        parent.initialize(web.page, web.request, originalResponse, null, false, 64, true);
+        assertFalse(parent.isForwarded());
+    }
+
+    @Test
+    void includedForwardRejectsEmittedAncestorOutput() throws Exception {
+        var web = new Web();
+        var target = web.dispatch("/target.jsp");
+        var included = web.dispatch("/included.jsp");
+        var parent = web.open(false, null, JspWriter.NO_BUFFER);
+        parent.getOut().write("sent");
+        included.action = (request, response) -> {
+            var child = new IbarraPageContext();
+            child.initialize(web.page, request, response, null, false, 64, true);
+            try { child.forward("/target.jsp"); }
+            finally { child.release(); }
+        };
+        assertFalse(web.response.isCommitted());
+        assertThrows(IllegalStateException.class, () -> parent.include("/included.jsp", false));
+        assertEquals(0, target.forwards);
+        assertEquals("sent", web.response.output.toString());
+    }
+
+    @Test
+    void includedForwardValidatesFlushedAncestorsBeforeDiscardingChildOutput() throws Exception {
+        var web = new Web();
+        var target = web.dispatch("/target.jsp");
+        var included = web.dispatch("/included.jsp");
+        var parent = web.open(false, null);
+        parent.getOut().write("sent");
+        parent.getOut().flush();
+        included.action = (request, response) -> {
+            var child = new IbarraPageContext();
+            child.initialize(web.page, request, response, null, false, 64, true);
+            try {
+                child.getOut().write("child");
+                assertThrows(IllegalStateException.class, () -> child.forward("/target.jsp"));
+                assertEquals(59, child.getOut().getRemaining());
+                assertFalse(child.isForwarded());
+            } finally { child.release(); }
+        };
+        parent.include("/included.jsp", false);
+        assertEquals(0, target.forwards);
+        assertFalse(parent.isForwarded());
+        assertEquals("sent", web.response.output.toString());
+    }
+
+    @Test
+    void aFailedIncludedForwardDoesNotMarkAncestorsAsSuccessfullyForwarded() throws Exception {
+        var web = new Web();
+        var target = web.dispatch("/target.jsp");
+        target.failure = new ServletException("target failed");
+        var included = web.dispatch("/included.jsp");
+        var parent = web.open(false, null);
+        included.action = (request, response) -> {
+            var child = new IbarraPageContext();
+            child.initialize(web.page, request, response, null, false, 64, true);
+            try {
+                assertSame(target.failure, assertThrows(ServletException.class, () -> child.forward("/target.jsp")));
+                assertFalse(child.isForwarded());
+            } finally { child.release(); }
+        };
+        parent.include("/included.jsp", false);
+        assertFalse(parent.isForwarded());
+    }
+
+    @Test
     void unbufferedWritesPreventForwardingBeforeTheServletResponseCommits() throws Exception {
         for(int operation=0;operation<3;operation++) {
             var web=new Web();var target=web.dispatch("/next.jsp");
@@ -503,16 +600,24 @@ class PageRuntimeTest {
     }
 
     static final class Dispatch implements RequestDispatcher {
+        @FunctionalInterface
+        interface IncludeAction {
+            void run(ServletRequest request, ServletResponse response) throws ServletException, IOException;
+        }
+        IncludeAction action;
+        ServletException failure;
         String includeText;
         int forwards;
         int includes;
         ServletRequest request;
         ServletResponse response;
-        public void forward(ServletRequest request, ServletResponse response) {
+        public void forward(ServletRequest request, ServletResponse response) throws ServletException {
             forwards++; this.request = request; this.response = response;
+            if (failure != null) throw failure;
         }
-        public void include(ServletRequest request, ServletResponse response) throws IOException {
+        public void include(ServletRequest request, ServletResponse response) throws ServletException, IOException {
             includes++; this.request = request; this.response = response;
+            if (action != null) action.run(request, response);
             if (includeText != null) response.getWriter().write(includeText);
         }
     }

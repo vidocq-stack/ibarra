@@ -46,6 +46,14 @@ reports uncommitted. An unwritten unbuffered page may forward; zero-length write
 do not acquire the response writer. This follows
 https://jakarta.ee/specifications/pages/4.0/jakarta-server-pages-spec-4.0.html#jsp:forward[Pages 4.0 section 5.5].
 Partial unbuffered write failures also retain the possible-output state.
+Typed inclusion wrappers connect each included page to its including PageContext.
+A forward validates all ancestor writers before clearing their pending buffers and
+dispatching with the outermost page's original response, preserving application
+wrappers. The request-owned `PageDispatchContext` records successful completion;
+generated including pages then stop execution and suppress their final flush.
+This also covers nested includes. Failed target dispatch does not mark completion,
+and initialization/release reset the state. Core does not depend on container-specific
+include wrappers or request-attribute markers.
 Error pages receive Servlet error attributes and the Pages exception attribute;
 after Servlet commitment or JSP output they are included without discarding output.
 Release drops request state without pooling.
