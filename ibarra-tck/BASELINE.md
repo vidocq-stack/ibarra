@@ -20,23 +20,23 @@ and exact preparation commands are in [README.md](README.md).
 | Official classes selected | 92 |
 | Declared runtime-visible JUnit `@Test` methods in the official binary | 682 |
 | Official Surefire entries reported | 682 |
-| Passing test methods | 506 |
-| Failing method entries | 176 |
+| Passing test methods | 507 |
+| Failing method entries | 175 |
 | Class-level setup/deployment errors | 0 |
-| Total reported errors | 176 |
+| Total reported errors | 175 |
 | Assertion failures reported as Surefire `failure` | 0 |
 | Skipped entries | 0 |
-| Adapter regression tests (separate invocation) | 30/30 |
+| Adapter regression tests (separate invocation) | 31/31 |
 | CI smoke subset (factory/engine + character sequence/EL/encoding configuration) | 18/18 |
 
-Surefire reports `Tests run: 682, Failures: 0, Errors: 176, Skipped: 0` and exits
+Surefire reports `Tests run: 682, Failures: 0, Errors: 175, Skipped: 0` and exits
 nonzero. The TCK's HTTP assertion helper reports failures as exceptions, hence
 `errors` rather than `failures`; zero in the failure column does not mean success.
 
-**506/682 = 74.2% measured full-suite pass rate**. All 682 declared method entries
+**507/682 = 74.3% measured full-suite pass rate**. All 682 declared method entries
 now execute across the 92 official classes; there are no class-level setup errors
 or skipped entries. This records complete method execution for this distribution,
-not certification: 176 methods still report errors.
+not certification: 175 methods still report errors.
 
 The deferred-signature simple-name fix was rechecked with the full suite on
 2026-10-13: the same 504 methods pass and the same 178 methods fail, with no
@@ -53,6 +53,15 @@ method-only application providers. All existing module services and native list
 properties are preserved. The adapter passes 30 regressions, including a real HTTP
 deferred/overloaded call and isolated-module metadata, conversion, exception,
 resolution-flag, null-context and collision checks. No production dependency changes.
+
+JSP writer output-state checks then restore unbufferedWriteForwardTest:
+507 passes and 175 method errors, zero setup errors/skips, 41 completely passing
+classes and no regression among previous passes. All 18 smoke methods pass.
+The clean default reactor passes 290 tests, the adapter 31 tests and the independent
+Maven example packages. Forwarding rejects emitted unbuffered output or a JSP flush
+even when the Servlet response remains uncommitted. Error pages include after such
+output, retaining the original exception; unwritten unbuffered and pending buffered
+pages still forward. Partial write failures preserve the emitted-output state.
 
 The denominator was inventoried from the verified official jar with Java 25:
 

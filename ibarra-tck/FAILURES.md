@@ -1,9 +1,10 @@
 # Official Pages failure inventory
 
 Date: 2026-10-13, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-This inventory records the remaining 176 method errors and no setup errors
+This inventory records the remaining 175 method errors and no setup errors
 after legacy WAR library, JspIdConsumer, direct property and collection-method
-accessor generation. All 682 official methods now execute. Each class keeps its previous stable id.
+accessor generation and JSP forwarding output-state checks. All 682 official methods
+now execute. Each class keeps its previous stable id.
 Resolved method entries remain as a trace; other causes still need investigation.
 Append new ids when discovering new failing classes, without renumbering records.
 
@@ -448,12 +449,14 @@ Failing methods:
 ## TCK-030 — ee.jakarta.tck.pages.spec.core_syntax.actions.forward.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.spec.core_syntax.actions.forward.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Status: RESOLVED; all seven official methods now pass.
+- Symptom: the previous unbuffered-write forward assertion error is resolved.
+- Minimal repro: select `ee.jakarta.tck.pages.spec.core_syntax.actions.forward.URLClientIT`.
+- Cause: Ibarra checked Servlet commitment without consulting JSP output state
+  (IBARRA-089). Forwarding now rejects unbuffered writes/JSP flushes; the error
+  page is included after emitted output, preserving its original exception.
 
-Failing methods:
+Resolved methods (2026-10-13, JSP forwarding output-state checks):
 
 - `unbufferedWriteForwardTest`
 

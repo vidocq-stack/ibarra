@@ -40,9 +40,15 @@ runtime dependencies, shared state or handler pooling.
 and application scopes to the Servlet API. Session access is opt-in. Nested
 body pushes update the implicit `out` attribute; pops restore the previous writer.
 Includes route through the current writer, preserving output order and body
-capture. Forwards discard pending output and reject committed responses. Error
-pages receive Servlet error attributes and the Pages exception attribute; after
-commitment they are included. Release drops request state without pooling.
+capture. Forwards discard pending JSP output and reject committed responses,
+unbuffered writes and prior JSP flushes, even when a Servlet response wrapper still
+reports uncommitted. An unwritten unbuffered page may forward; zero-length writes
+do not acquire the response writer. This follows
+https://jakarta.ee/specifications/pages/4.0/jakarta-server-pages-spec-4.0.html#jsp:forward[Pages 4.0 section 5.5].
+Partial unbuffered write failures also retain the possible-output state.
+Error pages receive Servlet error attributes and the Pages exception attribute;
+after Servlet commitment or JSP output they are included without discarding output.
+Release drops request state without pooling.
 Page code flushes or closes output before releasing its context.
 
 `IbarraJspFactory` allocates fresh request contexts and shared application contexts.

@@ -266,6 +266,13 @@ buffering, scope lookup/storage, session opt-in, implicit objects, body writers,
 includes/forwards, error-page dispatch, release/reinitialization and rendering
 through an installed factory with a hand-written `HttpJspPage`.
 
+Forwarding correction (2026-10-13): base JSP writer state also gates dispatch,
+independently of Servlet commitment. Unbuffered writes and JSP flushes reject
+forwarding; unwritten/zero-length pages still forward, and pending buffered output
+is discarded. Partial write failures retain possible output. Error pages include
+after emitted output and retain the original exception. All seven official forward
+scenarios pass; the full measured baseline is recorded in ibarra-tck/BASELINE.md.
+
 Application resolvers freeze atomically on first use. The EL provider is created
 once, lazily, through `ExpressionFactory.newInstance()`. Context listeners can
 retrieve the page's context during their callback. Tests use an EL factory

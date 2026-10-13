@@ -17,6 +17,14 @@ Standard pages, standard actions, custom tags with TLDs, tag files and `jsp-conf
 * **`jsp:useBean beanName`** (serialized beans) — support is an open question.
 * **Tag handler pooling** — Ibarra does not pool handlers; a handler that relied on reuse between invocations must not.
 
+== Forwarding and page output
+
+Forward before writing output when using `buffer="none"`. Ibarra now rejects a
+forward after an unbuffered write or a JSP flush, even while the Servlet response
+still reports uncommitted. This corrects the earlier loss of already emitted output.
+Empty writes do not prevent forwarding; pending buffered JSP output is discarded.
+An error page after emitted output is included with the original exception.
+
 == XML TLD namespaces in the development line
 
 Use `xmlns:f="urn:example:functions"` for a mapped library URI, or

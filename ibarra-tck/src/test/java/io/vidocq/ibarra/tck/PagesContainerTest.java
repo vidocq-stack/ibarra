@@ -34,6 +34,28 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PagesContainerTest {
     @Test
+    void compiledForwardsDistinguishPendingBufferedOutputFromUnbufferedWritesAndRouteErrors() throws Exception {
+        var war=ShrinkWrap.create(WebArchive.class,"forward-output.war")
+                .addAsWebResource(new StringAsset("<%@ page buffer='none' %><jsp:forward page='target.jsp'/>"),"empty.jsp")
+                .addAsWebResource(new StringAsset("discard<jsp:forward page='target.jsp'/>"),"buffered.jsp")
+                .addAsWebResource(new StringAsset("<%@ page buffer='none' %>sent<%try { pageContext.forward(\"target.jsp\"); }"
+                        + "catch(IllegalStateException expected) { out.print(\"|blocked\"); }%>"),"unbuffered.jsp")
+                .addAsWebResource(new StringAsset("<%@ page buffer='none' errorPage='error.jsp' %>sent|<jsp:forward page='target.jsp'/>"),"failure.jsp")
+                .addAsWebResource(new StringAsset("<%@ page isErrorPage='true' %><%=exception instanceof IllegalStateException%>"),"error.jsp")
+                .addAsWebResource(new StringAsset("target"),"target.jsp");
+        var container=new PagesContainer();container.setup(new PagesConfiguration());
+        try {
+            var http=container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            try(var client=HttpClient.newHttpClient()) {
+                for(var entry:java.util.Map.of("empty.jsp","target","buffered.jsp","target","unbuffered.jsp","sent|blocked","failure.jsp","sent|true").entrySet()) {
+                    var response=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+http.getPort()+"/forward-output/"+entry.getKey())).build(),HttpResponse.BodyHandlers.ofString());
+                    assertEquals(200,response.statusCode(),entry.getKey()+": "+response.body());assertEquals(entry.getValue(),response.body(),entry.getKey());
+                }
+            }
+            container.undeploy(war);
+        } finally { container.stop(); }
+    }
+    @Test
     void compiledCollectionMethodsExposeMetadataAndInvokeWithoutShadowingListProperties() throws Exception {
         var war=ShrinkWrap.create(WebArchive.class,"collection-methods.war")
                 .addClass(io.vidocq.ibarra.tck.fixtures.DeferredCollectionTag.class)

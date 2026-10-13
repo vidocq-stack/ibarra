@@ -85,8 +85,9 @@ final class BufferedJspWriter extends JspWriter {
         ensureOpen();
         checkCapacity(1);
         if (bufferSize == NO_BUFFER) {
-            destination().write(value);
+            Writer writer = destination();
             flushed = true;
+            writer.write(value);
             return;
         }
         if (position == bufferSize) {
@@ -104,8 +105,9 @@ final class BufferedJspWriter extends JspWriter {
             return;
         }
         if (bufferSize == NO_BUFFER) {
-            destination().write(chars, offset, length);
+            Writer writer = destination();
             flushed = true;
+            writer.write(chars, offset, length);
             return;
         }
         while (length > 0) {
@@ -129,8 +131,9 @@ final class BufferedJspWriter extends JspWriter {
             return;
         }
         if (bufferSize == NO_BUFFER) {
-            destination().write(text, offset, length);
+            Writer writer = destination();
             flushed = true;
+            writer.write(text, offset, length);
             return;
         }
         while (length > 0) {
@@ -194,6 +197,11 @@ final class BufferedJspWriter extends JspWriter {
     @Override
     public int getRemaining() {
         return bufferSize - position;
+    }
+
+    /** Includes unbuffered writes that may have sent partial output before failing. */
+    boolean hasFlushed() {
+        return flushed;
     }
 
     @Override

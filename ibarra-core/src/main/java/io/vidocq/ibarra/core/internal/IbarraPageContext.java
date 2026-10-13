@@ -47,7 +47,7 @@ final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.sp
     private HttpSession session;
     private String errorPage;
     private JspWriter out;
-    private JspWriter base;
+    private BufferedJspWriter base;
     private ELContext elContext;
 
     IbarraPageContext() { this(new IbarraApplicationContext()); }
@@ -247,6 +247,7 @@ final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.sp
     @Override
     public void forward(String path) throws ServletException, IOException {
         if (response.isCommitted()) throw new IllegalStateException("Response is already committed");
+        if (base.hasFlushed()) throw new IllegalStateException("Page output has already been flushed");
         var target = dispatcher(path);
         if (base.getBufferSize() != JspWriter.NO_BUFFER) base.clearBuffer();
         response.resetBuffer();
@@ -303,7 +304,7 @@ final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.sp
         request.setAttribute(RequestDispatcher.ERROR_STATUS_CODE, 500);
         request.setAttribute(RequestDispatcher.ERROR_SERVLET_NAME, config.getServletName());
         if (request instanceof HttpServletRequest http) request.setAttribute(RequestDispatcher.ERROR_REQUEST_URI, http.getRequestURI());
-        if (response.isCommitted()) include(errorPage, false);
+        if (response.isCommitted() || base.hasFlushed()) include(errorPage, false);
         else forward(errorPage);
     }
 

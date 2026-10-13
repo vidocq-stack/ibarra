@@ -18,14 +18,14 @@ Run date: 2026-10-13, Temurin Java 25 and Maven 3.9.16.
 
 Official artifacts had already been prepared; the smoke command clean-installs the reactor.
 The verified official binary contains 92 test classes and 682 declared JUnit
-`@Test` methods. The run records *506 passing methods* and *176 failing methods*,
+`@Test` methods. The run records *507 passing methods* and *175 failing methods*,
 with *zero class-level setup/deployment errors*. Surefire therefore reports 682
-entries, 176 errors, zero assertion failures and zero skips, and exits nonzero.
+entries, 175 errors, zero assertion failures and zero skips, and exits nonzero.
 The upstream HTTP assertion helper reports failures as exceptions.
 
-*506/682 = 74.2% measured full-suite pass rate*. All 682 declared test methods
+*507/682 = 74.3% measured full-suite pass rate*. All 682 declared test methods
 execute across 92 official classes, with no skipped methods or deployment blockers.
-The suite remains failing and uncertified because 176 methods report errors.
+The suite remains failing and uncertified because 175 methods report errors.
 
 The detailed command, binary inventory, counts and remaining categories are in
 link:{repo-ibarra}/src/branch/main/ibarra-tck/BASELINE.md[the recorded baseline].
@@ -62,8 +62,14 @@ positiveELDeferredMethodValueTest. Compiled Vector calls now expose metadata and
 invoke without reflection, preserving native list property resolution. No previous
 pass regressed; this bounded runner adaptation does not alter production packaging.
 
+All seven standard forward-action methods now pass. The runtime refuses forwarding
+after unbuffered output or a JSP flush even while the Servlet response remains
+uncommitted; it includes error pages after emitted output. The original exception
+is retained, unwritten pages still forward, and no previous pass regressed.
+See xref:internals.adoc[Runtime internals] for the output-state rules.
+
 `official-pages-tck-smoke` runs on pull requests and `main`. It clean-installs
-Ibarra, runs thirty adapter regression tests, then three official JspFactory
+Ibarra, runs 31 adapter regression tests, then three official JspFactory
 tests, one JspEngineInfo test and fourteen character-sequence/EL/encoding
 configuration tests. This deliberately bounded regression check
 does not claim 100% Pages coverage. Full-suite certification is milestone I8;

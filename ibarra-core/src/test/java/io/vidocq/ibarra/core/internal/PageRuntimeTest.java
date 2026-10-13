@@ -149,6 +149,85 @@ class PageRuntimeTest {
     }
 
     @Test
+    void unbufferedWritesPreventForwardingBeforeTheServletResponseCommits() throws Exception {
+        for(int operation=0;operation<3;operation++) {
+            var web=new Web();var target=web.dispatch("/next.jsp");
+            var pc=web.open(false,null,JspWriter.NO_BUFFER);
+            switch(operation) {
+                case 0->pc.getOut().write('x');
+                case 1->pc.getOut().write(new char[]{'x'},0,1);
+                case 2->pc.getOut().write("x",0,1);
+            }
+            assertFalse(web.response.isCommitted());
+            assertThrows(IllegalStateException.class,()->pc.forward("/next.jsp"));
+            assertEquals(0,target.forwards);assertEquals("x",web.response.output.toString());
+        }
+    }
+
+    @Test
+    void anUnwrittenUnbufferedPageCanForwardWithoutAcquiringTheResponseWriter() throws Exception {
+        var web=new Web();var target=web.dispatch("/next.jsp");
+        var pc=web.open(false,null,JspWriter.NO_BUFFER);
+        pc.getOut().write("",0,0);pc.getOut().write(new char[0],0,0);
+        pc.forward("/next.jsp");
+        assertEquals(1,target.forwards);assertEquals(0,web.response.acquisitions);
+    }
+
+    @Test
+    void jspFlushPreventsForwardingEvenWhenAResponseWrapperDefersCommitment() throws Exception {
+        var web=new Web();var target=web.dispatch("/next.jsp");var sink=new StringWriter();
+        var response=new HttpServletResponseWrapper(web.response) {
+            private final java.io.PrintWriter writer=new java.io.PrintWriter(sink);
+            @Override public java.io.PrintWriter getWriter(){ return writer; }
+        };
+        var pc=new IbarraPageContext();pc.initialize(web.page,web.request,response,null,false,64,true);
+        pc.getOut().write("sent");pc.getOut().flush();
+        assertFalse(response.isCommitted());
+        assertThrows(IllegalStateException.class,()->pc.forward("/next.jsp"));
+        assertEquals(0,target.forwards);assertEquals("sent",sink.toString());
+    }
+
+    @Test
+    void partialUnbufferedWriteFailuresStillPreventForwarding() throws Exception {
+        for(int operation=0;operation<3;operation++) {
+            var web=new Web();var target=web.dispatch("/next.jsp");var sink=new StringWriter();
+            var response=new HttpServletResponseWrapper(web.response) {
+                private final java.io.PrintWriter writer=new java.io.PrintWriter(sink) {
+                    private void fail(){ sink.write("partial");throw new IllegalArgumentException("write failed"); }
+                    @Override public void write(int value){ fail(); }
+                    @Override public void write(char[] value,int offset,int length){ fail(); }
+                    @Override public void write(String value,int offset,int length){ fail(); }
+                };
+                @Override public java.io.PrintWriter getWriter(){ return writer; }
+            };
+            var pc=new IbarraPageContext();pc.initialize(web.page,web.request,response,null,false,JspWriter.NO_BUFFER,true);
+            int selected=operation;
+            assertThrows(IllegalArgumentException.class,()->{
+                switch(selected) {
+                    case 0->pc.getOut().write('x');
+                    case 1->pc.getOut().write(new char[]{'x'},0,1);
+                    case 2->pc.getOut().write("x",0,1);
+                }
+            });
+            assertFalse(response.isCommitted());
+            assertThrows(IllegalStateException.class,()->pc.forward("/next.jsp"));
+            assertEquals(0,target.forwards);assertEquals("partial",sink.toString());
+        }
+    }
+
+    @Test
+    void errorPagesIncludeAfterUnbufferedOutputWhileRetainingTheOriginalException() throws Exception {
+        var web=new Web();var target=web.dispatch("/error.jsp");target.includeText="error";
+        var pc=web.open(false,"/error.jsp",JspWriter.NO_BUFFER);pc.getOut().write("sent|");
+        assertFalse(web.response.isCommitted());var failure=new IllegalStateException("forward rejected");
+        pc.handlePageException(failure);
+        assertEquals(0,target.forwards);assertEquals(1,target.includes);
+        assertEquals("sent|error",web.response.output.toString());
+        assertSame(failure,web.request.getAttribute(RequestDispatcher.ERROR_EXCEPTION));
+        assertSame(failure,web.request.getAttribute("jakarta.servlet.jsp.jspException"));
+    }
+
+    @Test
     void relativeDispatchDuringIncludeUsesTheIncludedServletPath() throws Exception {
         var web = new Web();
         web.request.setAttribute(RequestDispatcher.INCLUDE_SERVLET_PATH, "/tags/body.jsp");
@@ -391,8 +470,11 @@ class PageRuntimeTest {
         final FixturePage page = new FixturePage();
         Web() throws ServletException { page.init(config); }
         IbarraPageContext open(boolean session, String error) throws IOException {
+            return open(session,error,64);
+        }
+        IbarraPageContext open(boolean session,String error,int size) throws IOException {
             var pc = new IbarraPageContext();
-            pc.initialize(page, request, response, error, session, 64, true);
+            pc.initialize(page, request, response, error, session, size, true);
             return pc;
         }
         Dispatch dispatch(String path) {

@@ -1,5 +1,26 @@
 # BUG.md — Ibarra
 
+## IBARRA-116 · 2026-10-13 · Partial unbuffered writes remain eligible for forwarding
+
+- Symptom: after a response writer sends partial output and throws, forwarding
+  succeeds while the Servlet response still reports uncommitted.
+- Minimal repro: PageRuntimeTest.partialUnbufferedWriteFailuresStillPreventForwarding,
+  exercising single-character, character-array and String writes.
+- Cause: unbuffered writes record the flushed state only after the writer returns.
+- Status: FIXED by recording possible output before invoking each nonempty write,
+  after acquiring the destination. Forwarding consults the page writer's state.
+
+## IBARRA-117 · 2026-10-13 · Error-page dispatch discards already emitted JSP output
+
+- Symptom: an unbuffered page exception forwards to its error page and discards
+  output already passed to a Servlet response whose own buffer is uncommitted.
+- Minimal repro: PageRuntimeTest.errorPagesIncludeAfterUnbufferedOutputWhileRetainingTheOriginalException
+  and PagesContainerTest.compiledForwardsDistinguishPendingBufferedOutputFromUnbufferedWritesAndRouteErrors.
+- Cause: error-page selection considers only Servlet commitment, ignoring JSP
+  output state; forwarding cannot preserve output already emitted by the page.
+- Status: FIXED by including the error page after JSP output is flushed/written,
+  preserving original exception attributes and leaving pending buffered forwards intact.
+
 ## IBARRA-115 · 2026-10-13 · Collection property pass-through accepts a null ELContext
 
 - Symptom: generated method-only tables silently accept null context in their
@@ -197,8 +218,8 @@
 
 ## IBARRA-098 · 2026-10-12 · Remaining official Pages assertions after deployment recovery
 
-- Symptom: the current full official run reports 176 method errors and no class-level
-  setup/deployment errors after 506 passing methods; the previous baseline was 504 passes.
+- Symptom: the current full official run reports 175 method errors and no class-level
+  setup/deployment errors after 507 passing methods; the previous baseline was 506 passes.
 - Minimal repro: `./run-official-tck-pages-4.0.sh all`; individual classes and
   failing method selectors are recorded under stable TCK ids in
   [ibarra-tck/FAILURES.md](ibarra-tck/FAILURES.md).
@@ -293,9 +314,12 @@
 - Symptom: `spec.core_syntax.actions.forward.URLClientIT#unbufferedWriteForwardTest`
   reports Test FAILED; six other methods in that class pass.
 - Minimal repro: select that fully qualified class with the official script.
-- Hypothesis: commitment and forwarding after unbuffered output differ between
-  the generated page writer and Foy dispatch.
-- Status: OPEN, cross-layer investigation; no upstream attribution established yet.
+- Cause: Ibarra PageContext.forward checks only Servlet response commitment,
+  allowing forward after unbuffered JSP writes or a JSP flush whose response
+  wrapper defers commitment. Pages 4.0 section 5.5 requires rejection.
+- Status: FIXED by checking the base JSP writer's existing output state before
+  clearing buffers or resolving the dispatcher. Unwritten unbuffered pages may
+  still forward; zero-length writes do not acquire the response writer.
 
 ## IBARRA-090 · 2026-10-12 · Official bean PropertyEditor conversion fails
 
