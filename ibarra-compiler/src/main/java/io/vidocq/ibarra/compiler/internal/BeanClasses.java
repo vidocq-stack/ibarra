@@ -43,7 +43,7 @@ public final class BeanClasses {
         while (type.endsWith("[]")) { suffix += "[]"; type = type.substring(0, type.length() - 2); }
         if (Set.of("void", "boolean", "byte", "short", "int", "long", "float", "double", "char").contains(type))
             return type + suffix;
-        String candidate = type;
+        String candidate = type.contains(".") ? type : "java.lang." + type;
         while (true) {
             ClassModel model;
             try { model = read(candidate, at); }

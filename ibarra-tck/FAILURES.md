@@ -40,7 +40,9 @@ for explicit root web.xml components without application exports/opens.
 - Status: OPEN.
 - Symptom: the official HTTP/signature assertion reported an error.
 - Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_el.methodinfo.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Diagnosis: Object in the deferred signature now resolves at build time
+  (IBARRA-113); Vector.add method metadata reaches Peano's denied reflection
+  fallback (IBARRA-114). Direct method support remains open.
 
 Failing methods:
 

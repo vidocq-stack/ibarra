@@ -34,6 +34,8 @@ initialization transaction.
 literal MethodExpression for `Welcome`. Its handler evaluates them through the
 current EL context. The TLD specifies their expected String types; generated
 expression classes ship with the application, with no runtime parsing or compiler.
+The deferred declarations use the simple name `String`, resolved as
+`java.lang.String` at build time. Non-java.lang types use qualified names.
 
 Run from the Ibarra checkout root with Java 25:
 

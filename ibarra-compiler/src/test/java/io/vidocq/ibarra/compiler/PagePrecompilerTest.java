@@ -127,6 +127,39 @@ class PagePrecompilerTest {
     }
 
     @Test
+    void deferredSignaturesResolveSimpleJavaLangNamesInLiteralAndCompiledExpressions() throws Exception {
+        prepareDeferredTags();
+        Path tld=web.resolve("WEB-INF/deferred.tld");
+        Files.writeString(tld,Files.readString(tld).replace("java.lang.Integer","Integer").replace("java.lang.String","String"));
+        Files.writeString(web.resolve("index.jsp"),deferredPrefix()
+                + "<d:value value='42'/>|<d:method action='17'/>|<%pageContext.setAttribute(\"callback\",new demo.DeferredTag.Callback());%><d:method action='#{callback}'/>");
+        precompile();Path jar=directory.resolve("deferred-simple-types.jar");jar(classes,jar);
+        assertEquals("V:java.lang.Integer:true:42|M:java.lang.Integer:true:17|M:java.lang.Integer:false:101",render(jar,true));
+    }
+
+    @Test
+    void deferredObjectParametersResolveForMappedMethodExpressionsWithoutRuntimeCompilation() throws Exception {
+        prepareDeferredTags();
+        Path tld=web.resolve("WEB-INF/deferred.tld");
+        Files.writeString(tld,Files.readString(tld).replace("java.lang.Integer documented(java.lang.String)","Object documented(Object)"));
+        Files.writeString(web.resolve("index.jsp"),deferredPrefix()
+                + "<%pageContext.setAttribute(\"callback\",new demo.DeferredTag.Callback());%><d:method action='#{callback}'/>");
+        precompile();Path jar=directory.resolve("deferred-object-parameter.jar");jar(classes,jar);
+        assertEquals("M:java.lang.Integer:false:101",render(jar,true));
+    }
+
+    @Test
+    void deferredJavaLangArrayAliasesKeepTheirDimensionsAndExpectedClass() throws Exception {
+        prepareDeferredTags();
+        Path tld=web.resolve("WEB-INF/deferred.tld");
+        Files.writeString(tld,Files.readString(tld).replace("<type>java.lang.Integer</type>","<type>String[][]</type>"));
+        Files.writeString(web.resolve("index.jsp"),deferredPrefix()
+                + "<%request.setAttribute(\"names\",new String[][]{{\"x\"}});%><d:value value='#{requestScope.names}'/>");
+        precompile();Path jar=directory.resolve("deferred-array-alias.jar");jar(classes,jar);
+        assertTrue(render(jar,true).startsWith("V:[[Ljava.lang.String;:false:"));
+    }
+
+    @Test
     void deferredMethodsUseTypedCompiledLiteralAndVariableTargets() throws Exception {
         prepareDeferredTags();
         Files.writeString(web.resolve("index.jsp"), deferredPrefix()

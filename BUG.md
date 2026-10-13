@@ -1,5 +1,31 @@
 # BUG.md — Ibarra
 
+## IBARRA-113 · 2026-10-13 · Deferred signatures reject simple java.lang names
+
+- Symptom: valid TLD types such as Object, Integer and String[][] fail translation
+  with Bean class is absent from the build module path.
+- Minimal repro: PagePrecompilerTest.deferredSignaturesResolveSimpleJavaLangNamesInLiteralAndCompiledExpressions,
+  deferredObjectParametersResolveForMappedMethodExpressionsWithoutRuntimeCompilation
+  and deferredJavaLangArrayAliasesKeepTheirDimensionsAndExpectedClass.
+- Cause: expression type resolution treats simple names as binary names without
+  the implicit java.lang qualification used by Java source signatures.
+- Status: FIXED by qualifying simple reference names after peeling array dimensions;
+  primitive and explicitly qualified names retain their existing resolution.
+
+## IBARRA-114 · 2026-10-13 · Deferred Vector methods need direct EL metadata
+
+- Symptom: after resolving Object in a deferred signature, getMethodInfo for
+  #{vect.add} fails with Reflection fallback denied for java.util.Vector.
+- Minimal repro: official api.jakarta_el.methodinfo.URLClientIT#methodInfoTest
+  and spec.el.jsp.URLClientIT#positiveELDeferredMethodValueTest; a compiled page
+  creating java.util.Vector and passing #{vect.add} with boolean add(Object)
+  reproduces the metadata failure with peano.reflection=deny.
+- Hypothesis: Peano CompiledMethodExpression.metadata finds no registered direct
+  method table for Vector and reaches its denied reflection fallback. Invocation
+  support also requires verification once metadata is available.
+- Status: OPEN; simple-name translation is fixed separately in IBARRA-113.
+  No reflection fallback or fixture rewrite is enabled.
+
 ## IBARRA-108 · 2026-10-13 · Interface-first bean lookup widens a covariant getter
 
 - Symptom: a parent String getter becomes Object from an interface, making an

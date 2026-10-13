@@ -38,6 +38,13 @@ now execute across the 92 official classes; there are no class-level setup error
 or skipped entries. This records complete method execution for this distribution,
 not certification: 178 methods still report errors.
 
+The deferred-signature simple-name fix was rechecked with the full suite on
+2026-10-13: the same 504 methods pass and the same 178 methods fail, with no
+regression. The two deferred Vector method scenarios now pass translation but
+remain blocked by direct EL method metadata (IBARRA-113/114), so this fix adds no
+official passing method. The clean default reactor passes 285 tests; adapter
+regressions remain 26/26 and the independent Maven example packages successfully.
+
 The denominator was inventoried from the verified official jar with Java 25:
 
 ```bash

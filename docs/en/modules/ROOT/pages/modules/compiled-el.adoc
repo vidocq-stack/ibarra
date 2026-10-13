@@ -147,6 +147,14 @@ separate contracts. Fragment/deferred conflicts and malformed signatures fail
 descriptor parsing. Expected classes are inspected without initialization;
 staged javac validates module accessibility.
 
+Simple reference names in deferred expected types and method signatures resolve
+in `java.lang`: for example, `Object`, `Integer` and `String[][]` have the same
+meaning as their fully qualified forms. Array dimensions are preserved. Other
+reference types must use qualified names; page imports do not qualify TLD types.
+This translation support does not supply direct method metadata for arbitrary
+receiver classes. In particular, deferred `Vector.add` remains blocked with
+Peano reflection disabled (IBARRA-114).
+
 [source,xml]
 ----
 <attribute>
