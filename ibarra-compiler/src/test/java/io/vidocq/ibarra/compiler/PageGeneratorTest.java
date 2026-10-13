@@ -767,6 +767,27 @@ class PageGeneratorTest {
         }
     }
 
+    @Test
+    void inheritedExplicitBeanInfoIsDiagnosedInsteadOfSilentlyUsingElCoercion() throws Exception {
+        preparePropertyEditor(false);
+        compile(List.of(new GeneratedPage("fixture.EditedChild", """
+                package fixture;
+                public class EditedChild extends EditedBean { }
+                """, Map.of()), new GeneratedPage("fixture.EditedGrandchild", """
+                package fixture;
+                public class EditedGrandchild extends EditedChild { }
+                """, Map.of())));
+        for (String type : List.of("fixture.EditedChild", "fixture.EditedGrandchild")) {
+            var failure = assertThrows(PageParseException.class, () -> generator().generate("/inherited.jsp",
+                    "<jsp:useBean id='bean' class='" + type + "'/>\n<jsp:setProperty name='bean' property='name' value='x'/>",
+                    PAGE_CLASS, GenerationOptions.DEFAULT));
+            assertEquals(2, failure.location().line());
+            assertTrue(failure.getMessage().contains("inherited build-time BeanInfo"), failure.getMessage());
+            assertTrue(failure.getMessage().contains("fixture.EditedBeanBeanInfo"), failure.getMessage());
+        }
+        assertNull(System.getProperty("ibarra.editor.beaninfo.initialized"));
+    }
+
     private void preparePropertyEditor(boolean dynamic) throws Exception {
         preparePropertyEditor(dynamic ? "dynamic" : "literal");
     }

@@ -152,6 +152,10 @@ supported. Every descriptor must name matching conventional public getter/setter
 types, including descriptors unused by the page. Dynamic calls/branches,
 custom accessor names, inherited BeanInfo metadata and other descriptor shapes
 fail at translation with a page diagnostic rather than partially applying metadata.
+When a bean has no explicit BeanInfo of its own, the compiler checks its superclass
+chain before using ordinary coercion. An explicit ancestor BeanInfo is diagnosed
+as unsupported inherited metadata, including when intermediate ancestors have
+no BeanInfo; it is never silently ignored.
 
 The selected editor must be public, concrete, implement `PropertyEditor`, and
 have a public no-argument constructor. Generated request code calls its constructor,

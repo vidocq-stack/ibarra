@@ -1246,3 +1246,16 @@ Entry format: `short id · date · symptom · minimal repro · cause hypothesis 
 - Status: FIXED with public concrete/no-argument BeanInfo validation and matching
   getter/setter checks for all literal descriptors. Unsupported metadata is diagnosed
   at the property action; application classes are never initialized.
+
+## IBARRA-127 · 2026-10-13 · An absent child BeanInfo hides inherited editor metadata
+
+- Symptom: a child bean inherits an edited property but lacks its own BeanInfo;
+  generated setProperty silently uses EL coercion instead of applying or diagnosing
+  the explicit parent BeanInfo's editor.
+- Minimal repro: `PageGeneratorTest.inheritedExplicitBeanInfoIsDiagnosedInsteadOfSilentlyUsingElCoercion`.
+- Cause: the missing child BeanInfo path cached an empty editor table without
+  checking the bean's superclass chain.
+- Status: FIXED by checking superclass class files for explicit BeanInfo before
+  caching the ordinary conversion fallback. Inherited metadata remains explicitly
+  unsupported and yields a page-location diagnostic; no metadata class is loaded
+  or initialized and no runtime introspection fallback is added.

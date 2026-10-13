@@ -190,6 +190,7 @@ public final class BeanClasses {
             try { info = read(type + "BeanInfo", at); }
             catch (PageParseException absent) {
                 if (!absent.getMessage().contains("absent from the build module path")) throw absent;
+                rejectInheritedBeanInfo(type, at);
                 beanEditors.put(type, Map.of()); return null;
             }
             constructor(type + "BeanInfo", at, "BeanInfo");
@@ -221,6 +222,24 @@ public final class BeanClasses {
         if (!subtype(editor, "java.beans.PropertyEditor", at, new HashSet<>()))
             throw new PageParseException(at, "Property editor must implement java.beans.PropertyEditor: " + editor);
         return sourceName(editor, at);
+    }
+
+    private void rejectInheritedBeanInfo(String type, SourceLocation at) {
+        var visited = new HashSet<String>();
+        var model = read(type, at);
+        while (model.superclass().isPresent()) {
+            String parent = model.superclass().orElseThrow().asInternalName().replace('/', '.');
+            if (parent.equals("java.lang.Object") || !visited.add(parent)) return;
+            String info = parent + "BeanInfo";
+            boolean found;
+            try { read(info, at); found = true; }
+            catch (PageParseException absent) {
+                if (!absent.getMessage().contains("absent from the build module path")) throw absent;
+                found = false;
+            }
+            if (found) throw new PageParseException(at, "Unsupported inherited build-time BeanInfo metadata: " + info);
+            model = read(parent, at);
+        }
     }
 
     /** Ordinary tag values bind JavaBeans properties independently of TLD EL type defaults. */
