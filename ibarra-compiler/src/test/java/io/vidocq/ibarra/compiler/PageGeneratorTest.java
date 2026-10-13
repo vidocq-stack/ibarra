@@ -80,6 +80,36 @@ class PageGeneratorTest {
     }
 
     @Test
+    void anIncludedForwardStopsGeneratedParentOutputAndSideEffects() throws Exception {
+        String source = "<%@ page session='false' %>discard<jsp:include page='/included.jsp' flush='false'/>"
+                + "after<% application.setAttribute(\"after-include\", true); %>";
+        String setup = """
+                context.dispatchers.put("/included.jsp", new RequestDispatcher() {
+                    public void include(ServletRequest req, ServletResponse res) throws ServletException, java.io.IOException {
+                        var servlet = new jakarta.servlet.http.HttpServlet() {};
+                        servlet.init(new ServletConfig() {
+                            public String getServletName() { return "included"; }
+                            public ServletContext getServletContext() { return context; }
+                            public String getInitParameter(String name) { return null; }
+                            public java.util.Enumeration<String> getInitParameterNames() { return java.util.Collections.emptyEnumeration(); }
+                        });
+                        var factory = JspFactory.getDefaultFactory();
+                        var included = factory.getPageContext(servlet, req, res, null, false, 64, true);
+                        try { included.forward("/target.jsp"); }
+                        finally { factory.releasePageContext(included); }
+                    }
+                    public void forward(ServletRequest req, ServletResponse res) { throw new UnsupportedOperationException(); }
+                });
+                context.dispatchers.put("/target.jsp", new RequestDispatcher() {
+                    public void include(ServletRequest req, ServletResponse res) { throw new UnsupportedOperationException(); }
+                    public void forward(ServletRequest req, ServletResponse res) throws java.io.IOException { res.resetBuffer(); res.getWriter().write("target"); res.getWriter().flush(); }
+                });
+                """;
+        assertEquals("target", render(source, setup,
+                "if (context.getAttribute(\"after-include\") != null) throw new AssertionError(\"Parent continued after included forward\");"));
+    }
+
+    @Test
     void errorPageReceivesTheExceptionAndReplacesPendingOutput() throws Exception {
         String jsp = "<%@ page session='false' errorPage='/part.jsp' %>discard<% throw new IllegalArgumentException(\"bad\"); %>";
         assertEquals("FORWARDED", render(jsp, dispatchSetup(), ""));

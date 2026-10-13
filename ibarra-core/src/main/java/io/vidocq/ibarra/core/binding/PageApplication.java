@@ -27,6 +27,10 @@ public interface PageApplication extends AutoCloseable {
     static PageApplication open(ServletContext context, ModuleLayer applicationLayer) {
         return io.vidocq.ibarra.core.internal.IbarraPageApplication.open(context, applicationLayer);
     }
+    /** Installs the container's typed dispatch transition before any page contexts are served. */
+    static PageApplication open(ServletContext context, ModuleLayer applicationLayer, PageForwardDispatcher dispatcher) {
+        return io.vidocq.ibarra.core.internal.IbarraPageApplication.open(context, applicationLayer, dispatcher);
+    }
     /** Creates an uninitialized servlet, or returns null for a missing precompiled page. */
     HttpJspPage createPage(String path);
     /** Checks the finite precompiled catalogue without constructing a servlet. */

@@ -31,6 +31,9 @@ import jakarta.servlet.jsp.*;
 
 /** Application-owned EL registrations, frozen atomically when first used. */
 final class IbarraApplicationContext implements JspApplicationContext {
+    private record ForwardRegistration(io.vidocq.ibarra.core.binding.PageForwardDispatcher dispatcher, boolean used) { }
+    private final AtomicReference<ForwardRegistration> forward = new AtomicReference<>(
+            new ForwardRegistration(io.vidocq.ibarra.core.binding.PageForwardDispatcher.DIRECT, false));
     // One bounded, application-owned lock also coordinates distinct session facades.
     final java.util.concurrent.locks.ReentrantLock beanScopeLock = new java.util.concurrent.locks.ReentrantLock();
     private record Registration(List<ELResolver> resolvers, List<ELContextListener> listeners, boolean used) { }
@@ -48,6 +51,18 @@ final class IbarraApplicationContext implements JspApplicationContext {
     IbarraApplicationContext(Supplier<ExpressionFactory> source) {
         Objects.requireNonNull(source);
         expressionFactory = new FutureTask<>(() -> Objects.requireNonNull(source.get()));
+    }
+
+    void configureForwardDispatcher(io.vidocq.ibarra.core.binding.PageForwardDispatcher dispatcher) {
+        Objects.requireNonNull(dispatcher);
+        forward.updateAndGet(current -> {
+            if (current.used()) throw new IllegalStateException("Forward dispatcher must be installed before serving pages");
+            return new ForwardRegistration(dispatcher, false);
+        });
+    }
+
+    io.vidocq.ibarra.core.binding.PageForwardDispatcher forwardDispatcher() {
+        return forward.updateAndGet(current -> new ForwardRegistration(current.dispatcher(), true)).dispatcher();
     }
 
     @Override

@@ -149,6 +149,184 @@ class PageRuntimeTest {
     }
 
     @Test
+    void includedForwardRetainsTheChildApplicationWrapperAndItsPreviouslyAcquiredWriter() throws Exception {
+        var web = new Web(); var included = web.dispatch("/included.jsp");
+        ServletResponse[] delivered = { null }, childResponse = { null };
+        java.io.PrintWriter[] retained = { null };
+        web.context.dispatchers.put("/target.jsp", new RequestDispatcher() {
+            public void forward(ServletRequest request, ServletResponse response) {
+                delivered[0] = response;
+                retained[0].write("target"); retained[0].flush();
+            }
+            public void include(ServletRequest request, ServletResponse response) { throw new UnsupportedOperationException(); }
+        });
+        var parent = web.open(false, null); parent.getOut().write("discard-parent");
+        included.action = (request, response) -> {
+            var delegate = response.getWriter();
+            var upper = new java.io.PrintWriter(delegate) {
+                @Override public void write(String value, int offset, int length) {
+                    super.write(value.substring(offset, offset + length).toUpperCase(java.util.Locale.ROOT), 0, length);
+                }
+            };
+            var wrapper = new HttpServletResponseWrapper((HttpServletResponse) response) {
+                @Override public java.io.PrintWriter getWriter() { return upper; }
+            };
+            childResponse[0] = wrapper; retained[0] = wrapper.getWriter();
+            var child = new IbarraPageContext(); child.initialize(web.page, request, wrapper, null, false, 64, true);
+            try { child.getOut().write("discard-child"); child.forward("/target.jsp"); }
+            finally { child.release(); }
+        };
+        parent.include("/included.jsp", false); parent.getOut().flush();
+        assertSame(childResponse[0], delivered[0]);
+        assertEquals("TARGET", web.response.output.toString());
+    }
+
+    @Test
+    void includedForwardRejectsAFlushedAncestorBeforeClearingTheChild() throws Exception {
+        var web = new Web(); var included = web.dispatch("/included.jsp"); var target = web.dispatch("/target.jsp");
+        var sink = new StringWriter();
+        var response = new HttpServletResponseWrapper(web.response) {
+            private final java.io.PrintWriter writer = new java.io.PrintWriter(sink);
+            @Override public java.io.PrintWriter getWriter() { return writer; }
+        };
+        var parent = new IbarraPageContext(); parent.initialize(web.page, web.request, response, null, false, 64, true);
+        parent.getOut().write("sent"); parent.getOut().flush();
+        assertFalse(response.isCommitted());
+        included.action = (request, includedResponse) -> {
+            var child = new IbarraPageContext(); child.initialize(web.page, request, includedResponse, null, false, 64, true);
+            try {
+                var captured = child.pushBody(); captured.write("pending-child");
+                assertThrows(IllegalStateException.class, () -> child.forward("/target.jsp"));
+                assertEquals("pending-child", captured.getString());
+            } finally { child.release(); }
+        };
+        parent.include("/included.jsp", false);
+        assertEquals(0, target.forwards); assertEquals("sent", sink.toString());
+    }
+
+    @Test
+    void failedIncludedForwardRestoresTheRetainedIncludeWriter() throws Exception {
+        var web = new Web(); var included = web.dispatch("/included.jsp");
+        var failure = new ServletException("target failed");
+        web.context.dispatchers.put("/target.jsp", new RequestDispatcher() {
+            public void forward(ServletRequest request, ServletResponse response) throws ServletException { throw failure; }
+            public void include(ServletRequest request, ServletResponse response) { throw new UnsupportedOperationException(); }
+        });
+        var parent = web.open(false, null); parent.getOut().write("discard-parent");
+        included.action = (request, response) -> {
+            var retained = response.getWriter();
+            var child = new IbarraPageContext(); child.initialize(web.page, request, response, null, false, 64, true);
+            try {
+                assertSame(failure, assertThrows(ServletException.class, () -> child.forward("/target.jsp")));
+                assertFalse(child.isForwarded());
+                retained.write("recovered"); retained.flush();
+                assertEquals("", web.response.output.toString());
+            } finally { child.release(); }
+        };
+        parent.include("/included.jsp", false); assertFalse(parent.isForwarded()); parent.getOut().flush();
+        assertEquals("recovered", web.response.output.toString());
+    }
+
+    @Test
+    void successfulForwardKeepsTheWriterRouteAfterBothPageContextsAreReleased() throws Exception {
+        var web = new Web(); var included = web.dispatch("/included.jsp");
+        java.io.PrintWriter[] retained = { null };
+        var parent = web.open(false, null); parent.getOut().write("discard");
+        included.action = (request, response) -> {
+            retained[0] = response.getWriter();
+            var child = new IbarraPageContext(); child.initialize(web.page, request, response, null, false, 64, true);
+            try { child.forward("/target.jsp"); }
+            finally { child.release(); }
+        };
+        web.dispatch("/target.jsp");
+        parent.include("/included.jsp", false); parent.release();
+        try (var tasks = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            tasks.submit(() -> { retained[0].write("later"); retained[0].flush(); }).get();
+        }
+        assertEquals("later", web.response.output.toString());
+    }
+
+    @Test
+    void successfulNestedForwardClearsEveryPendingBodyAndStartsTheTargetWithFreshAncestry() throws Exception {
+        var web = new Web(); var one = web.dispatch("/one.jsp"); var two = web.dispatch("/two.jsp");
+        var parent = web.open(false, null); var captured = parent.pushBody(); captured.write("discard-parent");
+        one.action = (request, response) -> {
+            var middle = new IbarraPageContext(); middle.initialize(web.page, request, response, null, false, 64, true);
+            try { middle.pushBody().write("discard-middle"); middle.include("/two.jsp", false); assertTrue(middle.isForwarded()); }
+            finally { middle.release(); }
+        };
+        two.action = (request, response) -> {
+            var child = new IbarraPageContext(); child.initialize(web.page, request, response, null, false, 64, true);
+            try { child.getOut().write("discard-child"); child.forward("/target.jsp"); assertTrue(child.isForwarded()); }
+            finally { child.release(); }
+        };
+        web.context.dispatchers.put("/target.jsp", new RequestDispatcher() {
+            public void forward(ServletRequest request, ServletResponse response) throws IOException {
+                var target = new IbarraPageContext(); target.initialize(web.page, request, response, null, false, 64, true);
+                try { assertFalse(target.isForwarded()); target.getOut().write("target"); target.getOut().flush(); }
+                finally { target.release(); }
+            }
+            public void include(ServletRequest request, ServletResponse response) { throw new UnsupportedOperationException(); }
+        });
+        parent.include("/one.jsp", false);
+        assertTrue(parent.isForwarded()); assertEquals("", captured.getString());
+        assertEquals("target", web.response.output.toString());
+        parent.release(); parent.initialize(web.page, web.request, web.response, null, false, 64, true);
+        assertFalse(parent.isForwarded());
+    }
+
+    @Test
+    void applicationForwardHookReceivesTheCurrentChainAndOwnsOneResponseReset() throws Exception {
+        var web = new Web(); var target = web.dispatch("/target.jsp");
+        var application = new IbarraApplicationContext();
+        int[] resets = { 0 }, calls = { 0 };
+        var response = new HttpServletResponseWrapper(web.response) {
+            @Override public void resetBuffer() { resets[0]++; super.resetBuffer(); }
+        };
+        application.configureForwardDispatcher((dispatcher, request, delivered) -> {
+            assertSame(target, dispatcher); assertSame(web.request, request); assertSame(response, delivered);
+            calls[0]++; delivered.resetBuffer(); dispatcher.forward(request, delivered);
+        });
+        var page = new IbarraPageContext(application); page.initialize(web.page, web.request, response, null, false, 64, true);
+        assertThrows(IllegalStateException.class, () -> application.configureForwardDispatcher(io.vidocq.ibarra.core.binding.PageForwardDispatcher.DIRECT));
+        page.getOut().write("discard"); page.forward("/target.jsp");
+        assertEquals(1, calls[0]); assertEquals(1, resets[0]); assertTrue(page.isForwarded());
+        page.release(); assertFalse(page.isForwarded());
+    }
+
+    @Test
+    void childErrorPageIncludesAfterAncestorFlushAndRetainsTheOriginalFailure() throws Exception {
+        var web = new Web(); var included = web.dispatch("/included.jsp"); var error = web.dispatch("/error.jsp"); error.includeText = "error";
+        var sink = new StringWriter();
+        var response = new HttpServletResponseWrapper(web.response) {
+            private final java.io.PrintWriter writer = new java.io.PrintWriter(sink);
+            @Override public java.io.PrintWriter getWriter() { return writer; }
+        };
+        var parent = new IbarraPageContext(); parent.initialize(web.page, web.request, response, null, false, 64, true);
+        parent.getOut().write("sent|"); parent.getOut().flush();
+        var failure = new ServletException("child failed");
+        included.action = (request, delivered) -> {
+            var child = new IbarraPageContext(); child.initialize(web.page, request, delivered, "/error.jsp", false, 64, true);
+            try { child.handlePageException(failure); child.getOut().flush(); }
+            finally { child.release(); }
+        };
+        parent.include("/included.jsp", false); parent.getOut().flush();
+        assertEquals(0, error.forwards); assertEquals(1, error.includes); assertEquals("sent|error", sink.toString());
+        assertSame(failure, web.request.getAttribute(RequestDispatcher.ERROR_EXCEPTION));
+        assertSame(failure, web.request.getAttribute("jakarta.servlet.jsp.jspException"));
+    }
+
+    @Test
+    void closingAnIncludeWriterDoesNotCloseTheOwnedRoutingView() throws Exception {
+        var web = new Web(); var included = web.dispatch("/included.jsp");
+        included.action = (request, response) -> {
+            var writer = response.getWriter(); writer.close(); writer.write("included");
+        };
+        var parent = web.open(false, null); parent.include("/included.jsp", false); parent.getOut().flush();
+        assertEquals("included", web.response.output.toString());
+    }
+
+    @Test
     void unbufferedWritesPreventForwardingBeforeTheServletResponseCommits() throws Exception {
         for(int operation=0;operation<3;operation++) {
             var web=new Web();var target=web.dispatch("/next.jsp");
@@ -503,6 +681,8 @@ class PageRuntimeTest {
     }
 
     static final class Dispatch implements RequestDispatcher {
+        @FunctionalInterface interface Action { void run(ServletRequest request, ServletResponse response) throws ServletException, IOException; }
+        Action action;
         String includeText;
         int forwards;
         int includes;
@@ -511,8 +691,9 @@ class PageRuntimeTest {
         public void forward(ServletRequest request, ServletResponse response) {
             forwards++; this.request = request; this.response = response;
         }
-        public void include(ServletRequest request, ServletResponse response) throws IOException {
+        public void include(ServletRequest request, ServletResponse response) throws ServletException, IOException {
             includes++; this.request = request; this.response = response;
+            if (action != null) action.run(request, response);
             if (includeText != null) response.getWriter().write(includeText);
         }
     }

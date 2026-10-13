@@ -31,7 +31,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Container binding for constructor-based page indexes in the supplied application layer. */
 public final class IbarraJspEngine implements JspEngine {
     public Application deploy(ServletContext context, ModuleLayer layer) {
-        var pages = PageApplication.open(context, layer);
+        var pages = PageApplication.open(context, layer, (target, request, response) -> {
+            if (target instanceof JspEngine.ForwardDispatcher forward) forward.forwardFromJsp(request, response);
+            else target.forward(request, response);
+        });
         var servlet = new Router(pages);
         return new Application() {
             private final AtomicBoolean closed = new AtomicBoolean();

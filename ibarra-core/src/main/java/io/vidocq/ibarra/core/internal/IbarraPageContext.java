@@ -35,7 +35,7 @@ import jakarta.servlet.jsp.*;
 import jakarta.servlet.jsp.tagext.BodyContent;
 
 /** Per-request page state. No thread-local storage or context pooling. */
-final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.spi.BeanScopeContext {
+final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.spi.BeanScopeContext, io.vidocq.ibarra.spi.PageDispatchContext {
     private final IbarraApplicationContext application;
     private final Map<String, Object> attributes = new HashMap<>();
     private final ArrayDeque<JspWriter> bodies = new ArrayDeque<>();
@@ -49,6 +49,9 @@ final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.sp
     private JspWriter out;
     private BufferedJspWriter base;
     private ELContext elContext;
+    private IbarraPageContext includingPage;
+    private boolean forwarded;
+    private io.vidocq.ibarra.core.binding.PageForwardDispatcher forwardDispatcher;
 
     IbarraPageContext() { this(new IbarraApplicationContext()); }
     IbarraPageContext(IbarraApplicationContext application) { this.application = Objects.requireNonNull(application); }
@@ -72,6 +75,9 @@ final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.sp
         this.servlet = servlet;
         this.request = request;
         this.response = response;
+        this.includingPage = includingPage(response);
+        this.forwarded = false;
+        this.forwardDispatcher = application.forwardDispatcher();
         this.config = config;
         this.context = context;
         this.session = session;
@@ -96,7 +102,10 @@ final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.sp
         bodies.clear();
         servlet = null; request = null; response = null; config = null; context = null;
         session = null; errorPage = null; out = null; base = null; elContext = null;
+        includingPage = null; forwarded = false; forwardDispatcher = null;
     }
+
+    @Override public boolean isForwarded() { return forwarded; }
 
     private static String name(String name) { return Objects.requireNonNull(name, "attribute name"); }
     private HttpSession requiredSession() {
@@ -246,40 +255,95 @@ final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.sp
 
     @Override
     public void forward(String path) throws ServletException, IOException {
-        if (response.isCommitted()) throw new IllegalStateException("Response is already committed");
-        if (base.hasFlushed()) throw new IllegalStateException("Page output has already been flushed");
+        var pages = new ArrayDeque<IbarraPageContext>();
+        for (var page = this; page != null; page = page.includingPage) {
+            if (page.response.isCommitted()) throw new IllegalStateException("Response is already committed");
+            if (page.base.hasFlushed()) throw new IllegalStateException("Page output has already been flushed");
+            pages.addLast(page);
+        }
         var target = dispatcher(path);
-        if (base.getBufferSize() != JspWriter.NO_BUFFER) base.clearBuffer();
-        response.resetBuffer();
-        target.forward(request, response);
+        var routes = new java.util.LinkedHashMap<IncludeWriter, Boolean>();
+        for (var current = response; current instanceof ServletResponseWrapper wrapper; current = wrapper.getResponse())
+            if (current instanceof Inclusion inclusion) routes.putIfAbsent(inclusion.writer(), inclusion.writer().forward);
+        boolean succeeded = false;
+        try {
+            for (var page : pages) {
+                if (page.base.getBufferSize() != JspWriter.NO_BUFFER) page.base.clearBuffer();
+                if (page.out instanceof BodyContent body) body.clearBody();
+                for (var writer : page.bodies) if (writer instanceof BodyContent body) body.clearBody();
+            }
+            routes.keySet().forEach(writer -> writer.forward = true);
+            forwardDispatcher.forward(target, request, response);
+            for (var page : pages) page.forwarded = true;
+            succeeded = true;
+        } finally {
+            if (!succeeded) routes.forEach((writer, previous) -> writer.forward = previous);
+        }
     }
 
     @Override public void include(String path) throws ServletException, IOException { include(path, true); }
     @Override
     public void include(String path, boolean flush) throws ServletException, IOException {
         if (flush) out.flush();
-        var writer = new PrintWriter(out) {
-            @Override public void close() { }
-            @Override public void flush() { }
-        };
+        var route = new IncludeWriter(this, out, response);
         ServletResponse included;
         if (response instanceof HttpServletResponse http) {
-            included = new HttpServletResponseWrapper(http) {
-                @Override public PrintWriter getWriter() { return writer; }
-                @Override public ServletOutputStream getOutputStream() {
-                    throw new IllegalStateException("JSP inclusion uses character output");
-                }
-            };
+            included = new HttpInclusion(http, route);
         } else {
-            included = new ServletResponseWrapper(response) {
-                @Override public PrintWriter getWriter() { return writer; }
-                @Override public ServletOutputStream getOutputStream() {
-                    throw new IllegalStateException("JSP inclusion uses character output");
-                }
-            };
+            included = new GenericInclusion(response, route);
         }
         dispatcher(path).include(request, included);
-        if (writer.checkError()) throw new IOException("Failed to write included output");
+        if (!forwarded && route.writer.checkError()) throw new IOException("Failed to write included output");
+    }
+
+    private interface Inclusion { IncludeWriter writer(); }
+
+    private static IbarraPageContext includingPage(ServletResponse response) {
+        while (response instanceof ServletResponseWrapper wrapper) {
+            if (response instanceof Inclusion inclusion && !inclusion.writer().forward) return inclusion.writer().page;
+            response = wrapper.getResponse();
+        }
+        return null;
+    }
+
+    /** Stable delegation for application writers retained before or after dispatch. */
+    private static final class IncludeWriter extends java.io.Writer {
+        final IbarraPageContext page;
+        final JspWriter output;
+        final ServletResponse response;
+        final PrintWriter writer = new PrintWriter(this) {
+            @Override public void close() { if (IncludeWriter.this.forward) super.close(); }
+        };
+        volatile boolean forward;
+        IncludeWriter(IbarraPageContext page, JspWriter output, ServletResponse response) {
+            this.page = page; this.output = output; this.response = response;
+        }
+        @Override public void write(char[] value, int offset, int length) throws IOException {
+            if (forward) response.getWriter().write(value, offset, length);
+            else output.write(value, offset, length);
+        }
+        @Override public void flush() throws IOException { if (forward) response.getWriter().flush(); }
+        @Override public void close() throws IOException { if (forward) response.getWriter().close(); }
+        ServletOutputStream outputStream() throws IOException {
+            if (!forward) throw new IllegalStateException("JSP inclusion uses character output");
+            return response.getOutputStream();
+        }
+    }
+
+    private static final class HttpInclusion extends HttpServletResponseWrapper implements Inclusion {
+        private final IncludeWriter route;
+        HttpInclusion(HttpServletResponse response, IncludeWriter route) { super(response); this.route = route; }
+        @Override public IncludeWriter writer() { return route; }
+        @Override public PrintWriter getWriter() { return route.writer; }
+        @Override public ServletOutputStream getOutputStream() throws IOException { return route.outputStream(); }
+    }
+
+    private static final class GenericInclusion extends ServletResponseWrapper implements Inclusion {
+        private final IncludeWriter route;
+        GenericInclusion(ServletResponse response, IncludeWriter route) { super(response); this.route = route; }
+        @Override public IncludeWriter writer() { return route; }
+        @Override public PrintWriter getWriter() { return route.writer; }
+        @Override public ServletOutputStream getOutputStream() throws IOException { return route.outputStream(); }
     }
 
     @Override
@@ -304,8 +368,14 @@ final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.sp
         request.setAttribute(RequestDispatcher.ERROR_STATUS_CODE, 500);
         request.setAttribute(RequestDispatcher.ERROR_SERVLET_NAME, config.getServletName());
         if (request instanceof HttpServletRequest http) request.setAttribute(RequestDispatcher.ERROR_REQUEST_URI, http.getRequestURI());
-        if (response.isCommitted() || base.hasFlushed()) include(errorPage, false);
+        if (hasFlushedOutput()) include(errorPage, false);
         else forward(errorPage);
+    }
+
+    private boolean hasFlushedOutput() {
+        for (var page = this; page != null; page = page.includingPage)
+            if (page.response.isCommitted() || page.base.hasFlushed()) return true;
+        return false;
     }
 
     @Override

@@ -86,3 +86,26 @@ A follow-up must provide a typed dispatch contract with the container, preserve
 application wrapper identity and retained delegates, and apply forward header,
 status, flush/close and asynchronous-response rules. Mutating unknown wrapper
 delegates or guessing their classes is not an acceptable replacement.
+
+## Typed follow-up implementation
+
+The follow-up retains the current application response chain and cached writer
+delegates. Core promotes only its owned inclusion/writer bridges, validates all
+active JSP ancestors before clearing their buffers, and exposes successful
+completion through the typed `PageDispatchContext` state. Failed dispatch restores
+the owned routes; successful routes survive page release and later writer use.
+Forward targets start with fresh JSP ancestry.
+
+The neutral `PageForwardDispatcher` is installed per application through the
+existing qualified core binding facade. `ibarra-foy` adapts the additive
+`JspEngine.ForwardDispatcher.forwardFromJsp` method. Foy owns Servlet reset,
+headers/status and async completion, and forwards through a container response
+view wrapping the current application chain. No unknown wrapper delegates are
+mutated and no implementation-name classification is used.
+
+A named-module HTTP fixture is red without the typed adapter (the transformed
+target header is missing) and green with it: nested JSP buffers disappear, cached
+application writers uppercase the target body, header transformations survive,
+relative target includes resolve correctly, and including-page side effects stop.
+The original include/forward classes pass all 19 methods. Producer publication
+precedes consumer publication; staged validation uses an isolated Maven repository.

@@ -34,6 +34,42 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PagesContainerTest {
     @Test
+    void nestedIncludedForwardPreservesApplicationHeaderAndCachedWriterTransformations() throws Exception {
+        var war = ShrinkWrap.create(WebArchive.class, "typed-forward.war")
+                .addClasses(io.vidocq.ibarra.tck.fixtures.ForwardResponseFilter.class,
+                        io.vidocq.ibarra.tck.fixtures.ForwardResponseFilter.BodyWriter.class,
+                        io.vidocq.ibarra.tck.fixtures.ForwardResponseFilter.WrappedResponse.class)
+                .setWebXML(new StringAsset("<web-app xmlns='https://jakarta.ee/xml/ns/jakartaee' version='6.1'>"
+                        + "<filter><filter-name>wrap</filter-name><filter-class>io.vidocq.ibarra.tck.fixtures.ForwardResponseFilter</filter-class></filter>"
+                        + "<filter-mapping><filter-name>wrap</filter-name><url-pattern>/*</url-pattern><dispatcher>INCLUDE</dispatcher></filter-mapping></web-app>"))
+                .addAsWebResource(new StringAsset("discard-parent<jsp:include page='/nested/middle.jsp' flush='false'/>"
+                        + "<% application.setAttribute(\"after-parent\", true); %>"), "index.jsp")
+                .addAsWebResource(new StringAsset("discard-middle<jsp:include page='/nested/child.jsp' flush='false'/>"
+                        + "<% application.setAttribute(\"after-middle\", true); %>"), "nested/middle.jsp")
+                .addAsWebResource(new StringAsset("discard-child<jsp:forward page='/dest/target.jsp'/>"), "nested/child.jsp")
+                .addAsWebResource(new StringAsset("<% response.setHeader(\"X-Target\", \"target\"); %>target<jsp:include page='part.jsp' flush='false'/>"), "dest/target.jsp")
+                .addAsWebResource(new StringAsset("part"), "dest/part.jsp")
+                .addAsWebResource(new StringAsset("discard-missing<jsp:include page='/nested/missing.jsp' flush='false'/>"), "missing.jsp")
+                .addAsWebResource(new StringAsset("<jsp:forward page='/absent.bin'/>"), "nested/missing.jsp")
+                .addAsWebResource(new StringAsset("<%=application.getAttribute(\"after-parent\")%>|<%=application.getAttribute(\"after-middle\")%>"), "state.jsp");
+        var container = new PagesContainer(); container.setup(new PagesConfiguration());
+        try {
+            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            String base = "http://127.0.0.1:" + http.getPort() + "/typed-forward/";
+            try (var client = HttpClient.newHttpClient()) {
+                var response = client.send(HttpRequest.newBuilder(URI.create(base + "index.jsp")).build(), HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, response.statusCode(), response.body()); assertEquals("TARGETPART", response.body());
+                assertEquals("TARGET", response.headers().firstValue("X-Target").orElse("missing"));
+                var state = client.send(HttpRequest.newBuilder(URI.create(base + "state.jsp")).build(), HttpResponse.BodyHandlers.ofString());
+                assertEquals("null|null", state.body());
+                var missing = client.send(HttpRequest.newBuilder(URI.create(base + "missing.jsp")).build(), HttpResponse.BodyHandlers.ofString());
+                assertEquals(404, missing.statusCode(), missing.body()); assertFalse(missing.body().contains("discard-missing"));
+            }
+            container.undeploy(war);
+        } finally { container.stop(); }
+    }
+
+    @Test
     void precompileRequestsValidateDecodedValuesAndNeverExecuteThePageThroughRoutesOrAliases() throws Exception {
         var war=ShrinkWrap.create(WebArchive.class,"precompile-protocol.war")
                 .setWebXML(new StringAsset("<web-app xmlns='https://jakarta.ee/xml/ns/jakartaee' version='6.1'>"

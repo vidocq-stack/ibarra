@@ -28,6 +28,41 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PageApplicationTest {
     @Test
+    void deploymentInstallsOnlyItsOwnForwardHookAndUndeploymentRemovesIt() throws Exception {
+        JspFactory previous = JspFactory.getDefaultFactory(); JspFactory.setDefaultFactory(null);
+        var first = new ServletDoubles.Context(); var second = new ServletDoubles.Context();
+        var catalogue = new PrecompiledPages(List.of());
+        int[] calls = { 0 };
+        var app = IbarraPageApplication.open(first, catalogue, (target, request, response) -> {
+            calls[0]++; response.resetBuffer(); target.forward(request, response);
+        });
+        var other = IbarraPageApplication.open(second, catalogue);
+        try {
+            var factory = (IbarraJspFactory) JspFactory.getDefaultFactory();
+            var target = new PageRuntimeTest.Dispatch(); first.dispatchers.put("/target.jsp", target); second.dispatchers.put("/target.jsp", target);
+            for (var context : List.of(first, second)) {
+                var servlet = new TestPage();
+                servlet.init(new jakarta.servlet.ServletConfig() {
+                    public String getServletName() { return "page"; }
+                    public jakarta.servlet.ServletContext getServletContext() { return context; }
+                    public String getInitParameter(String name) { return null; }
+                    public java.util.Enumeration<String> getInitParameterNames() { return java.util.Collections.emptyEnumeration(); }
+                });
+                var page = factory.getPageContext(servlet, new ServletDoubles.Request(), new ServletDoubles.Response(), null, false, 64, true);
+                try { page.forward("/target.jsp"); }
+                finally { factory.releasePageContext(page); }
+            }
+            assertEquals(1, calls[0]); app.close();
+            var fresh = (IbarraApplicationContext) factory.getJspApplicationContext(first);
+            fresh.forwardDispatcher().forward(target, new ServletDoubles.Request(), new ServletDoubles.Response());
+            assertEquals(1, calls[0]);
+        } finally {
+            app.close(); other.close(); ((IbarraJspFactory) JspFactory.getDefaultFactory()).releaseApplicationContext(first);
+            JspFactory.setDefaultFactory(previous);
+        }
+    }
+
+    @Test
     void deploymentOwnsFactoriesAndReleasesOnlyItsApplicationContext() {
         JspFactory previous = JspFactory.getDefaultFactory();
         JspFactory.setDefaultFactory(null);

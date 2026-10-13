@@ -36,14 +36,20 @@ public final class IbarraPageApplication implements PageApplication {
     public static PageApplication open(ServletContext context, ModuleLayer layer) {
         return open(context, PrecompiledPages.discover(Objects.requireNonNull(layer)));
     }
+    public static PageApplication open(ServletContext context, ModuleLayer layer, io.vidocq.ibarra.core.binding.PageForwardDispatcher dispatcher) {
+        return open(context, PrecompiledPages.discover(Objects.requireNonNull(layer)), dispatcher);
+    }
     static PageApplication open(ServletContext context, PrecompiledPages pages) {
+        return open(context, pages, io.vidocq.ibarra.core.binding.PageForwardDispatcher.DIRECT);
+    }
+    static PageApplication open(ServletContext context, PrecompiledPages pages, io.vidocq.ibarra.core.binding.PageForwardDispatcher dispatcher) {
         var existing = JspFactory.getDefaultFactory();
         if (existing == null) {
             JspFactory.setDefaultFactory(DEFAULT_FACTORY);
             existing = JspFactory.getDefaultFactory();
         }
         if (!(existing instanceof IbarraJspFactory factory)) throw new IllegalStateException("A different JSP factory is installed");
-        factory.getJspApplicationContext(Objects.requireNonNull(context));
+        ((IbarraApplicationContext) factory.getJspApplicationContext(Objects.requireNonNull(context))).configureForwardDispatcher(dispatcher);
         return new IbarraPageApplication(context, pages, factory);
     }
     private IbarraPageApplication(ServletContext context, PrecompiledPages pages, IbarraJspFactory factory) {

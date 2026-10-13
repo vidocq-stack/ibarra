@@ -95,6 +95,11 @@ ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
    Servlet, EL). It obtains its `ExpressionFactory` through `ExpressionFactory.newInstance()`
    — Peano is the default provider, not a hard dependency (PLAN.md open question 4).
 2. **Only `ibarra-foy` depends on Foy.** The core stays container-neutral.
+   Include-forward uses the neutral application-owned `PageForwardDispatcher`
+   hook in the existing qualified binding facade. Core may transition only its
+   owned JSP writer bridges; the container owns response reset and INCLUDE/forward
+   policy. Preserve application wrappers and retained delegates, never classify
+   or mutate unknown wrappers. Completion state is typed through `PageDispatchContext`.
 3. **Pages are compiled at build time.** Runtime translation (`javax.tools`) is a
    documented degraded mode, off by default in production; never make the runtime path
    the default.

@@ -130,6 +130,32 @@ named attribute/body capture. Bean construction and property calls are direct;
 metadata comes from the Class-File API. Javac checks module accessibility.
 Property actions resolve the current scoped attribute rather than a stale local.
 
+=== Typed forwarding from included pages
+
+The container-neutral `PageForwardDispatcher` hook belongs to the existing
+qualified `core.binding` facade. A deployment installs it through `PageApplication`
+before serving any page contexts; the factory freezes the hook on first use and
+removes it at undeployment. Foy adapts its typed `JspEngine.ForwardDispatcher`
+without introducing a Foy dependency in core or an Ibarra dependency in Foy.
+The dispatcher owns Servlet response reset and completion; core clears only JSP
+buffers after validating every active including page's output state.
+
+Forwarding passes the current application response chain intact. Core transitions
+only its own inclusion/writer bridges; no application delegates are replaced or
+classified by implementation name. Retained writers preserve application body
+transformations. Successful routes survive PageContext release and later virtual
+thread writes; failed dispatch restores the previous inclusion routes and does
+not mark any page completed. A forwarded target starts with fresh JSP ancestry.
+Generated includes stop the source page after successful descendant forwarding,
+including inside fragments, and final cleanup avoids flushing discarded output.
+
+Error pages include after any ancestor emitted output, preserving the original
+exception. Otherwise they may forward. Servlet headers, status, asynchronous
+dispatch, flush and close policies belong to the container's typed transition;
+the writer bridge adds no asynchronous support to a servlet or filter that lacks it.
+Foy's forward-specific views retain that policy per operation. Original INCLUDE
+references retain their INCLUDE header policy outside that view.
+
 === Property editors
 
 String literals and request parameters may use an editor declared in the bean's

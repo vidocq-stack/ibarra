@@ -63,10 +63,10 @@
 - Cause: JSP inclusion redirects output to the ancestor writer through a response
   wrapper. Forward clears only the child buffer and forwards through the container's
   include response; ancestor buffers and generated-page continuation remain active.
-- Status: OPEN. The signed prototype in the fix-include-forward worktree restores
-  the official scenario, but bypasses application wrappers added during inclusion
-  (IBARRA-130). It is withheld from the publication branch pending a typed container
-  dispatch boundary that preserves those wrappers. See
+- Status: FIXED in the typed dispatch slice. Core preserves the current response
+  chain and transitions only owned writer bridges; the Foy binding invokes the
+  additive typed container transition. Generated pages stop after a successful
+  descendant forward. The unsafe historical prototype remains withheld. See
   [studies/include-forward-wrapper-dispatch.md](studies/include-forward-wrapper-dispatch.md).
 - Validation: original official method reproduced red, plus two focused core failures
   and HTTP `beforetargetafter`. Under Temurin 25, `./mvnw -o -ntp -Ptck -pl ibarra-tck
@@ -88,9 +88,34 @@
 - Cause: forwarding through the saved outer response bypasses application and
   container include wrappers together; core cannot safely distinguish opaque
   container wrappers from application wrappers through ServletResponseWrapper alone.
-- Status: OPEN; prototype withheld from this branch. The original include/forward
-  scenario remains failing. Follow-up requires container-aware typed dispatch,
-  preserving wrapper identity/delegation and include/forward response semantics.
+- Status: FIXED by the container-aware dispatch hook and stable owned writer
+  routing. The cached writer/app wrapper regression passes, as does a named-module
+  HTTP fixture preserving header/body transformations through nested includes and
+  a relative include in the forwarded target. Without the typed binding hook that
+  fixture is red because INCLUDE still suppresses the target header. Upstream Foy
+  publication must precede the Ibarra consumer publication; validation uses an
+  isolated local repository, never unpublished artifacts in the shared repository.
+
+## IBARRA-131 · 2026-10-13 · Closing an included routing writer invalidates retained output
+
+- Symptom: the first typed writer bridge ignores the delegate's close but its
+  PrintWriter still closes its own view, losing later included writes.
+- Minimal repro: `PageRuntimeTest.closingAnIncludeWriterDoesNotCloseTheOwnedRoutingView`.
+- Cause: suppressing `Writer.close()` alone does not stop `PrintWriter.close()`
+  from clearing its cached delegate.
+- Status: FIXED by suppressing close on the owned PrintWriter in INCLUDE mode,
+  while allowing ordinary close semantics on the successful forward route.
+
+## IBARRA-132 · 2026-10-13 · Child error pages attempt forwarding after ancestor output
+
+- Symptom: an included JSP with an error page masks its original exception by
+  attempting a forward after an ancestor has flushed through an uncommitted wrapper.
+- Minimal repro: `PageRuntimeTest.childErrorPageIncludesAfterAncestorFlushAndRetainsTheOriginalFailure`.
+- Cause: error-page selection checked only the failing child's JSP writer;
+  ancestor-aware forward validation then rejected the selected dispatch.
+- Status: FIXED by applying the same ancestor output state to error-page selection:
+  include after emitted output, retain the original exception attributes, and
+  forward only while every active ancestor remains eligible.
 
 ## IBARRA-120 · 2026-10-13 · Tag-dependent body content is parsed as JSP
 

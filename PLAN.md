@@ -115,6 +115,17 @@ it at all.
   descriptor accessors remain unsupported. Editor-using application modules read
   `java.desktop`; the runtime core and compiler retain their existing descriptors.
 
+### Typed include-forward boundary
+
+Forwarding from an included page uses a neutral application-owned dispatch hook
+adapted by `ibarra-foy` to Foy's additive `JspEngine.ForwardDispatcher` contract.
+Core validates and clears JSP ancestor buffers, preserves the current application
+response/writer chain through owned routing views, and records successful
+completion through `PageDispatchContext`. The container owns response reset,
+header/status and asynchronous dispatch rules. Failure restores inclusion routes;
+successful retained writer routes survive page cleanup. Publication requires the
+upstream Foy typed contract first; no cross-brick dependency cycle is introduced.
+
 ### Degraded mode: runtime translation
 
 When a page has no precompiled class (development, or a WAR deployed without the
