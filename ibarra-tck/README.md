@@ -117,6 +117,22 @@ multi-release entries, web fragments and classpath service metadata require
 separate adaptation and are rejected, rather than discarding their semantics.
 This bounded test-runner assembly does not change production Maven packaging.
 
+## Official API signature check
+
+The official-only profile uses maven-dependency-plugin 3.8.1 to copy the exact
+configured Pages, Servlet and EL API versions into target/signature-api. The
+unchanged upstream driver receives those API paths through sigTestClasspath and
+its extracted java.base image through jimage.dir. No signature file or expected
+member is altered. The signature tool's build-side classpath is separate from the
+application/host module path; no implementation or Maven tooling is shipped.
+
+```bash
+./mvnw -ntp -Ptck,tck-official -pl ibarra-tck clean test \
+  -Dtest=ee.jakarta.tck.pages.signaturetest.jsp.JSPSigTestIT
+```
+
+The default adapter profile does not activate this resource-copy execution.
+
 ## Private bean property access
 
 Legacy WAR classes have no Peano annotation-processing output. The runner uses

@@ -28,6 +28,13 @@ an earlier Eclipse distribution because the Pages 4.0 ZIP omits it.
 Only that tool is used from the older distribution; all tests are Pages 4.0.
 These dependencies are test-only and never enter application artifacts.
 
+The official profile also uses `maven-dependency-plugin` 3.8.1 to stage the
+configured Pages/Servlet/EL API jars for the unchanged API signature driver.
+`sigTestClasspath` contains only those API jars and the driver's extracted
+`java.base` image (`jimage.dir`). Signature expectations are not rewritten;
+this build-side classpath does not change application/host module isolation.
+The ordinary adapter profile does not copy these signature resources.
+
 == Runtime isolation
 
 The build-side adapter precompiles each WAR as a named application module,

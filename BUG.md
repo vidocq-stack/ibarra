@@ -427,7 +427,11 @@
 - Symptom: `signaturetest.jsp.JSPSigTestIT#signatureTest` fails with signature differences.
 - Minimal repro: select that fully qualified class with the official script.
 - Cause: the upstream signature tool is invoked with an empty `-Classpath`.
-- Status: OPEN, runner configuration follow-up; this is not proof of an API mismatch.
+- Status: FIXED in the official-only runner profile: maven-dependency-plugin
+  copies the exact Pages/Servlet/EL API versions, and the unchanged signature
+  driver receives their paths plus its extracted java.base image. The original
+  signatureTest passes after clean without command-line path overrides; application
+  and host deployment remain on the module path. No signature fixture is changed.
 
 ## IBARRA-093 · 2026-10-12 · TLD attribute names that are Java keywords are rejected
 

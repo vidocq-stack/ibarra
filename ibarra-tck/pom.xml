@@ -91,6 +91,41 @@
                 <plugins>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-dependency-plugin</artifactId>
+                        <version>3.8.1</version>
+                        <executions>
+                            <execution>
+                                <id>copy-spec-apis-for-signature-test</id>
+                                <phase>process-test-resources</phase>
+                                <goals><goal>copy</goal></goals>
+                                <configuration>
+                                    <artifactItems>
+                                        <artifactItem>
+                                            <groupId>jakarta.servlet.jsp</groupId>
+                                            <artifactId>jakarta.servlet.jsp-api</artifactId>
+                                            <version>${jakarta.pages.version}</version>
+                                            <destFileName>jakarta.servlet.jsp-api.jar</destFileName>
+                                        </artifactItem>
+                                        <artifactItem>
+                                            <groupId>jakarta.servlet</groupId>
+                                            <artifactId>jakarta.servlet-api</artifactId>
+                                            <version>${jakarta.servlet.version}</version>
+                                            <destFileName>jakarta.servlet-api.jar</destFileName>
+                                        </artifactItem>
+                                        <artifactItem>
+                                            <groupId>jakarta.el</groupId>
+                                            <artifactId>jakarta.el-api</artifactId>
+                                            <version>${jakarta.el.version}</version>
+                                            <destFileName>jakarta.el-api.jar</destFileName>
+                                        </artifactItem>
+                                    </artifactItems>
+                                    <outputDirectory>${project.build.directory}/signature-api</outputDirectory>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
                             <!-- The TCK jar is not a Java module: class path, like foy-tck. -->
@@ -102,6 +137,10 @@
                             <trimStackTrace>false</trimStackTrace>
                             <systemPropertyVariables>
                                 <porting.ts.url.class.1>ee.jakarta.tck.pages.lib.implementation.sun.common.SunRIURL</porting.ts.url.class.1>
+                                <!-- Signature tools inspect spec API bytecode on the build machine;
+                                     application and host deployment remain on the module path. -->
+                                <jimage.dir>${project.build.directory}/signature-jimage</jimage.dir>
+                                <sigTestClasspath>${project.build.directory}/signature-api/jakarta.servlet.jsp-api.jar${path.separator}${project.build.directory}/signature-api/jakarta.servlet-api.jar${path.separator}${project.build.directory}/signature-api/jakarta.el-api.jar${path.separator}${project.build.directory}/signature-jimage/java.base</sigTestClasspath>
                             </systemPropertyVariables>
                         </configuration>
                     </plugin>
