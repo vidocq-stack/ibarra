@@ -436,6 +436,21 @@ it bypasses response wrappers introduced during inclusion (IBARRA-119/130).
 The next dispatch design must preserve those wrappers through a typed container
 boundary; the source evidence is in studies/include-forward-wrapper-dispatch.md.
 
+## Tagdependent envelopes and signature checks (2026-10-13)
+
+Outer named attributes now use ordinary translation/evaluation contracts while
+an explicit tagdependent body remains opaque. Standard/JSPX nesting, aliases,
+CDATA, fragment values, whitespace and named-only empty invocations are covered;
+malformed envelopes receive source diagnostics. XML output accepts only its
+specified yes/no/true/false omission values and validates XML context/empty body
+before whitespace normalization. Broader prolog/default/doctype semantics remain open.
+
+The official profile stages the exact spec APIs for the unchanged signature
+driver. Final result: 518/682 (76.0%), 164 method errors, zero setup/skips,
+eight methods restored and no previous-pass regression. Ordinary reactor 309,
+adapter 33, smoke 18 and the independent example package pass. Typed forwarding
+is a separate coordinated Foy/Ibarra slice, isolated from this publication branch.
+
 ## Initial I4 implementation
 
 Initial I4 proof (2026-10-10): `examples/precompiled-pages` builds with the real

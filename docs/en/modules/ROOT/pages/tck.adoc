@@ -18,14 +18,14 @@ Run date: 2026-10-13, Temurin Java 25 and Maven 3.9.16.
 
 Official artifacts had already been prepared; the smoke command clean-installs the reactor.
 The verified official binary contains 92 test classes and 682 declared JUnit
-`@Test` methods. The run records *510 passing methods* and *172 failing methods*,
+`@Test` methods. The run records *518 passing methods* and *164 failing methods*,
 with *zero class-level setup/deployment errors*. Surefire therefore reports 682
-entries, 172 errors, zero assertion failures and zero skips, and exits nonzero.
+entries, 164 errors, zero assertion failures and zero skips, and exits nonzero.
 The upstream HTTP assertion helper reports failures as exceptions.
 
-*510/682 = 74.8% measured full-suite pass rate*. All 682 declared test methods
+*518/682 = 76.0% measured full-suite pass rate*. All 682 declared test methods
 execute across 92 official classes, with no skipped methods or deployment blockers.
-The suite remains failing and uncertified because 172 methods report errors.
+The suite remains failing and uncertified because 164 methods report errors.
 
 The detailed command, binary inventory, counts and remaining categories are in
 link:{repo-ibarra}/src/branch/main/ibarra-tck/BASELINE.md[the recorded baseline].
@@ -79,6 +79,14 @@ The include-forward prototype is withheld after a reproduced child response-wrap
 regression. Its original official method remains failing (IBARRA-119/130); no
 prototype pass is credited here. The source evidence and follow-up are in
 link:{repo-ibarra}/src/branch/main/studies/include-forward-wrapper-dispatch.md[the dispatch study].
+
+The signature/envelope follow-up restores eight more methods with no regression.
+The unchanged official signature driver checks the configured spec API jars;
+tagdependent named attributes use ordinary semantics while explicit bodies stay
+opaque. XML output accepts its specified yes/no omission aliases and rejects
+nonempty bodies before normalization. All JSP document general methods now pass;
+the final run has 47 completely passing classes. Broader XML prolog/doctype output
+semantics remain open, and typed include-forward dispatch is a separate slice.
 
 `official-pages-tck-smoke` runs on pull requests and `main`. It clean-installs
 Ibarra, runs 33 adapter regression tests, then three official JspFactory

@@ -20,23 +20,23 @@ and exact preparation commands are in [README.md](README.md).
 | Official classes selected | 92 |
 | Declared runtime-visible JUnit `@Test` methods in the official binary | 682 |
 | Official Surefire entries reported | 682 |
-| Passing test methods | 510 |
-| Failing method entries | 172 |
+| Passing test methods | 518 |
+| Failing method entries | 164 |
 | Class-level setup/deployment errors | 0 |
-| Total reported errors | 172 |
+| Total reported errors | 164 |
 | Assertion failures reported as Surefire `failure` | 0 |
 | Skipped entries | 0 |
 | Adapter regression tests (separate invocation) | 33/33 |
 | CI smoke subset (factory/engine + character sequence/EL/encoding configuration) | 18/18 |
 
-Surefire reports `Tests run: 682, Failures: 0, Errors: 172, Skipped: 0` and exits
+Surefire reports `Tests run: 682, Failures: 0, Errors: 164, Skipped: 0` and exits
 nonzero. The TCK's HTTP assertion helper reports failures as exceptions, hence
 `errors` rather than `failures`; zero in the failure column does not mean success.
 
-**510/682 = 74.8% measured full-suite pass rate**. All 682 declared method entries
+**518/682 = 76.0% measured full-suite pass rate**. All 682 declared method entries
 now execute across the 92 official classes; there are no class-level setup errors
 or skipped entries. This records complete method execution for this distribution,
-not certification: 172 methods still report errors.
+not certification: 164 methods still report errors.
 
 The deferred-signature simple-name fix was rechecked with the full suite on
 2026-10-13: the same 504 methods pass and the same 178 methods fail, with no
@@ -77,6 +77,20 @@ the fix, but its case-sensitive unexpected text did not prove body suppression;
 the new HTTP counter/alias regression does. The include-forward prototype is
 withheld after a concrete child response-wrapper regression (IBARRA-119/130),
 so positiveIncludeForwardTest is still an error and receives no coverage credit.
+
+The signature/envelope batch then restores eight methods: the original API
+signature check, jspConfigurationIncludes3Test, jspRootPrefixTest and all five
+previous errors in jspdocument.general (including the real named-attribute/raw-body
+fixture). Final result: 518/682 (76.0%), 164 errors, zero setup/skips, 47 completely
+passing classes and no regression against merged PR #32. Default reactor 309,
+adapter 33/33, smoke 18/18 and the independent example package pass.
+
+The official signature driver now receives the exact staged spec APIs and its
+java.base image. Tagdependent named attributes are evaluated normally while the
+explicit body stays opaque. XML output accepts its specified yes/no aliases;
+empty-body/context validation prevents the initially observed jspOutputBodyTest
+regression. The six earlier output errors remain; no broader prolog/doctype support
+is claimed. Typed include forwarding is still a separate upstream-dependent slice.
 
 The denominator was inventoried from the verified official jar with Java 25:
 

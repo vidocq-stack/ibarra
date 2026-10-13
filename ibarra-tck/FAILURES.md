@@ -1,13 +1,15 @@
 # Official Pages failure inventory
 
 Date: 2026-10-13, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-This inventory records the remaining 172 method errors and no setup errors
+This inventory records the remaining 164 method errors and no setup errors
 after legacy WAR library, JspIdConsumer, direct property and collection-method
 accessor generation and JSP forwarding output-state checks. All 682 official methods
 now execute. Each class keeps its previous stable id.
 The parallel compiler batch restores literal editor conversion, opaque tagdependent
 bodies and invalid precompile handling. Include-forward stays open: its prototype
 was withheld after the wrapper regression recorded in IBARRA-130.
+The signature/envelope follow-up restores eight more methods without a regression;
+the six pre-existing output errors remain tracked under TCK-033.
 Resolved method entries remain as a trace; other causes still need investigation.
 Append new ids when discovering new failing classes, without renumbering records.
 
@@ -318,12 +320,13 @@ Resolved methods (2026-10-13, direct WAR bean property access):
 ## TCK-020 — ee.jakarta.tck.pages.signaturetest.jsp.JSPSigTestIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.signaturetest.jsp.JSPSigTestIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Status: RESOLVED; the unchanged official signature method passes.
+- Symptom: the previous signature driver error is resolved.
+- Minimal repro: select `ee.jakarta.tck.pages.signaturetest.jsp.JSPSigTestIT`.
+- Cause: an empty API path (IBARRA-092). The official profile now supplies staged
+  exact spec APIs and the driver's java.base image, without changing expectations.
 
-Failing methods:
+Resolved methods (2026-10-13, official signature configuration):
 
 - `signatureTest`
 
@@ -348,12 +351,12 @@ Failing methods:
 ## TCK-022 — ee.jakarta.tck.pages.spec.configuration.includes.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.spec.configuration.includes.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Status: RESOLVED; the official class now passes.
+- Symptom: the previous XML/prelude/coda page assertion error is resolved.
+- Minimal repro: select `ee.jakarta.tck.pages.spec.configuration.includes.URLClientIT`.
+- Cause: valid XML output omission aliases were rejected (IBARRA-135).
 
-Failing methods:
+Resolved methods (2026-10-13, XML output omission aliases):
 
 - `jspConfigurationIncludes3Test`
 
@@ -685,19 +688,23 @@ Resolved methods (2026-10-12, ordinary setter binding):
 
 Failing methods:
 
-- `jspRootPrefixTest`
 - `negativeJspRootTest`
+
+Resolved methods (2026-10-13, XML output omission aliases):
+
+- `jspRootPrefixTest`
 
 ## TCK-046 — ee.jakarta.tck.pages.spec.jspdocument.general.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.spec.jspdocument.general.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Status: RESOLVED; all official methods in the class now pass.
+- Symptom: previous XML output/envelope translation errors are resolved.
+- Minimal repro: select `ee.jakarta.tck.pages.spec.jspdocument.general.URLClientIT`.
+- Cause: named raw-body envelopes and specified yes/no output values were not
+  supported. Attribute/body separation and narrow output validation fix them.
 - The previous TLD setup blocker was resolved by IBARRA-093/094 on 2026-10-12.
 
-Failing methods:
+Resolved methods (2026-10-13, tagdependent envelopes and XML output aliases):
 
 - `invalidPlainURITest`
 - `identifyByExtensionTest`
