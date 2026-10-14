@@ -12,27 +12,34 @@ Run date: 2026-10-14, Temurin Java 25 and Maven 3.9.16.
 
 [source,bash]
 ----
-./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 clean install
-./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 -Ptck -pl ibarra-tck clean test
-./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 -Ptck,tck-official -pl ibarra-tck clean test '-Dtest=ee.jakarta.tck.pages.**.*IT'
+./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 install
+./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 -f examples/precompiled-pages/pom.xml clean package
+MAVEN_ARGS='-o -Dmaven.repo.local=/private/tmp/ibarra-forward-m2' ./run-official-tck-pages-4.0.sh --no-install all
 ----
 
 Official artifacts had already been prepared. The isolated cache includes the
-unpublished typed-forward producer from
+typed-forward producer from
 link:https://codefloe.com/Vidocq/foy/pulls/47[Foy #47], signed commit `073288d`.
-The local result requires that producer; independent CI must wait for its merge
-and snapshot publication. No temporary workflow bootstrap or global cache install
-was used. The ordinary reactor passes 319 tests, adapter 34/34 and the independent
+The measured run used its isolated artifacts; Foy #47 has now merged and completed
+snapshot publication. Independent Ibarra CI remains a separate validation result.
+No temporary workflow bootstrap or global cache install
+was used. The ordinary reactor install passes 338 tests, adapter 34/34 and the independent
 Maven example packages; build provenance generation was enabled.
 The verified official binary contains 92 test classes and 682 declared JUnit
-`@Test` methods. The run records *519 passing methods* and *163 failing methods*,
+`@Test` methods. Code head `119151d` records *523 passing methods* and *159 failing methods*,
 with *zero class-level setup/deployment errors*. Surefire therefore reports 682
-entries, 163 errors, zero assertion failures and zero skips, and exits nonzero.
+entries, 159 errors, zero assertion failures and zero skips, and exits nonzero.
 The upstream HTTP assertion helper reports failures as exceptions.
 
-*519/682 = 76.1% measured full-suite pass rate*. All 682 declared test methods
+*523/682 = 76.7% measured full-suite pass rate*. All 682 declared test methods
 execute across 92 official classes, with no skipped methods or deployment blockers.
-The suite remains failing and uncertified because 163 methods report errors.
+The suite remains failing and uncertified because 159 methods report errors.
+
+Static XML output restores exactly `doctypeSystemPublicTest`, `simpleDefaultTest`,
+`doctypeSystemTest` and `jspOutputJspRootOmitDeclDefaultTest`. All 519 previous passes
+remain, and all 682 class/method keys match with no missing or extra entry. The run
+has 48 completely passing classes. Two output methods still require unsupported
+XML tag files: `jspOutputOmitDeclValidValuesTest` and `jspOutputUsageContextTest`.
 
 The detailed command, binary inventory, counts and remaining categories are in
 link:{repo-ibarra}/src/branch/main/ibarra-tck/BASELINE.md[the recorded baseline].
@@ -96,8 +103,10 @@ The unchanged official signature driver checks the configured spec API jars;
 tagdependent named attributes use ordinary semantics while explicit bodies stay
 opaque. XML output accepts its specified yes/no omission aliases and rejects
 nonempty bodies before normalization. All JSP document general methods now pass;
-the final run has 47 completely passing classes. Broader XML prolog/doctype output
-semantics remain open.
+that stage's final run had 47 completely passing classes. The subsequent XML output
+delivery collects declaration and DOCTYPE settings statically over the translation
+unit and emits declaration, DOCTYPE and body in order. Source DTDs and external
+entities remain rejected; no official fixture was changed.
 
 `official-pages-tck-smoke` runs on pull requests and `main`. It clean-installs
 Ibarra, runs 34 adapter regression tests, then three official JspFactory

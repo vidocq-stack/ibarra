@@ -21,6 +21,10 @@ generator emits Java servlet source, compiles it at build time and renders
 fixtures for scripting, standard actions, configuration and direct bean access.
 Static includes can mix JSP/JSPX syntax; source encodings are validated per file.
 Byte sources support BOM/prolog detection and strict decoding before translation.
+XML output declarations and SYSTEM/PUBLIC DOCTYPE metadata are collected at
+translation time across static includes, then emitted before the page body.
+Declarations use the response encoding; input DTDs and external entities remain
+rejected. XML tag-file output semantics remain pending.
 The Maven `precompile` goal emits pages and an index into an application module;
 a packaged application JAR is discovered and rendered without compiler modules.
 EL compiles at build time through Peano into application-owned classes; startup
@@ -72,14 +76,14 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 | `ibarra-compiler` | JSP/JSPX parser, page model, Java generator, initial tag handlers and build-time compiler | I2 implemented; I3/I6 in progress |
 | `ibarra-maven-plugin` | `precompile` goal at process-classes; module service registration | Initial I4 implemented |
 | `ibarra-foy` | Optional Foy engine provider; application layer, routing and TLD listener lifecycle | Initial I5 implemented |
-| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; 18-test smoke passes, 76.1% measured full-suite pass rate |
+| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; 18-test smoke passes, 76.7% measured full-suite pass rate |
 
-The latest local full run passes 519/682 official methods with no regression against
-the previous 518 passes; 163 errors remain, so certification is pending.
-Typed forwarding currently requires the unpublished producer in
-[Foy #47](https://codefloe.com/Vidocq/foy/pulls/47). This result uses its signed
-candidate in an isolated Maven repository; ordinary CI needs that producer merged
-and published first. See [the exact baseline](ibarra-tck/BASELINE.md).
+The latest local full run passes 523/682 official methods with no regression against
+the previous 519 passes; 159 method errors remain, so certification is pending.
+The ordinary reactor passes 338 tests, the adapter 34/34 and the independent example
+packages successfully. Typed forwarding uses the producer delivered in
+[Foy #47](https://codefloe.com/Vidocq/foy/pulls/47), now merged and published.
+See [the exact baseline](ibarra-tck/BASELINE.md).
 
 Planned modules (`ibarra-bench`) are described in [PLAN.md](PLAN.md) and created by
 the milestone that needs them. JSTL is out of scope.

@@ -37,8 +37,11 @@
 - Cause: the initial generator emits explicit declarations at action position;
   full translation-unit prolog defaults, context/body validation and DOCTYPE
   output are not yet implemented.
-- Status: OPEN. The alias fix is intentionally bounded; full section 5.13 support
-  needs separate prolog collection and validation. No official fixtures are rewritten.
+- Status: PARTIALLY FIXED (2026-10-14). Static XML declaration/DOCTYPE output restores
+  four original methods: `doctypeSystemPublicTest`, `simpleDefaultTest`,
+  `doctypeSystemTest` and `jspOutputJspRootOmitDeclDefaultTest`.
+  `jspOutputOmitDeclValidValuesTest` and `jspOutputUsageContextTest` remain errors
+  because their XML tag files are unsupported. No official fixtures are rewritten.
 - DOCTYPE progress (2026-10-14): translation-time metadata now collects all structured
   `jsp:output` occurrences, including unexecuted action bodies and static includes.
   Each action requires root/system together and PUBLIC requires SYSTEM; identical
@@ -54,9 +57,9 @@
   passes for namespace aliases/default namespaces, literal EL-looking identifiers,
   decoded LF/CR and unsupported foreign-qualified attributes. Command:
   `./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 -pl ibarra-compiler -am test`.
-  Prologue/default handling and the action's final no-op are coordinated separately;
-  declaration emission must precede the DOCTYPE in the integrated generator. XML tag-file
-  semantics remain pending, and the official output fixture has not been rewritten.
+  The integrated generator emits the response-encoding declaration, then DOCTYPE,
+  then body; output actions have no runtime instructions. XML tag-file semantics
+  remain pending, and the official output fixture has not been rewritten.
 - Integration investigation (2026-10-14): the first combined compiler run rejected a
   foreign-qualified output attribute correctly but changed its established diagnostic;
   `xmlDoctypeValuesStayStaticLiteralsAndRecognizeJspNamespaceAliases` reproduced the
@@ -74,8 +77,10 @@ compatibility diagnostic, including equivalent aliases. Generated declarations
 precede all template output and use the actual response character encoding,
 never the source pageEncoding. Seven compiled-rendering regressions were red
 before the fix; default namespaces, mixed includes and all aliases are also covered.
-DOCTYPE collection is a separately integrated companion change; no full official
-coverage gain is credited by this worktree.
+The integrated delivery passes 338 ordinary reactor tests, adapter 34/34 and the
+independent example package. The full official run passes 523/682 with 159 method
+errors, zero assertion failures/setup/skips and no regression against all 519
+previous passes. The four restored selectors are tracked under TCK-033.
 
 ## IBARRA-118 · 2026-10-13 · Valid precompile queries still execute the JSP body
 
@@ -400,9 +405,10 @@ coverage gain is credited by this worktree.
 
 ## IBARRA-098 · 2026-10-12 · Remaining official Pages assertions after deployment recovery
 
-- Symptom: the 2026-10-14 full official run reports 163 method errors and no class-level
-  setup/deployment errors after 519 passing methods; the previous baseline was 518 passes.
-  The unchanged positiveIncludeForwardTest is restored with no previous-pass regression.
+- Symptom: the 2026-10-14 full official run reports 159 method errors and no class-level
+  setup/deployment errors after 523 passing methods; the previous baseline was 519 passes.
+  Four XML output methods are restored with no previous-pass regression. All 682
+  method keys remain present; there are zero assertion failures or skips.
 - Minimal repro: `./run-official-tck-pages-4.0.sh all`; individual classes and
   failing method selectors are recorded under stable TCK ids in
   [ibarra-tck/FAILURES.md](ibarra-tck/FAILURES.md).

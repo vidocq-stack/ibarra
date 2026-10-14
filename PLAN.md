@@ -476,8 +476,8 @@ reactor passes 319 tests, adapter 34/34 and the independent example packages.
 The complete official run passes 519/682 (76.1%), with 163 method errors, zero
 setup/skips and 48 completely passing classes. Exactly positiveIncludeForwardTest
 is restored; all 518 previous passes remain. Provenance generation was enabled.
-This local run uses isolated unpublished Foy #47 commit073288d artifacts; merge
-and publication of that producer must precede independent Ibarra CI validation.
+That local run used isolated, then-unpublished Foy #47 commit073288d artifacts;
+producer merge/publication was a prerequisite for independent Ibarra CI validation.
 
 ## XML declaration generation (2026-10-14)
 
@@ -491,8 +491,24 @@ literals are rejected as a conservative compatibility guard matching established
 implementation behavior, including equivalent aliases. Runtime response character
 encoding selects the declaration
 encoding independently of source decoding/pageEncoding. Output nodes generate no
-runtime instructions and RawText payloads stay opaque. DOCTYPE emission is the
-companion slice; full-suite counts are updated only after combined validation.
+runtime instructions and RawText payloads stay opaque. SYSTEM/PUBLIC DOCTYPE metadata
+is collected statically across the same unit. Each action requires root/system
+together and PUBLIC requires SYSTEM; repeated identical values are accepted and
+conflicting values retain their source diagnostics. The XML declaration precedes
+DOCTYPE and normal body output. Input DOCTYPE declarations and external entities
+remain rejected; output identifiers never trigger document lookup. Identifier
+lexical validity remains the page author's responsibility.
+
+On combined code head `119151d`, the reactor install passes 338 tests (core 71,
+compiler 260, plugin 4 and binding 3); adapter 34 and the independent example
+clean-package also pass. The complete official run passes 523/682 (76.7%), with
+159 method errors, zero assertion failures/setup/skips, 92 classes and 48 completely
+passing classes. Exactly `doctypeSystemPublicTest`, `simpleDefaultTest`,
+`doctypeSystemTest` and `jspOutputJspRootOmitDeclDefaultTest` are restored;
+all 519 prior passes remain and all 682 method keys match. The two remaining
+output methods require unsupported XML tag files (IBARRA-136/TCK-033). No official
+fixtures were changed. Typed forwarding's Foy #47 producer has since merged and
+completed snapshot publication; that earlier milestone's results remain recorded above.
 
 ## Initial I4 implementation
 

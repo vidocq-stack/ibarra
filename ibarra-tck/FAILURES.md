@@ -1,7 +1,7 @@
 # Official Pages failure inventory
 
 Date: 2026-10-14, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-This inventory records the remaining 163 method errors and no setup errors
+This inventory records the remaining 159 method errors and no setup errors
 after legacy WAR library, JspIdConsumer, direct property and collection-method
 accessor generation and JSP forwarding output-state checks. All 682 official methods
 now execute. Each class keeps its previous stable id.
@@ -10,7 +10,8 @@ bodies and invalid precompile handling. The unsafe include-forward prototype was
 withheld; the typed dispatch replacement now restores positiveIncludeForwardTest
 without bypassing application wrappers (IBARRA-119/130).
 The signature/envelope follow-up restores eight more methods without a regression;
-the six pre-existing output errors remain tracked under TCK-033.
+static XML prolog/DOCTYPE generation restores four of the six pre-existing output
+errors. The two XML tag-file methods remain tracked under TCK-033.
 Resolved method entries remain as a trace; other causes still need investigation.
 Append new ids when discovering new failing classes, without renumbering records.
 
@@ -502,19 +503,23 @@ Failing methods:
 ## TCK-033 — ee.jakarta.tck.pages.spec.core_syntax.actions.output.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
+- Status: PARTIALLY RESOLVED (2026-10-14); two method errors remain.
+- Symptom: XML tag-file output scenarios still report errors; the pure JSP-document
+  declaration/default/DOCTYPE methods now pass.
 - Minimal repro: select `ee.jakarta.tck.pages.spec.core_syntax.actions.output.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Cause: the remaining methods use unsupported XML tag files (IBARRA-136).
 
 Failing methods:
 
-- `doctypeSystemPublicTest`
 - `jspOutputOmitDeclValidValuesTest`
+- `jspOutputUsageContextTest`
+
+Resolved methods (2026-10-14, static XML output prolog and DOCTYPE):
+
+- `doctypeSystemPublicTest`
 - `simpleDefaultTest`
 - `doctypeSystemTest`
 - `jspOutputJspRootOmitDeclDefaultTest`
-- `jspOutputUsageContextTest`
 
 ## TCK-034 — ee.jakarta.tck.pages.spec.core_syntax.actions.param.URLClientIT
 

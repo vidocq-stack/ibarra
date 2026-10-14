@@ -1,29 +1,32 @@
 # Jakarta Pages 4.0.0 diagnostic baseline
 
 Date: 2026-10-14. Temurin Java 25, Maven 3.9.16, macOS; Ibarra development
-version `0.4.0-SNAPSHOT` at `e0c5295`, modular Foy/Chappe and published Peano snapshots.
+version `0.4.0-SNAPSHOT` at code head `119151d`, modular Foy/Chappe and published Peano snapshots.
 This records compatibility checks, not a performance benchmark or certification.
 
 ```bash
 export JAVA_HOME=/Users/yblazart/.sdkman/candidates/java/25-tem
 export PATH="$JAVA_HOME/bin:$PATH"
-rtk ./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 clean install
+rtk ./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 install
 rtk ./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 -f examples/precompiled-pages/pom.xml clean package
-rtk ./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 -Ptck -pl ibarra-tck clean test
-rtk ./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 -Ptck,tck-official -pl ibarra-tck clean test '-Dtest=ee.jakarta.tck.pages.**.*IT'
+MAVEN_ARGS='-o -Dmaven.repo.local=/private/tmp/ibarra-forward-m2' rtk ./run-official-tck-pages-4.0.sh --no-install all
 ```
 
 Prerequisites were prepared by `prepare-tck.py`, preserving the official embedded
 POM, and already present in the isolated cache. Distribution checksums and artifact
 preparation commands are in [README.md](README.md). No provenance skip was used.
-The default reactor passes 319 tests; the independent example packages successfully.
+The default reactor install passes 338 tests; the independent example clean-package
+succeeds. The first clean install exposed an established diagnostic mismatch for a
+foreign-qualified output attribute; code head `119151d` fixes it and the final install
+passes without skipping build provenance generation.
 
 This candidate depends on [Foy #47](https://codefloe.com/Vidocq/foy/pulls/47),
 signed commit `073288db47fa12460c5662fb6a4aff25ff4de2bb`, rebased on `9ab0971`.
 Its parent/API/core artifacts were installed only in the independent local cache;
-the global Maven repository was unchanged. The producer is not yet published,
-so this local result does not assert independent CI compatibility with the current
-published Foy snapshot. Publication order is Foy merge/deploy, then Ibarra validation.
+the global Maven repository was unchanged. Foy #47 has since merged and its main
+build/deploy completed successfully, publishing the producer snapshots before this
+Ibarra delivery. This local run used the isolated cache; independent Ibarra CI remains
+a separate validation result.
 
 ## Recorded results
 
@@ -32,27 +35,36 @@ published Foy snapshot. Publication order is Foy merge/deploy, then Ibarra valid
 | Official classes selected | 92 |
 | Declared runtime-visible JUnit `@Test` methods in the official binary | 682 |
 | Official Surefire entries reported | 682 |
-| Passing test methods | 519 |
-| Failing method entries | 163 |
+| Passing test methods | 523 |
+| Failing method entries | 159 |
 | Class-level setup/deployment errors | 0 |
-| Total reported errors | 163 |
+| Total reported errors | 159 |
 | Assertion failures reported as Surefire `failure` | 0 |
 | Skipped entries | 0 |
 | Adapter regression tests (separate invocation) | 34/34 |
 | Smoke subset methods passing within this full run | 18/18 |
 
-Surefire reports `Tests run: 682, Failures: 0, Errors: 163, Skipped: 0` and exits
+Surefire reports `Tests run: 682, Failures: 0, Errors: 159, Skipped: 0` and exits
 nonzero. The TCK's HTTP assertion helper reports failures as exceptions, hence
 `errors` rather than `failures`; zero in the failure column does not mean success.
 
-**519/682 = 76.1% measured full-suite pass rate**. All 682 declared method entries
+**523/682 = 76.7% measured full-suite pass rate**. All 682 declared method entries
 now execute across the 92 official classes; there are no class-level setup errors
 or skipped entries. This records complete method execution for this distribution,
-not certification: 163 methods still report errors.
+not certification: 159 methods still report errors.
 
-The typed-forward delivery restores exactly `positiveIncludeForwardTest` against
-the merged 518-pass baseline. Comparison by all 682 class/method keys finds no
-regression or missing entry. There are 48 completely passing classes, including
+Static XML output restores exactly `doctypeSystemPublicTest`, `simpleDefaultTest`,
+`doctypeSystemTest` and `jspOutputJspRootOmitDeclDefaultTest` in the output-action
+class against the merged 519-pass baseline. Comparison by all 682 class/method keys
+finds no regression, missing or extra entry. The two remaining output errors,
+`jspOutputOmitDeclValidValuesTest` and `jspOutputUsageContextTest`, require unsupported
+XML tag files. Declarations use the response encoding and precede static SYSTEM/PUBLIC
+DOCTYPE metadata and page output. All original official fixtures remain unchanged.
+
+The preceding typed-forward delivery restored exactly `positiveIncludeForwardTest`
+against the merged 518-pass baseline, reaching 519 passes and 163 method errors.
+Its ordinary reactor passed 319 tests; adapter 34/34 and the independent example
+package passed. There are still 48 completely passing classes, including
 all twelve include-action methods and all seven forward-action methods. The new
 HTTP fixture additionally verifies child-added wrapper headers, cached writer
 transformations, nested ancestors, stopped parent side effects and missing-target
@@ -144,10 +156,11 @@ ordinary Ibarra unit tests or Peano's independent EL TCK.
 | JspIdConsumer | All three methods pass; IBARRA-086 fixed by stable per-occurrence generated identifiers. |
 | TagLibraryValidator | Two methods fail; IBARRA-087. |
 | TryCatchFinally | The official method passes; IBARRA-088 was an EL verifier-access issue, fixed through direct WAR property accessors. |
-| Unbuffered forward | One method fails; IBARRA-089. |
-| PropertyEditor conversion | One method fails; IBARRA-090. |
-| Invalid precompile query | One method fails; IBARRA-091. |
-| Signature tooling | One method fails with an empty signature-tool classpath; IBARRA-092. |
+| Unbuffered forward | The method passes; IBARRA-089 is fixed. |
+| PropertyEditor conversion | The method passes; IBARRA-090 is fixed. |
+| Invalid precompile query | The method passes; IBARRA-091 is fixed. |
+| Signature tooling | The exact staged APIs and Java image pass; IBARRA-092 is fixed. |
+| XML output | Four former errors now pass; the two remaining methods require XML tag files, IBARRA-136/TCK-033. |
 
 The previous runner baseline (PR #22) recorded 174 passes, 11 method errors and
 54 setup errors. The per-page recovery stage recorded 427 passes, 179 method errors and 8 setup

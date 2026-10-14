@@ -114,8 +114,9 @@ accepts decoded text or strictly decoded byte sources, including independently
 encoded static resources. BOMs and XML byte signatures/prologs are detected
 before parsing; encoding directives are scanned with the standard lexer rather
 than matched inside comments or EL strings. Full semantic validation remains open.
-DOCTYPE declarations and external
-entities are unsupported in this initial parser; no external documents are read.
+Input DOCTYPE declarations and external entities remain unsupported; no external
+documents are read. Generated output DOCTYPE declarations use static `jsp:output`
+metadata and do not relax that input parser boundary.
 
 == Initial Java generator (I3 in progress)
 
@@ -241,7 +242,14 @@ Declarations precede all template output and use the effective response characte
 encoding rather than source `pageEncoding`. Output actions emit no body instructions;
 tagdependent raw payloads are not metadata. As a conservative compatibility guard,
 differing repeated omission literals are diagnosed, including equivalent aliases.
-DOCTYPE generation is a separately integrated companion slice.
+SYSTEM/PUBLIC DOCTYPE metadata is collected over the same structured translation
+unit, independently of runtime control flow. Each output action requires root/system
+together; PUBLIC requires SYSTEM. Identical repeated values are accepted and
+conflicts retain their source diagnostics. Generated order is XML declaration,
+DOCTYPE, then normal page content, including preserved prolog whitespace or processing
+instructions. Identifier literals retain decoded characters and use a quote delimiter
+absent from their value; no DTD lookup occurs. URI, public-ID and root-name lexical
+validity remains the page author's responsibility. XML tag-file output remains pending.
 New shared-scope beans use direct construction; existing
 typed shared beans are supported. This is not TCK certification.
 

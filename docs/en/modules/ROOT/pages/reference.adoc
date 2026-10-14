@@ -110,6 +110,19 @@ own syntax. XML namespace declarations are separate from directive attributes.
 Standard taglib declarations cannot redefine an enclosing XML prefix to a
 different URI.
 
+For JSP documents, `jsp:output` settings are collected at translation time across
+static includes. Documents without a `jsp:root` emit an XML declaration by default;
+namespace-qualified JSP roots omit it. Explicit `yes`/`true` omit the declaration,
+while `no`/`false` include it using the response character encoding. Differing
+repeated literal omission settings are diagnosed, including equivalent aliases.
+Each DOCTYPE action requires `doctype-root-element` and `doctype-system` together;
+`doctype-public` is optional and requires SYSTEM. Identical DOCTYPE values are
+deduplicated across the unit and conflicts carry source diagnostics. Generated
+order is declaration, DOCTYPE, then page body. Output actions emit no local content,
+even inside conditional bodies; tagdependent raw payloads remain opaque. Output
+identifiers are literals and never trigger DTD/resource lookup. Input DOCTYPE and
+external entities remain rejected. XML tag-file output is not yet implemented.
+
 `pageEncoding` applies only to its source file and may occur once per file.
 Encoding aliases are compared using `Charset`; malformed or conflicting
 encodings produce source diagnostics. Included encodings do not set response
