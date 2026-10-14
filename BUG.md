@@ -422,6 +422,9 @@ is resolved.
   setup/deployment errors after 525 passing methods; the previous baseline was 523 passes.
   Six XML output methods pass with no previous-pass regression. All 682
   method keys remain present; there are zero assertion failures or skips.
+- Targeted follow-up: TCK-005 now passes all 11 methods in `URLClientIT`, including
+  `bodyTagSupportVariableSynchronizationTest`; the full-suite aggregate still needs
+  a fresh run before updating the baseline counts.
 - Minimal repro: `./run-official-tck-pages-4.0.sh all`; individual classes and
   failing method selectors are recorded under stable TCK ids in
   [ibarra-tck/FAILURES.md](ibarra-tck/FAILURES.md).

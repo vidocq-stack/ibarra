@@ -47,6 +47,11 @@ Surefire reports `Tests run: 682, Failures: 0, Errors: 157, Skipped: 0` and exit
 nonzero. The TCK's HTTP assertion helper reports failures as exceptions, hence
 `errors` rather than `failures`; zero in the failure column does not mean success.
 
+After this full-suite snapshot, a targeted rerun passed all 11 methods in
+`bodytagsupport.URLClientIT`, including `bodyTagSupportVariableSynchronizationTest`.
+The complete 682-method suite has not been rerun, so the table above remains the
+last measured aggregate baseline.
+
 **525/682 = 77.0% measured full-suite pass rate**. All 682 declared method entries
 now execute across the 92 official classes; there are no class-level setup errors
 or skipped entries. Compared with the previous 523-pass run, the two XML tag-file

@@ -32,6 +32,7 @@ public final class BeanClasses {
     public record Function(String owner, String method, String returnType, List<String> parameters) {
         public Function { parameters = List.copyOf(parameters); }
     }
+    public record TagVariable(String name, String className, boolean declare, int scope) { }
     public record Handler(String sourceName, boolean simple, boolean iteration, boolean buffered,
             boolean catchFinally, boolean dynamic, boolean jspIdConsumer) { }
     private final List<Path> paths;
@@ -158,6 +159,29 @@ public final class BeanClasses {
                 subtype(type, "jakarta.servlet.jsp.tagext.DynamicAttributes", at, new HashSet<>()),
                 subtype(type, "jakarta.servlet.jsp.tagext.JspIdConsumer", at, new HashSet<>()));
     }
+
+    /** Reads statically declared TEI variables without loading the application class. */
+    public List<TagVariable> tagVariables(String type, SourceLocation at) {
+        constructor(type, at, "Tag extra info");
+        if (!subtype(type, "jakarta.servlet.jsp.tagext.TagExtraInfo", at, new HashSet<>()))
+            throw new PageParseException(at, "Tag extra info class does not extend TagExtraInfo: " + type);
+        var visited = new HashSet<String>();
+        String current = type;
+        while (visited.add(current)) {
+            var model = read(current, at);
+            try {
+                var variables = TagExtraInfoVariables.read(model);
+                if (variables.isPresent()) return variables.orElseThrow().stream()
+                        .map(value -> new TagVariable(value.name(), value.className(), value.declare(), value.scope())).toList();
+            } catch (RuntimeException failure) {
+                throw new PageParseException(at, "Tag extra info variable metadata is not a supported static contract: " + type, failure);
+            }
+            if (model.superclass().isEmpty()) break;
+            current = model.superclass().orElseThrow().asInternalName().replace('/', '.');
+        }
+        return List.of();
+    }
+
     private boolean subtype(String type, String target, SourceLocation at, Set<String> visited) {
         if (type.equals(target)) return true;
         if (type.equals("java.lang.Object") || !visited.add(type)) return false;

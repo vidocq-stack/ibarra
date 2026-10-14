@@ -73,6 +73,18 @@ simple parents through the standard TagAdapter for classic handlers.
 Unqualified DynamicAttributes use direct interface calls when advertised by
 the TLD and implemented by the handler.
 
+== TagExtraInfo scripting variables
+
+For classic handlers, the precompiler reads literal `VariableInfo` arrays returned
+by `TagExtraInfo.getVariableInfo` from class files. It generates declared locals
+and synchronizes them from `PageContext` after `doStartTag`, `doInitBody`, each
+`doAfterBody`, and `doEndTag` according to their `AT_BEGIN`, `NESTED` or `AT_END`
+scope. The TEI class is not loaded or executed. Metadata that depends on `TagData`,
+non-diagnostic helper calls or other dynamic computation is rejected during translation.
+
+This support does not implement `TagExtraInfo.validate`, `TagLibraryValidator`,
+TLD `<variable>` declarations or the complete `TagInfo` and `TagLibraryInfo` APIs.
+
 == Compiler-provided tag identifiers
 
 Classic and simple handlers implementing
@@ -147,17 +159,16 @@ bean declarations, directives or actions creates no page variables or metadata.
 == Current boundary
 
 This is an initial I6 implementation. Broader standard-action named-attribute
-support, namespaced dynamic attributes,
-scripting variables, TagExtraInfo, TagLibraryValidator and tag files
-remain follow-up work. Unsupported invoked metadata fails
+support, namespaced dynamic attributes, dynamic TEI metadata, TagLibraryValidator
+and tag files remain follow-up work. Unsupported invoked metadata fails
 translation; no reflective fallback or handler pooling is enabled.
 
-The official TEI metadata fixtures also share/reset translation-time static state
-with their JSP requests. Build-side validation alone does not preserve that state
-in the separate server process. The observed contract and required design work are
-recorded in link:{repo-ibarra}/src/branch/main/studies/tag-extra-info-aot.md[the TEI/AOT study].
-Metadata models, validation and variables remain incomplete; no fixture rewrite
-or artificial passing marker is used.
+Some official TEI validation fixtures share and reset translation-time static state
+with JSP requests. Build-side validation alone does not preserve that state in the
+separate server process. The observed contract and remaining design work are recorded
+in link:{repo-ibarra}/src/branch/main/studies/tag-extra-info-aot.md[the TEI/AOT study].
+The static variable synchronization case passes without replaying TEI code at request
+time or rewriting fixtures; validation and broader metadata APIs remain incomplete.
 
 Java-expression request values must be compatible with the selected ordinary setter
 parameter. Fragment, ValueExpression, MethodExpression and mixed Object setter
@@ -172,7 +183,7 @@ full tag/TLV coverage remains incomplete and failing.
 == Verification
 
 Named-module fixtures exercise literal/runtime attributes, iteration, buffered
-bodies, writer targets, mixed parents, setter failures, catch/finally/release,
+bodies, static TEI variable synchronization, writer targets, mixed parents, setter failures, catch/finally/release,
 skip-page propagation and metadata/URI precedence. HTTP tests precompile private
 application handlers and serve JSP/JSPX without exports, opens or compiler
 modules at runtime. Repeated requests prove fresh handler state.

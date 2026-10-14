@@ -57,6 +57,17 @@ class TldParserTest {
     }
 
     @Test
+    void tagExtraInfoClassIsRetainedForBuildTimeVariableAnalysis() {
+        var library = parse("<taglib><tag><name>x</name><tag-class>example.Handler</tag-class>"
+                + "<tei-class>example.Metadata</tei-class></tag></taglib>");
+        var tag = library.tags().get("x");
+        assertEquals("example.Metadata", tag.teiClass());
+        assertFalse(tag.unsupportedMetadata());
+        assertThrows(PageParseException.class, () -> parse("<taglib><tag><name>x</name>"
+                + "<tag-class>example.Handler</tag-class><tei-class>not a class</tei-class></tag></taglib>"));
+    }
+
+    @Test
     void legacyDoctypeIsAcceptedWithoutFetchingItsExternalDefinition() {
         var library = parse("""
                 <!DOCTYPE taglib SYSTEM "file:///unavailable/tld.dtd">

@@ -1,10 +1,11 @@
 # Official Pages failure inventory
 
 Date: 2026-10-14, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-This inventory records the remaining 157 method errors and no setup errors
-after legacy WAR library, JspIdConsumer, direct property and collection-method
-accessor generation and JSP forwarding output-state checks. All 682 official methods
-now execute. Each class keeps its previous stable id.
+The last complete suite recorded 157 method errors and no setup errors after legacy
+WAR library, JspIdConsumer, direct property and collection-method accessor generation
+and JSP forwarding output-state checks. A later targeted rerun resolved TCK-005's
+remaining method; refresh the aggregate counts after the next complete suite. All 682
+official methods execute. Each class keeps its previous stable id.
 The parallel compiler batch restores literal editor conversion, opaque tagdependent
 bodies and invalid precompile handling. The unsafe include-forward prototype was
 withheld; the typed dispatch replacement now restores positiveIncludeForwardTest
@@ -79,22 +80,21 @@ for explicit root web.xml components without application exports/opens.
 
 ## TCK-005 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.bodytagsupport.URLClientIT
 
-- Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.bodytagsupport.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Date: 2026-10-14.
+- Status: RESOLVED; the official class now passes.
+- Symptom: translation rejected the tag's `TagExtraInfo` scripting-variable metadata.
+- Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.bodytagsupport.URLClientIT#bodyTagSupportVariableSynchronizationTest`.
+- Cause: TLD parsing discarded the TEI class, and generated classic-tag code did not declare or synchronize `VariableInfo` locals.
+- Resolution: Class-File analysis reads literal `VariableInfo` arrays without loading TEI classes; generated classic-tag code synchronizes declared variables at their lifecycle boundaries.
+- Verification: the targeted method passes, and all 11 methods in `URLClientIT` pass.
 
-Failing methods:
-
-- `bodyTagSupportVariableSynchronizationTest`
-
-Resolved methods (2026-10-13, direct WAR bean property access):
+Resolved methods (2026-10-13, direct WAR bean property access; 2026-10-14, TEI variable synchronization):
 
 - `bodyTagSupportEvalBodyBufferedTest`
 - `bodyTagSupportSkipBodyTest`
 - `bodyTagSupportEvalBodyIncludeTest`
 - `bodyTagSupportEmptyTagTest`
+- `bodyTagSupportVariableSynchronizationTest`
 
 
 ## TCK-006 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.functioninfo.URLClientIT

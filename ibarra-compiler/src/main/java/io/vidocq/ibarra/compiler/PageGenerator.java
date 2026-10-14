@@ -72,6 +72,7 @@ public final class PageGenerator {
         private final List<String> imports = new ArrayList<>();
         private final Map<String, SourceLocation> importLocations = new HashMap<>();
         private final JavaSource declarations = new JavaSource();
+        private final JavaSource serviceDeclarations = new JavaSource();
         private JavaSource body = new JavaSource();
         private final JavaSource fragments = new JavaSource();
         private final TldReferences.Resolved resolvedLibraries;
@@ -85,6 +86,8 @@ public final class PageGenerator {
         private final List<Map<String, BeanClasses.Function>> expressionFunctions = new ArrayList<>();
         private record ExpressionSpec(String expectedType, DeferredMethodSignature method, boolean deferred, boolean literal) { }
         private final List<ExpressionSpec> expressionSpecs = new ArrayList<>();
+        private record ScriptingVariable(String name, String type, boolean declare, int scope) { }
+        private final Map<String, ScriptingVariable> pageVariables = new LinkedHashMap<>();
         private final Map<String, String> beans = new LinkedHashMap<>();
         private boolean needsFactory;
         private int serial;
@@ -168,6 +171,7 @@ public final class PageGenerator {
             if (bool("session", true)) result.add("var session = pageContext.getSession();\n");
             if (bool("isErrorPage", false)) result.add("Throwable exception = pageContext.getErrorData().getThrowable();\n");
             result.add("boolean _jspxFailed = false, _jspxHandled = false; boolean[] _jspxForwarded = {false};\ntry {\n");
+            result.add(serviceDeclarations);
             if (xmlDeclaration) result.add("out.write(\"<?xml version=\\\"1.0\\\" encoding=\\\"\" + response.getCharacterEncoding() + \"\\\"?>\");\n");
             if (!doctype.declaration().isEmpty()) result.add("out.write(" + JavaSource.quote(doctype.declaration()) + ");\n", doctype.location());
             if (needsFactory) result.add("var _jspxExpressionFactory = _jspxFactory.getJspApplicationContext(application).getExpressionFactory();\n");
@@ -324,6 +328,12 @@ public final class PageGenerator {
         }
 
 
+        private void synchronizeVariables(List<ScriptingVariable> variables, int... scopes) {
+            for (var variable : variables) for (int scope : scopes) if (variable.scope() == scope)
+                body.add(variable.name() + " = (" + variable.type() + ") pageContext.getAttribute("
+                        + JavaSource.quote(variable.name()) + ");\n");
+        }
+
         private void customTag(PageNode.Element node, TagLibraryDescriptor library) {
             String local = node.name().substring(node.name().lastIndexOf(':') + 1);
             var tag = library.tags().get(local);
@@ -335,8 +345,27 @@ public final class PageGenerator {
                         ? "Tag validators, scripting variables or tag metadata are not supported yet" : tag.unsupportedReason());
             if (tag.tagFile() && (!tag.attributes().isEmpty() || tag.dynamicAttributes()))
                 throw error(node.location(), "Attributes on XML tag files are not supported yet");
+            var scriptingVariables = new ArrayList<ScriptingVariable>();
+            if (tag.teiClass() != null) for (var variable : classes.tagVariables(tag.teiClass(), node.location())) {
+                if (!SourceVersion.isIdentifier(variable.name()) || SourceVersion.isKeyword(variable.name())
+                        || Set.of("true", "false", "null", "_", "request", "response", "pageContext", "out",
+                                "application", "config", "page", "session", "exception").contains(variable.name())
+                        || variable.name().startsWith("_jspx"))
+                    throw error(node.location(), "Invalid or reserved tag scripting variable: " + variable.name());
+                String type = classes.expressionType(variable.className(), node.location());
+                var resolved = new ScriptingVariable(variable.name(), type, variable.declare(), variable.scope());
+                scriptingVariables.add(resolved);
+                if (variable.scope() != 0 && variable.declare()) {
+                    var previous = pageVariables.putIfAbsent(variable.name(), resolved);
+                    if (previous == null) serviceDeclarations.add(type + " " + variable.name() + " = null;\n", node.location());
+                    else if (!previous.type().equals(type))
+                        throw error(node.location(), "Conflicting tag scripting variable type: " + variable.name());
+                }
+            }
             var kind = tag.tagFile() ? new BeanClasses.Handler(tag.handlerClass(), true, false, false, false, false, false)
                     : classes.handler(tag.handlerClass(), node.location());
+            if (kind.simple() && !scriptingVariables.isEmpty())
+                throw error(node.location(), "TagExtraInfo scripting variables for SimpleTag handlers are not supported yet");
             if (kind.simple() && tag.bodyContent().equals("JSP")) throw error(node.location(), "SimpleTag cannot have JSP body-content");
             if (tag.dynamicAttributes() && !kind.dynamic()) throw error(node.location(), "Handler does not implement DynamicAttributes");
             var invocation = tagInvocation(node);
@@ -347,7 +376,10 @@ public final class PageGenerator {
                 if (attribute.required() && !node.attributes().containsKey(attribute.name()) && !invocation.attributes().containsKey(attribute.name()))
                     throw error(node.location(), "Required tag attribute: " + attribute.name());
             String handler = "_jspxTag" + serial++;
-            body.add("{ var " + handler + " = new " + kind.sourceName() + "();\n", node.location());
+            body.add("{\n", node.location());
+            for (var variable : scriptingVariables)
+                if (variable.scope() == 0 && variable.declare()) body.add(variable.type() + " " + variable.name() + " = null;\n", node.location());
+            body.add("var " + handler + " = new " + kind.sourceName() + "();\n", node.location());
             if (!kind.simple()) body.add("try {\n");
             body.add(handler + (kind.simple() ? ".setJspContext(pageContext);\n" : ".setPageContext(pageContext);\n"), node.location());
             if (!kind.simple()) body.add(handler + ".setParent(" + classicParent(parentTag) + ");\n");
@@ -409,6 +441,7 @@ public final class PageGenerator {
                 String start = "_jspxStart" + handler;
                 body.add("if (" + start + " != 0 && " + start + " != 1" + (kind.buffered() ? " && " + start + " != 2" : "")
                         + ") throw new jakarta.servlet.jsp.JspException(\"Invalid doStartTag result\");\n");
+                synchronizeVariables(scriptingVariables, 1);
                 if (!children.isEmpty()) {
                     var previousBody = body; var content = new JavaSource(); body = content; emit(children); body = previousBody;
                     body.add("if (" + start + " != jakarta.servlet.jsp.tagext.Tag.SKIP_BODY) {\n");
@@ -417,12 +450,23 @@ public final class PageGenerator {
                             + "if (_jspxBuffered" + handler + ") { " + (kind.catchFinally() ? "_jspxSetterFailed" + handler + " = true; " : "")
                             + handler + ".setBodyContent((jakarta.servlet.jsp.tagext.BodyContent) out); "
                             + (kind.catchFinally() ? "_jspxSetterFailed" + handler + " = false; " : "") + handler + ".doInitBody(); }\n");
-                    body.add("do {\n"); body.add(content);
-                    body.add("} while (" + (kind.iteration() ? handler + ".doAfterBody() == jakarta.servlet.jsp.tagext.IterationTag.EVAL_BODY_AGAIN" : "false") + ");\n");
+                    if (kind.buffered()) synchronizeVariables(scriptingVariables, 1, 0);
+                    else synchronizeVariables(scriptingVariables, 0);
+                    if (kind.iteration() && !scriptingVariables.isEmpty()) {
+                        String afterBody = "_jspxAfterBody" + handler;
+                        body.add("int " + afterBody + ";\ndo {\n"); body.add(content);
+                        body.add(afterBody + " = " + handler + ".doAfterBody();\n");
+                        synchronizeVariables(scriptingVariables, 1, 0);
+                        body.add("} while (" + afterBody + " == jakarta.servlet.jsp.tagext.IterationTag.EVAL_BODY_AGAIN);\n");
+                    } else {
+                        body.add("do {\n"); body.add(content);
+                        body.add("} while (" + (kind.iteration() ? handler + ".doAfterBody() == jakarta.servlet.jsp.tagext.IterationTag.EVAL_BODY_AGAIN" : "false") + ");\n");
+                    }
                     if (kind.buffered()) body.add("} finally { if (_jspxBuffered" + handler + ") out = pageContext.popBody(); }\n");
                     body.add("}\n");
                 }
                 body.add("_jspxEnd" + handler + " = " + handler + ".doEndTag();\n", node.location());
+                synchronizeVariables(scriptingVariables, 1, 2);
                 if (kind.catchFinally()) body.add("} catch (Throwable _jspxFailure" + handler + ") { if (_jspxSetterFailed" + handler + ") throw _jspxFailure" + handler + "; "
                         + handler + ".doCatch(_jspxFailure" + handler + "); if (_jspxFailure" + handler + " instanceof jakarta.servlet.jsp.SkipPageException) throw _jspxFailure" + handler + ";"
                         + " } finally { if (!_jspxSetterFailed" + handler + ") " + handler + ".doFinally(); }\n");

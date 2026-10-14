@@ -25,18 +25,24 @@ import java.util.*;
 /** Immutable handler metadata; unsupported semantics must be rejected before generation. */
 public record TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
         boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile, String unsupportedReason,
-        boolean emitsXmlDeclaration) {
+        boolean emitsXmlDeclaration, String teiClass) {
     public TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
             boolean dynamicAttributes, boolean unsupportedMetadata) {
-        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, false, null, false);
+        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, false, null, false, null);
     }
     public TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
             boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile) {
-        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, tagFile, null, false);
+        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, tagFile, null, false, null);
     }
     public TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
             boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile, String unsupportedReason) {
-        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, tagFile, unsupportedReason, false);
+        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, tagFile, unsupportedReason, false, null);
+    }
+    public TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
+            boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile, String unsupportedReason,
+            boolean emitsXmlDeclaration) {
+        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, tagFile,
+                unsupportedReason, emitsXmlDeclaration, null);
     }
     public TagDescriptor {
         Objects.requireNonNull(name); Objects.requireNonNull(bodyContent);

@@ -139,15 +139,17 @@ public final class TldParser {
             if (!Set.of("name", "tag-class", "tei-class", "body-content", "dynamic-attributes", "path").contains(key)
                     || fields.putIfAbsent(key, child.getTextContent().trim()) != null)
                 throw new PageParseException(at, "Invalid or duplicate tag field: " + key);
-            if (key.equals("tei-class")) unsupported = true;
         }
         String name = required(fields, "name", at);
         if (!name.matches("[\\p{L}_][\\p{L}\\p{N}\\p{M}_.-]*")) throw new PageParseException(at, "Invalid tag name: " + name);
         String handler = tagFile ? null : required(fields, "tag-class", at);
         if (handler != null && !SourceVersion.isName(handler)) throw new PageParseException(at, "Invalid tag handler class");
+        String tei = fields.get("tei-class");
+        if (tei != null && !SourceVersion.isName(tei)) throw new PageParseException(at, "Invalid tag extra info class");
         String content = fields.getOrDefault("body-content", tagFile ? "scriptless" : "JSP");
         if (!Set.of("JSP", "empty", "scriptless", "tagdependent").contains(content)) throw new PageParseException(at, "Invalid tag body-content: " + content);
-        return new TagDescriptor(name, handler, content, attributes, bool(fields, "dynamic-attributes", false, at), unsupported);
+        return new TagDescriptor(name, handler, content, attributes, bool(fields, "dynamic-attributes", false, at),
+                unsupported, false, null, false, tei);
     }
     private static String required(Map<String, String> fields, String key, SourceLocation at) {
         String value = fields.get(key);

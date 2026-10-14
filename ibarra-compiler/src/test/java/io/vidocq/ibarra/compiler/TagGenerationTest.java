@@ -52,6 +52,12 @@ class TagGenerationTest {
     }
 
     @Test
+    void synchronizesStaticTagExtraInfoVariablesAcrossClassicTagLifecycle() throws Exception {
+        assertEquals("2:2;3:3;5:5", render("<x:sync><% out.print(begin + \":\" + nested + \";\"); %></x:sync>"
+                + "<% out.print(begin + \":\" + end); %>"));
+    }
+
+    @Test
     void tagDependentBindingCanComeFromTranslationTimeInclude() throws Exception {
         var options = rawOptions();
         var included = new GenerationOptions(options.propertyGroups(), Map.of("/binding.jspf", "<%@ taglib prefix='r' uri='urn:test' %>"),
@@ -602,6 +608,7 @@ class TagGenerationTest {
                   <attribute><name>label</name><required>true</required></attribute><attribute><name>count</name><type>int</type></attribute></tag>
                 <tag><name>repeat</name><tag-class>fixture.Tags$Repeat</tag-class><body-content>JSP</body-content>
                   <attribute><name>count</name><type>int</type><required>true</required></attribute></tag>
+                <tag><name>sync</name><tag-class>fixture.Tags$SyncVariables</tag-class><tei-class>fixture.Tags$Variables</tei-class><body-content>JSP</body-content></tag>
                 <tag><name>buffer</name><tag-class>fixture.Tags$Buffer</tag-class><body-content>scriptless</body-content></tag>
                 <tag><name>guard</name><tag-class>fixture.Tags$Guard</tag-class><body-content>scriptless</body-content></tag>
                 <tag><name>setterFailure</name><tag-class>fixture.Tags$SetterFailure</tag-class><body-content>scriptless</body-content></tag>
@@ -804,6 +811,28 @@ class TagGenerationTest {
                     public static class BufferedRepeat extends BodyTagSupport {
                         private int left=2; public void doInitBody() throws JspException {try{bodyContent.write("i");}catch(java.io.IOException e){throw new JspException(e);}}
                         public int doAfterBody() throws JspException {try{bodyContent.getEnclosingWriter().write("["+bodyContent.getString()+"]");}catch(java.io.IOException e){throw new JspException(e);}return --left>0?EVAL_BODY_AGAIN:SKIP_BODY;}
+                    }
+                    public static class Variables extends TagExtraInfo {
+                        public VariableInfo[] getVariableInfo(TagData data) { return new VariableInfo[] {
+                            new VariableInfo("begin", "java.lang.Integer", true, VariableInfo.AT_BEGIN),
+                            new VariableInfo("nested", "java.lang.Integer", true, VariableInfo.NESTED),
+                            new VariableInfo("end", "java.lang.Integer", true, VariableInfo.AT_END)
+                        }; }
+                    }
+                    public static class SyncVariables extends BodyTagSupport {
+                        private int iterations;
+                        public int doStartTag() { pageContext.setAttribute("begin", 1); return EVAL_BODY_BUFFERED; }
+                        public void doInitBody() { pageContext.setAttribute("begin", 2); pageContext.setAttribute("nested", 2); }
+                        public int doAfterBody() {
+                            int value = ++iterations + 2;
+                            pageContext.setAttribute("begin", value); pageContext.setAttribute("nested", value);
+                            return iterations == 1 ? EVAL_BODY_AGAIN : SKIP_BODY;
+                        }
+                        public int doEndTag() throws JspException {
+                            try { pageContext.getOut().write(bodyContent.getString()); }
+                            catch (java.io.IOException failure) { throw new JspException(failure); }
+                            pageContext.setAttribute("begin", 5); pageContext.setAttribute("end", 5); return EVAL_PAGE;
+                        }
                     }
                 }
                 """, Map.of())));
