@@ -448,8 +448,13 @@ public final class TagFileCompiler {
                 .append("@Override public void doTag() throws java.io.IOException, jakarta.servlet.jsp.JspException {\n")
                 .append(tag.libraryValidationDeclarations().isEmpty() ? "" : "_jspxValidateTagLibraries();\n")
                 .append("var jspContext = getJspContext();\n")
-                .append("var pageContext = jspContext;\n")
+                .append("var pageContext = (PageContext) jspContext;\n")
                 .append("var out = jspContext.getOut();\n")
+                .append("var application = pageContext.getServletContext();\n")
+                .append("var config = pageContext.getServletConfig();\n")
+                .append("var request = (jakarta.servlet.http.HttpServletRequest) pageContext.getRequest();\n")
+                .append("var response = (jakarta.servlet.http.HttpServletResponse) pageContext.getResponse();\n")
+                .append("var session = pageContext.getSession();\n")
                 .append(tag.body())
                 .append("}\n}\n");
         return source.toString();

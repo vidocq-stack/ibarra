@@ -828,6 +828,22 @@ class PagePrecompilerTest {
     }
 
     @Test
+    void standardSyntaxTagFilesExposeServletImplicitObjects() throws Exception {
+        prepare(false);
+        Path tags = web.resolve("WEB-INF/tags"); Files.createDirectories(tags);
+        Files.writeString(tags.resolve("implicit.tag"), "<%@ tag %><%"
+                + " application.getContextPath();"
+                + " config.getServletName();"
+                + " request.getContextPath();"
+                + " response.addHeader(\"TestHeader\", \"Method call OK\");"
+                + " session.getId();"
+                + " %>");
+        Files.writeString(web.resolve("index.jsp"), "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:implicit/>");
+
+        precompile();
+    }
+
+    @Test
     void standardSyntaxTagFilesExposeAttributesAndValidateNestedTagLibraries() throws Exception {
         prepare(false, false, true);
         Path validatorSource = directory.resolve("validator/demo/Validator.java");
