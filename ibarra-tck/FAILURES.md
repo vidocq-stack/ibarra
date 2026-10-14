@@ -99,14 +99,14 @@ Resolved methods (2026-10-13, direct WAR bean property access; 2026-10-14, TEI v
 
 ## TCK-006 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.functioninfo.URLClientIT
 
-- Date: 2026-10-12.
-- Status: OPEN.
+- Date: 2026-10-14.
+- Status: RESOLVED in the targeted 3-method class run; the full aggregate has not been rerun.
 - Symptom: the official HTTP/signature assertion reported an error.
 - Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.functioninfo.URLClientIT` and any method below.
-- Cause (2026-10-14): generated page initialization now invokes `TagExtraInfo.validate(TagData)` in the server process, but the generated `TagInfo` still has no `TagLibraryInfo` function catalogue. The targeted rerun after adding validation still reports errors in all three methods.
-- Follow-up: provide the function metadata through the `TagInfo`/`TagLibraryInfo` view and verify the validator contract; see [the TEI/AOT study](../studies/tag-extra-info-aot.md).
+- Cause: generated `TagInfo` did not link to a `TagLibraryInfo` exposing the TLD's function catalogue, so the TEI could not find the declared `FunctionInfo`.
+- Resolution: generated validation metadata now includes the tag library URI, prefix and `FunctionInfo` entries. The targeted class passes 3/3 methods.
 
-Failing methods:
+Previously failing methods:
 
 - `functionInfoGetFunctionClassTest`
 - `functionInfoGetNameTest`

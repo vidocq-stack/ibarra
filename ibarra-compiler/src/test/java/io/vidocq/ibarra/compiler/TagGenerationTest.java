@@ -604,8 +604,10 @@ class TagGenerationTest {
     @Test void dynamicAttributesUseDirectInterfaceCalls() throws Exception {
         assertEquals("a=one;b=42;",render("<x:dynamic a='one' b='<%=42%>'/>"));
     }
-    @Test void validatesTagExtraInfoOnceWithTheTagInfoAndStaticTagData() throws Exception {
-        assertEquals("1:literal1:literal", render("<x:validate value='literal'/>", false, options(), 2));
+    @Test void exposesTldFunctionMetadataToTagExtraInfoValidation() throws Exception {
+        assertEquals("1:upperCase:fixture.Functions:java.lang.String upperCase(java.lang.String):literal"
+                + "1:upperCase:fixture.Functions:java.lang.String upperCase(java.lang.String):literal",
+                render("<x:validate value='literal'/>", false, options(), 2));
     }
     @Test void bufferedIterationsRetainContentUntilTheHandlerClearsIt() throws Exception {
         assertEquals("[ia][iaa]",render("<x:bufferedRepeat>a</x:bufferedRepeat>"));
@@ -622,6 +624,8 @@ class TagGenerationTest {
     private GenerationOptions options() {
         String tld = """
                 <taglib><uri>urn:test</uri>
+                <function><name>upperCase</name><function-class>fixture.Functions</function-class>
+                  <function-signature>java.lang.String upperCase(java.lang.String)</function-signature></function>
                 <tag><name>echo</name><tag-class>fixture.Tags$Echo</tag-class><body-content>scriptless</body-content>
                   <attribute><name>label</name><required>true</required></attribute><attribute><name>count</name><type>int</type></attribute></tag>
                 <tag><name>repeat</name><tag-class>fixture.Tags$Repeat</tag-class><body-content>JSP</body-content>
@@ -747,6 +751,7 @@ class TagGenerationTest {
                 public class Tags {
                     public static class Validation extends TagExtraInfo {
                         static int calls;
+                        static String functionMetadata;
                         public ValidationMessage[] validate(TagData data) {
                             calls++;
                             TagAttributeInfo[] attributes=getTagInfo().getAttributes();
@@ -755,6 +760,14 @@ class TagGenerationTest {
                                     || !attributes[0].getTypeName().equals("java.lang.String")
                                     || !"literal".equals(data.getAttributeString("value")))
                                 return new ValidationMessage[]{new ValidationMessage(data.getId(), "Unexpected tag metadata")};
+                            TagLibraryInfo library=getTagInfo().getTagLibrary();
+                            FunctionInfo function=library==null ? null : library.getFunction("upperCase");
+                            if (library==null || !"x".equals(library.getPrefixString()) || !"urn:test".equals(library.getURI())
+                                    || function==null || !"upperCase".equals(function.getName())
+                                    || !"fixture.Functions".equals(function.getFunctionClass())
+                                    || !"java.lang.String upperCase(java.lang.String)".equals(function.getFunctionSignature()))
+                                return new ValidationMessage[]{new ValidationMessage(data.getId(), "Unexpected tag library function metadata")};
+                            functionMetadata=function.getName()+":"+function.getFunctionClass()+":"+function.getFunctionSignature();
                             return null;
                         }
                     }
@@ -762,7 +775,7 @@ class TagGenerationTest {
                         private String value;
                         public void setValue(String value) { this.value=value; }
                         public void doTag() throws java.io.IOException {
-                            getJspContext().getOut().write(Validation.calls+":"+value);
+                            getJspContext().getOut().write(Validation.calls+":"+Validation.functionMetadata+":"+value);
                         }
                     }
                     public static class Echo extends SimpleTagSupport {

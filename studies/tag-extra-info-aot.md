@@ -20,9 +20,10 @@ handler lifecycle boundaries. Generated page initialization also invokes
 static `TagData` values; request-time values use `TagData.REQUEST_TIME_VALUE`, and
 nonempty validation messages fail initialization.
 
-The generated `TagInfo` still omits its `TagLibraryInfo` and parts of the TLD
-metadata. `TagLibraryValidator`, function metadata and complete TagInfo/
-TagLibraryInfo context remain unsupported.
+The generated `TagInfo` now links a `TagLibraryInfo` exposing the TLD URI,
+prefix and function catalogue as `FunctionInfo` values. Other tag, tag-file and
+nested-library catalogues are not populated. `TagLibraryValidator` and complete
+TagInfo/TagLibraryInfo context remain unsupported.
 
 The runner precompiles WARs in the build-side process and serves their unchanged
 class bytes in a separate compiler-free named-module process. A static field changed
@@ -34,15 +35,15 @@ fabricating a marker. This is an Ibarra lifecycle adaptation; the official
 specification's translation-time validation contract still needs review before
 claiming full conformance.
 
-The targeted `tagattributeinfo.URLClientIT` (7/7), `tagdata.URLClientIT` (5/5) and
-`tagextrainfo.URLClientIT` (1/1) runs pass with this path. `functioninfo.URLClientIT`
-still reports errors in all three methods because function metadata is not exposed
-through the current TagInfo/TagLibraryInfo model.
+The targeted `tagattributeinfo.URLClientIT` (7/7), `tagdata.URLClientIT` (5/5),
+`tagextrainfo.URLClientIT` (1/1) and `functioninfo.URLClientIT` (3/3) runs pass
+with this path. FunctionInfo now reaches the TEI through `TagInfo.getTagLibrary()`;
+the full suite was not rerun.
 
 ## Required follow-up
 
-1. Retain complete TLD metadata and provide the TagInfo/TagLibraryInfo/TagData
-   context expected by TEI and TLV APIs, including the TLD function catalogue.
+1. Retain complete TLD metadata and provide the remaining TagInfo/TagLibraryInfo/
+   TagData context expected by TEI and TLV APIs, including tag and tag-file catalogues.
 2. Verify the servlet-initialization validation adaptation against the specification
    and TCK portability rules; preserve one-time lifecycle semantics and meaningful
    diagnostics without reflective access to private application types.
@@ -53,6 +54,7 @@ through the current TagInfo/TagLibraryInfo model.
 
 No per-request TEI replay, fixture-byte transformation, extra opens/exports or
 fabricated result has been introduced. The TCK-005 variable synchronization method
-and targeted TCK-010/-011/-012 classes now pass. Complete TagInfo/TagLibraryInfo,
-function metadata, TagLibraryValidator and tag-file failures remain in the official
-inventory; the full suite was not rerun for these targeted fixes.
+and targeted TCK-006/-010/-011/-012 classes now pass. Function metadata is available
+to TEI; complete TagInfo/TagLibraryInfo, TagLibraryValidator and tag-file failures
+remain in the official inventory. The full suite was not rerun for these targeted
+fixes.

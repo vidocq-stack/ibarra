@@ -6,8 +6,8 @@ The official Jakarta Pages 4.0.0 TCK runs through a build-side Arquillian adapte
 on Foy. The eighteen-test smoke subset passes. The last comparable full run
 executes all declared methods and passes 525/682; 157 method errors remain. A
 later full invocation reported 513/655, but its method-count discrepancy has not
-been reconciled. Subsequent targeted reruns pass 13 methods in the tag-attribute,
-tag-data and tag-extra-info classes; they do not replace a full-suite result.
+been reconciled. Subsequent targeted reruns pass 16 methods across tag-attribute,
+tag-data, tag-extra-info and function-info classes; they do not replace a full-suite result.
 Ibarra is not certified.
 
 == Recorded baseline
@@ -45,7 +45,10 @@ A 2026-10-14 targeted rerun also passed `tagattributeinfo.URLClientIT` (7/7),
 `tagdata.URLClientIT` (5/5) and `tagextrainfo.URLClientIT` (1/1), with the
 adapter passing 35/35 in each run. Generated page initialization now invokes
 `TagExtraInfo.validate` with available tag metadata. The full suite was not rerun,
-so these targeted results do not change the aggregate totals.
+so these targeted results do not change the aggregate totals. A combined rerun
+also passed `functioninfo.URLClientIT` (3/3), bringing the four-class total to
+16/16 with the adapter at 35/35. Its TEI now receives the TLD function catalogue
+through `TagInfo.getTagLibrary()`.
 A 2026-10-14 `all` invocation covered the same 92 classes and reported 513/655
 entries (142 errors, zero assertion failures or skips; 78.3%). Its method count is
 27 below the earlier 682-entry inventory, so that aggregate remains the last

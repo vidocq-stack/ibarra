@@ -376,7 +376,7 @@ public final class PageGenerator {
             if (kind.simple() && tag.bodyContent().equals("JSP")) throw error(node.location(), "SimpleTag cannot have JSP body-content");
             if (tag.dynamicAttributes() && !kind.dynamic()) throw error(node.location(), "Handler does not implement DynamicAttributes");
             var invocation = tagInvocation(node);
-            validateTagExtraInfo(tag, node, invocation);
+            validateTagExtraInfo(tag, library, node, invocation);
             var children = invocation.content();
             if (tag.bodyContent().equals("empty") && !children.isEmpty()) throw error(node.location(), "Tag requires an empty body");
             if (tag.bodyContent().equals("scriptless")) scriptless(children);
@@ -520,13 +520,16 @@ public final class PageGenerator {
 
         private record TagInvocation(Map<String, PageNode.Element> attributes, List<PageNode> content) {}
 
-        private void validateTagExtraInfo(TagDescriptor tag, PageNode.Element node, TagInvocation invocation) {
+        private void validateTagExtraInfo(TagDescriptor tag, TagLibraryDescriptor library, PageNode.Element node,
+                TagInvocation invocation) {
             if (tag.teiClass() == null) return;
             String suffix = String.valueOf(tagValidationSerial++);
             String extraInfo = "_jspxTagExtraInfo" + suffix;
+            String tagLibrary = "_jspxTagLibrary" + suffix;
             String tagInfo = "_jspxTagInfo" + suffix;
             String messages = "_jspxTagValidationMessages" + suffix;
             tagValidations.add("var " + extraInfo + " = new " + tag.teiClass().replace('$', '.') + "();\n", node.location());
+            tagValidations.add("var " + tagLibrary + " = " + tagLibraryInfoSource(library, node) + ";\n", node.location());
 
             String attributes = tag.attributes().values().stream().map(this::tagAttributeInfoSource)
                     .collect(java.util.stream.Collectors.joining(", "));
@@ -536,7 +539,7 @@ public final class PageGenerator {
                     .collect(java.util.stream.Collectors.joining(", "));
             tagValidations.add("var " + tagInfo + " = new jakarta.servlet.jsp.tagext.TagInfo("
                     + JavaSource.quote(tag.name()) + ", " + JavaSource.quote(tag.handlerClass()) + ", "
-                    + JavaSource.quote(tag.bodyContent()) + ", null, null, " + extraInfo
+                    + JavaSource.quote(tag.bodyContent()) + ", null, " + tagLibrary + ", " + extraInfo
                     + ", new jakarta.servlet.jsp.tagext.TagAttributeInfo[] {" + attributes + "}, null, null, null, "
                     + "new jakarta.servlet.jsp.tagext.TagVariableInfo[] {" + variables + "}, " + tag.dynamicAttributes() + ");\n"
                     + extraInfo + ".setTagInfo(" + tagInfo + ");\n", node.location());
@@ -563,6 +566,21 @@ public final class PageGenerator {
                     + "if (" + messages + " != null && " + messages + ".length != 0) throw new IllegalStateException("
                     + JavaSource.quote("TagExtraInfo validation failed for " + tag.name() + ": ") + " + " + messages + "[0].getMessage());\n",
                     node.location());
+        }
+
+        private String tagLibraryInfoSource(TagLibraryDescriptor library, PageNode.Element node) {
+            int separator = node.name().indexOf(':');
+            String prefix = separator < 0 ? "" : node.name().substring(0, separator);
+            String functions = library.functions().values().stream()
+                    .sorted(java.util.Comparator.comparing(TldFunction::name))
+                    .map(function -> "new jakarta.servlet.jsp.tagext.FunctionInfo(" + JavaSource.quote(function.name()) + ", "
+                            + JavaSource.quote(function.functionClass()) + ", " + JavaSource.quote(function.signature()) + ")")
+                    .collect(java.util.stream.Collectors.joining(", "));
+            return "new jakarta.servlet.jsp.tagext.TagLibraryInfo(" + JavaSource.quote(prefix) + ", "
+                    + JavaSource.quote(node.namespace()) + ") {\n"
+                    + "{ functions = new jakarta.servlet.jsp.tagext.FunctionInfo[] {" + functions + "}; }\n"
+                    + "@Override public jakarta.servlet.jsp.tagext.TagLibraryInfo[] getTagLibraryInfos() { "
+                    + "return new jakarta.servlet.jsp.tagext.TagLibraryInfo[0]; }\n}";
         }
 
         private String tagAttributeInfoSource(TagAttribute attribute) {

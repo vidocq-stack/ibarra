@@ -100,7 +100,9 @@ occurrence is validated during servlet initialization, before the page's
 `jspInit`; requests do not rerun validation. A nonempty validation-message array
 fails initialization.
 
-`TagLibraryValidator`, the `TagLibraryInfo` link from `TagInfo`, and complete
+The generated `TagLibraryInfo` is linked from `TagInfo` and exposes the TLD URI,
+prefix and function catalogue as `FunctionInfo` values. Other tag, tag-file and
+nested-library catalogues are not populated; `TagLibraryValidator` and complete
 `TagInfo`/`TagLibraryInfo` metadata remain unsupported.
 
 == Standard tag files
