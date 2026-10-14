@@ -199,6 +199,95 @@ class TagGenerationTest {
     }
 
     @Test
+    void xmlDoctypesAreEmittedBeforeTheDocumentRootWithoutExecutingTheOutputAction() throws Exception {
+        String head = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page session='false'/>";
+        assertEquals("<!DOCTYPE html SYSTEM \"test.dtd\"><html>body</html>", render(head
+                + "<html><jsp:output omit-xml-declaration='yes' doctype-root-element='html' doctype-system='test.dtd'/>body</html></jsp:root>", false, options()));
+        assertEquals("<!DOCTYPE html PUBLIC \"-//Example//DTD Page//EN\" \"https://example.invalid/page.dtd\"><html/>", render(head
+                + "<jsp:scriptlet>if (false) {</jsp:scriptlet>"
+                + "<jsp:output omit-xml-declaration='yes' doctype-root-element='html' doctype-system='https://example.invalid/page.dtd' doctype-public='-//Example//DTD Page//EN'/>"
+                + "<jsp:scriptlet>}</jsp:scriptlet><html/></jsp:root>", false, options()));
+    }
+
+    @Test
+    void xmlDoctypeIdentifiersSelectQuotesWithoutEscapingTheirLiteralValues() throws Exception {
+        String head = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page session='false'/>";
+        assertEquals("<!DOCTYPE p PUBLIC '-//Example \"Page\"//EN' 'page\"name.dtd'><p/>", render(head
+                + "<jsp:output omit-xml-declaration='yes' doctype-root-element='p' doctype-public='-//Example &quot;Page&quot;//EN' doctype-system='page&quot;name.dtd'/><p/></jsp:root>", false, options()));
+        assertEquals("<!DOCTYPE p SYSTEM \"page'name.dtd\"><p/>", render(head
+                + "<jsp:output omit-xml-declaration='yes' doctype-root-element='p' doctype-system=\"page'name.dtd\"/><p/></jsp:root>", false, options()));
+    }
+
+    @Test
+    void xmlDoctypePrecedesPreservedPrologMiscWithoutParsingOrFetchingItsSystemIdentifier() throws Exception {
+        String head = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page session='false'/>";
+        assertEquals("<!DOCTYPE p SYSTEM \"https://example.invalid/never-fetched.dtd\"><?before root?> \n<p/>", render(head
+                + "<jsp:text>&lt;?before root?&gt; \n</jsp:text><p/>"
+                + "<jsp:output omit-xml-declaration='yes' doctype-root-element='p' doctype-system='https://example.invalid/never-fetched.dtd'/></jsp:root>", false, options()));
+    }
+
+    @Test
+    void xmlDoctypeCollectionDoesNotInspectTagdependentLiteralPayloads() throws Exception {
+        String head = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:x='urn:test' version='4.0'><jsp:directive.page session='false'/>";
+        String payload = "<jsp:output doctype-root-element='literal' doctype-system='literal.dtd'/>";
+        assertEquals("[null:" + payload + "]", render(head + "<jsp:output omit-xml-declaration='yes'/>"
+                + "<x:raw><jsp:body><![CDATA[" + payload + "]]></jsp:body></x:raw></jsp:root>", false, rawOptions()));
+    }
+
+    @Test
+    void xmlDoctypeValuesStayStaticLiteralsAndRecognizeJspNamespaceAliases() throws Exception {
+        String head = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page session='false'/>";
+        assertEquals("<!DOCTYPE p SYSTEM \"${param.dtd}\"><p/>", render(head
+                + "<alias:output xmlns:alias='http://java.sun.com/JSP/Page' omit-xml-declaration='yes' doctype-root-element='p' doctype-system='${param.dtd}'/><p/></jsp:root>", false, options()));
+        assertEquals("<!DOCTYPE p SYSTEM \"a\nb\rc.dtd\"><p/>", render(head
+                + "<output xmlns='http://java.sun.com/JSP/Page' omit-xml-declaration='yes' doctype-root-element='p' doctype-system='a&#10;b&#13;c.dtd'/><p/></jsp:root>", false, options()));
+        var failure = assertThrows(PageParseException.class, () -> generator().generate("/qualified.jspx", head
+                + "<jsp:output xmlns:foreign='urn:foreign' foreign:doctype-system='test.dtd'/><p/></jsp:root>", "fixture.GeneratedPage", options()));
+        assertTrue(failure.getMessage().contains("Unsupported action attribute"));
+    }
+
+    @Test
+    void xmlDoctypeAttributesRequireRootAndSystemTogetherAndPublicRequiresSystem() {
+        String head = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'>\n";
+        for (String attributes : List.of("doctype-root-element='p'", "doctype-system='test.dtd'",
+                "doctype-public='public'", "doctype-root-element='p' doctype-public='public'")) {
+            var failure = assertThrows(PageParseException.class, () -> generator().generate("/doctype.jspx", head
+                    + "<jsp:output " + attributes + "/></jsp:root>", "fixture.GeneratedPage", options()));
+            assertEquals(2, failure.location().line());
+            assertTrue(failure.getMessage().contains("requires"), failure.getMessage());
+        }
+        var split = assertThrows(PageParseException.class, () -> generator().generate("/split.jspx", head
+                + "<jsp:output doctype-root-element='p'/><jsp:output doctype-system='test.dtd'/></jsp:root>", "fixture.GeneratedPage", options()));
+        assertTrue(split.getMessage().contains("requires"));
+    }
+
+    @Test
+    void xmlDoctypeMetadataIsDeduplicatedAcrossStaticIncludesAndConflictsKeepIncludeLocations() throws Exception {
+        String head = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page session='false'/>";
+        String output = "<jsp:output omit-xml-declaration='yes' doctype-root-element='p' doctype-system='test.dtd'/>";
+        var defaults = options();
+        String piece = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'>" + output + "</jsp:root>";
+        var included = new GenerationOptions(defaults.propertyGroups(), Map.of("/piece.jspx", piece), false,
+                defaults.byteSources(), defaults.tagLibraries());
+        assertEquals("<!DOCTYPE p SYSTEM \"test.dtd\"><p/>", render(head + output
+                + "<jsp:directive.include file='piece.jspx'/><jsp:directive.include file='piece.jspx'/><p/></jsp:root>", false, included));
+        for (String attribute : List.of("doctype-root-element", "doctype-system", "doctype-public")) {
+            String original = output.replace("/>", " doctype-public='public'/>");
+            String replacement = original.replace(attribute + "='" + switch (attribute) {
+                case "doctype-root-element" -> "p"; case "doctype-system" -> "test.dtd"; default -> "public";
+            } + "'", attribute + "='different'");
+            var conflicting = new GenerationOptions(defaults.propertyGroups(), Map.of("/piece.jspx",
+                    "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'>\n" + replacement + "</jsp:root>"), false,
+                    defaults.byteSources(), defaults.tagLibraries());
+            var failure = assertThrows(PageParseException.class, () -> generator().generate("/doctype.jspx", head + original
+                    + "<jsp:directive.include file='piece.jspx'/><p/></jsp:root>", "fixture.GeneratedPage", conflicting));
+            assertEquals("/piece.jspx", failure.location().source());
+            assertEquals(2, failure.location().line());
+            assertTrue(failure.getMessage().contains(attribute));
+        }
+    }
+
+    @Test
     void jspIdsAreUniqueStableAndInitializedForInheritedClassicAndSimpleConsumers() throws Exception {
         var options = jspIdOptions();
         String output = render("<x:simple label='one'/>|<x:classic/>|<x:simple label='two'/>;", false, options, 2);

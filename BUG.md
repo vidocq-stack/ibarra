@@ -39,6 +39,24 @@
   output are not yet implemented.
 - Status: OPEN. The alias fix is intentionally bounded; full section 5.13 support
   needs separate prolog collection and validation. No official fixtures are rewritten.
+- DOCTYPE progress (2026-10-14): translation-time metadata now collects all structured
+  `jsp:output` occurrences, including unexecuted action bodies and static includes.
+  Each action requires root/system together and PUBLIC requires SYSTEM; identical
+  unit values are deduplicated and differing values fail at the offending source.
+  Generated SYSTEM/PUBLIC literals precede the page body, preserve decoded characters
+  and choose a quote delimiter absent from the identifier. URI, public-ID and root-name
+  lexical validity remains the page author's responsibility; this is not an output XML
+  validator. Tagdependent payloads stay opaque. Input DOCTYPE/external entities remain
+  rejected, and no DTD is read during translation or rendering.
+- DOCTYPE evidence: four focused tests first reproduced three unsupported-attribute
+  errors; six DOCTYPE regressions then passed with the compiler reactor (247 compiler
+  tests, zero failures/errors/skips). A seventh targeted compiled-runtime regression
+  passes for namespace aliases/default namespaces, literal EL-looking identifiers,
+  decoded LF/CR and unsupported foreign-qualified attributes. Command:
+  `./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 -pl ibarra-compiler -am test`.
+  Prologue/default handling and the action's final no-op are coordinated separately;
+  declaration emission must precede the DOCTYPE in the integrated generator. XML tag-file
+  semantics remain pending, and the official output fixture has not been rewritten.
 
 ## IBARRA-118 · 2026-10-13 · Valid precompile queries still execute the JSP body
 
