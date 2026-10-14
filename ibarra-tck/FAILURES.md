@@ -144,17 +144,24 @@ Failing methods:
 
 ## TCK-009 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.simpletagsupport.URLClientIT
 
-- Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.simpletagsupport.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Date: 2026-10-14 (updated; original baseline 2026-10-12).
+- Status: PARTIALLY RESOLVED; two methods remain open.
+- Symptom: the unchanged official class had three method errors. The
+  `jspFragmentGetJspContextTest` page failed translation because the fragment
+  handler's setter accepts `Object`.
+- Cause for the resolved method: the compiler required exact equality between
+  the TLD fragment input type `jakarta.servlet.jsp.tagext.JspFragment` and the
+  handler setter parameter, although `Object` accepts that value.
+- Resolution: fragment setters now accept assignable reference supertypes based
+  on build-time class-file metadata. The generated call uses the selected setter
+  parameter type. Deferred attribute setters remain exact-type validated.
+- Verification: the unchanged official class now passes 9/11 methods, including
+  `jspFragmentGetJspContextTest` (1/1). See `IBARRA-138` in the root `BUG.md`.
 
-Failing methods:
+Still failing:
 
 - `simpleTagSupportVariableSynchronizationTest`
 - `simpleTagSupportSkipPageExceptionTest`
-- `jspFragmentGetJspContextTest`
 
 ## TCK-010 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagattributeinfo.URLClientIT
 

@@ -1,5 +1,19 @@
 # BUG.md — Ibarra
 
+## IBARRA-138 · 2026-10-14 · Fragment tag setters reject compatible supertypes
+
+- Symptom: the unchanged Pages TCK `jspFragmentGetJspContextTest` fails during
+  translation because its fragment attribute setter accepts `Object`.
+- Minimal repro: run
+  `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.simpletagsupport.URLClientIT#jspFragmentGetJspContextTest`.
+- Cause: build-time tag setter lookup required exact equality between the TLD's
+  `jakarta.servlet.jsp.tagext.JspFragment` input type and the handler setter
+  parameter, rather than allowing a reference supertype.
+- Status: FIXED. Fragment setter lookup now checks class-file subtype metadata and
+  emits the invocation using the selected setter parameter type. Deferred setter
+  contracts retain their exact type checks. The unchanged official method passes.
+
 ## IBARRA-137 · 2026-10-13 · Output omission aliases expose missing body validation
 
 - Symptom: accepting the legal yes/no aliases makes unchanged

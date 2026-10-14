@@ -190,16 +190,34 @@ public final class BeanClasses {
         return model.superclass().isPresent() && subtype(model.superclass().orElseThrow().asInternalName().replace('/', '.'), target, at, visited);
     }
     public Accessor tagSetter(String type, String property, String expected, SourceLocation at) {
+        return tagSetter(type, property, expected, at, false);
+    }
+    public Accessor tagFragmentSetter(String type, String property, String expected, SourceLocation at) {
+        return tagSetter(type, property, expected, at, true);
+    }
+    private Accessor tagSetter(String type, String property, String expected, SourceLocation at, boolean allowSupertype) {
         String name = "set" + suffix(property, at);
+        Accessor compatible = null;
         for (var method : methods(type, at)) {
             var descriptor = method.methodTypeSymbol();
             if (method.methodName().stringValue().equals(name) && descriptor.parameterCount() == 1
                     && descriptor.returnType().descriptorString().equals("V")) {
-                String parameter = javaType(descriptor.parameterType(0).descriptorString());
+                String parameterDescriptor = descriptor.parameterType(0).descriptorString();
+                String parameter = javaType(parameterDescriptor);
                 if (parameter.equals(expected.replace('$', '.'))) return new Accessor(name, parameter);
+                if (allowSupertype && compatible == null && parameterDescriptor.startsWith("L") && referenceType(expected)) {
+                    String parameterClass = parameterDescriptor.substring(1, parameterDescriptor.length() - 1).replace('/', '.');
+                    if (subtype(expected.replace('/', '.'), parameterClass, at, new HashSet<>()))
+                        compatible = new Accessor(name, parameter);
+                }
             }
         }
+        if (compatible != null) return compatible;
         throw new PageParseException(at, "No setter matching TLD type " + expected + " for " + property + " on " + type);
+    }
+
+    private static boolean referenceType(String type) {
+        return !type.endsWith("[]") && !Set.of("boolean", "byte", "short", "int", "long", "float", "double", "char", "void").contains(type);
     }
 
     public Accessor setter(String type, String property, SourceLocation at) {

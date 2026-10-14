@@ -612,7 +612,7 @@ class PagePrecompilerTest {
                 public class Echo extends jakarta.servlet.jsp.tagext.SimpleTagSupport {
                     private String label; private jakarta.servlet.jsp.tagext.JspFragment piece;
                     public void setLabel(String value) { label = value; }
-                    public void setPiece(jakarta.servlet.jsp.tagext.JspFragment value) { piece = value; }
+                    public void setPiece(Object value) { piece = (jakarta.servlet.jsp.tagext.JspFragment) value; }
                     public void doTag() throws jakarta.servlet.jsp.JspException, java.io.IOException {
                         getJspContext().getOut().write(label + "|");
                         var body = piece == null ? getJspBody() : piece; body.invoke(null); body.invoke(null);

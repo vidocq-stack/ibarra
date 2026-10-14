@@ -394,8 +394,9 @@ public final class PageGenerator {
                     body.add(handler + ".setDynamicAttribute(null, " + JavaSource.quote(supplied.getKey()) + ", " + value(supplied.getValue(), node.location(), false) + ");\n", node.location());
                 } else {
                     if (attribute.fragment()) throw error(node.location(), "Fragment attributes require jsp:attribute");
-                    var setter = attribute.fragment() || attribute.deferred()
-                            ? classes.tagSetter(tag.handlerClass(), attribute.name(), attribute.setterType(), node.location())
+                    var setter = attribute.fragment()
+                            ? classes.tagFragmentSetter(tag.handlerClass(), attribute.name(), attribute.setterType(), node.location())
+                            : attribute.deferred() ? classes.tagSetter(tag.handlerClass(), attribute.name(), attribute.setterType(), node.location())
                             : classes.tagPropertySetter(tag.handlerClass(), attribute.name(), node.location());
                     var target = new TagAttribute(attribute.name(), setter.type(), attribute.required(), attribute.runtimeExpression(), false);
                     protectJspIdSetter(kind, setter, node.location());
@@ -415,8 +416,9 @@ public final class PageGenerator {
                     if (!tag.dynamicAttributes() || supplied.getKey().contains(":")) throw error(named.location(), "Unknown or namespaced tag attribute: " + supplied.getKey());
                     body.add(handler + ".setDynamicAttribute(null, " + JavaSource.quote(supplied.getKey()) + ", " + capture(content, named.location(), handler) + ");\n", named.location());
                 } else {
-                    var setter = attribute.fragment() || attribute.deferred()
-                            ? classes.tagSetter(tag.handlerClass(), attribute.name(), attribute.setterType(), named.location())
+                    var setter = attribute.fragment()
+                            ? classes.tagFragmentSetter(tag.handlerClass(), attribute.name(), attribute.setterType(), named.location())
+                            : attribute.deferred() ? classes.tagSetter(tag.handlerClass(), attribute.name(), attribute.setterType(), named.location())
                             : classes.tagPropertySetter(tag.handlerClass(), attribute.name(), named.location());
                     protectJspIdSetter(kind, setter, named.location());
                     String argument;
