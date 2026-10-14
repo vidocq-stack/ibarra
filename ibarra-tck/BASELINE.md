@@ -1,31 +1,22 @@
 # Jakarta Pages 4.0.0 diagnostic baseline
 
 Date: 2026-10-14. Temurin Java 25, Maven 3.9.16, macOS; Ibarra development
-version `0.4.0-SNAPSHOT` on feature worktree changes based on code head `2331263`,
-modular Foy/Chappe and published Peano snapshots.
+version `0.4.0-SNAPSHOT` at source commit `99a794f`, based on merged main
+`06a12bb`, with modular Foy/Chappe and published Peano snapshots.
 This records compatibility checks, not a performance benchmark or certification.
 
 ```bash
-export JAVA_HOME=/Users/yblazart/.sdkman/candidates/java/25-tem
-export PATH="$JAVA_HOME/bin:$PATH"
-rtk ./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 install
-rtk ./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 -f examples/precompiled-pages/pom.xml clean package
-MAVEN_ARGS='-o -Dmaven.repo.local=/private/tmp/ibarra-forward-m2' rtk ./run-official-tck-pages-4.0.sh --no-install all
+sdk env
+./run-official-tck-pages-4.0.sh all
 ```
 
-Prerequisites were prepared by `prepare-tck.py`, preserving the official embedded
-POM, and already present in the isolated cache. Distribution checksums and artifact
-preparation commands are in [README.md](README.md). No provenance skip was used.
-The default reactor install passes 341 tests; the independent example clean-package
-also passes. The final clean install ran without skipping build provenance generation.
+The script verifies and prepares the official artifacts, performs a clean reactor
+install, runs the adapter regression tests and then selects all official classes.
+Distribution checksums and artifact preparation commands are in [README.md](README.md).
+No provenance skip was used.
 
-This candidate depends on [Foy #47](https://codefloe.com/Vidocq/foy/pulls/47),
-signed commit `073288db47fa12460c5662fb6a4aff25ff4de2bb`, rebased on `9ab0971`.
-Its parent/API/core artifacts were installed only in the independent local cache;
-the global Maven repository was unchanged. Foy #47 has since merged and its main
-build/deploy completed successfully, publishing the producer snapshots before this
-Ibarra delivery. This local run used the isolated cache; independent Ibarra CI remains
-a separate validation result.
+Foy #47 has merged; its parent/API/core snapshots are available to this run. The
+post-merge Ibarra build and official smoke workflows also completed successfully.
 
 ## Recorded results
 
@@ -33,19 +24,23 @@ a separate validation result.
 |---|---:|
 | Official classes selected | 92 |
 | Declared runtime-visible JUnit `@Test` methods in the official binary | 682 |
-| Official Surefire entries reported | 682 |
-| Passing test methods | 525 |
-| Failing method entries | 157 |
-| Class-level setup/deployment errors | 0 |
-| Total reported errors | 157 |
+| Official Surefire entries reported | 669 |
+| Passing test entries | 553 |
+| Method-level errors | 114 |
+| Class-level setup/deployment errors | 2 |
+| Total reported errors | 116 |
 | Assertion failures reported as Surefire `failure` | 0 |
 | Skipped entries | 0 |
+| Classes with no reported errors | 60/92 |
 | Adapter regression tests (separate invocation) | 35/35 |
 | Smoke subset methods passing within this full run | 18/18 |
 
-Surefire reports `Tests run: 682, Failures: 0, Errors: 157, Skipped: 0` and exits
-nonzero. The TCK's HTTP assertion helper reports failures as exceptions, hence
-`errors` rather than `failures`; zero in the failure column does not mean success.
+Surefire reports `Tests run: 669, Failures: 0, Errors: 116, Skipped: 0` and exits
+nonzero. The 114 method-level errors are TCK failures; two further errors occur
+during class deployment for TCK-054 and TCK-056. Those classes' 15 declared methods
+do not execute in this run. The TCK's HTTP assertion helper reports method failures
+as exceptions, hence `errors` rather than `failures`; zero in the failure column does
+not mean success. TCK-017 now deploys and passes all 15 methods.
 
 After this full-suite snapshot, a targeted rerun passed all 11 methods in
 `bodytagsupport.URLClientIT`, including `bodyTagSupportVariableSynchronizationTest`.
@@ -60,20 +55,15 @@ methods. The adapter passed 35/35. Generated page initialization invokes
 `TagLibraryInfo` exposes the TLD function catalogue. The full suite was not
 rerun, so the aggregate totals below are unchanged.
 
-The 2026-10-14 `all --no-install` invocation ran 92 official classes and reported
-655 entries: 513 passed, 142 errored, zero assertion failures and zero skips
-(78.3% of reported entries), with 53 classes fully passing. This differs from the earlier
-682-entry report by 27 methods. The source/class inventory and Surefire method
-selection need reconciliation. Until then, the table above remains the last
-comparable aggregate baseline and 513/655 is recorded as an observed run, not a
-like-for-like trend.
-
-**525/682 = 77.0% measured full-suite pass rate**. All 682 declared method entries
-now execute across the 92 official classes; there are no class-level setup errors
-or skipped entries. Compared with the previous 523-pass run, the two XML tag-file
-output methods now pass and none of the prior passes regressed. This records complete
-method execution for this distribution, not certification: 157 methods still report
-errors.
+Historical full-suite snapshots from 2026-10-14 are not directly comparable because
+the set of methods that reached execution changed. An earlier `all --no-install`
+run recorded 655 entries (513 passes, 142 errors, no setup errors). A fresh run on
+merged commit `06a12bb`, before IBARRA-139, also recorded 655 entries but had 538
+passes, 114 method errors and three class-level deployment errors (TCK-017, TCK-054
+and TCK-056). After IBARRA-139, the current run reports 669 entries: all 15 TCK-017
+methods execute successfully, while the two tag-file classes remain blocked at
+deployment. The declared-method inventory remains 682; no certification claim is
+made while methods are blocked and errors remain.
 
 Static XML output and the initial XML `.tagx` subset restore all six previously
 failing output-action methods: `doctypeSystemPublicTest`, `simpleDefaultTest`, `doctypeSystemTest`,
@@ -181,11 +171,11 @@ ordinary Ibarra unit tests or Peano's independent EL TCK.
 |---|---|
 | Per-page translation failures | IBARRA-084 fixed: genuine parse/generation/javac failures become compiled error servlets, while valid pages still render. Global deployment metadata remains fatal. |
 | WAR adaptation | No setup failures remain. Legacy WAR libraries assemble into the private application module (IBARRA-102 fixed); explicit web.xml components use direct factories (IBARRA-100 fixed). Unadapted library metadata remains an explicit boundary. JSP property groups apply at build time; TLD keyword names no longer block deployment. Runtime JSP descriptor exposure remains pending upstream. |
-| Tag files and full tag metadata | `urn:jsptagdir`, standard `.tag` scalar attributes, variables, nested declared tag attributes and initial PageData TLV coverage are implemented; `.tagx` actions, EL, fragments and complete tag metadata remain I6/I7 work. |
+| Tag files and full tag metadata | `urn:jsptagdir`, standard `.tag` scalar attributes, variables, nested declared tag attributes and initial PageData TLV coverage are implemented. Generated tag-file implicit objects remain unsupported and block TCK-054/056 deployment; `.tagx` actions, EL, fragments and complete tag metadata remain I6/I7 work. |
 | Ordinary TLD attributes | IBARRA-093/094 fixed: keyword names accepted and actual JavaBeans setter types selected/coerced from class files. Deferred/fragment protocols remain exact. |
 | BeanELResolver fixture access | IBARRA-085 fixed; the official method passes with qualified exports to `jakarta.el` only. |
 | JspIdConsumer | All three methods pass; IBARRA-086 fixed by stable per-occurrence generated identifiers. |
-| TagLibraryValidator | IBARRA-087 fixed: both official validator methods pass. The PageData page and tag-file methods also pass in focused runs; refresh aggregate suite counts after the next complete run. |
+| TagLibraryValidator | IBARRA-087 fixed: both official validator methods pass. PageData page and tag-file methods pass in focused runs; the latest aggregate counts are in the table above. |
 | TryCatchFinally | The official method passes; IBARRA-088 was an EL verifier-access issue, fixed through direct WAR property accessors. |
 | Unbuffered forward | The method passes; IBARRA-089 is fixed. |
 | PropertyEditor conversion | The method passes; IBARRA-090 is fixed. |
