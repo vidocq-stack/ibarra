@@ -1,17 +1,29 @@
 # Jakarta Pages 4.0.0 diagnostic baseline
 
-Date: 2026-10-13. Temurin Java 25, Maven 3.9.16, macOS; Ibarra development
-version `0.4.0-SNAPSHOT`, modular Foy/Chappe and published Peano snapshots.
+Date: 2026-10-14. Temurin Java 25, Maven 3.9.16, macOS; Ibarra development
+version `0.4.0-SNAPSHOT` at `e0c5295`, modular Foy/Chappe and published Peano snapshots.
 This records compatibility checks, not a performance benchmark or certification.
 
 ```bash
-./run-official-tck-pages-4.0.sh smoke --no-prepare
-./run-official-tck-pages-4.0.sh all --no-install --no-prepare
+export JAVA_HOME=/Users/yblazart/.sdkman/candidates/java/25-tem
+export PATH="$JAVA_HOME/bin:$PATH"
+rtk ./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 clean install
+rtk ./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 -f examples/precompiled-pages/pom.xml clean package
+rtk ./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 -Ptck -pl ibarra-tck clean test
+rtk ./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 -Ptck,tck-official -pl ibarra-tck clean test '-Dtest=ee.jakarta.tck.pages.**.*IT'
 ```
 
 Prerequisites were prepared by `prepare-tck.py`, preserving the official embedded
-POM; the smoke command clean-installs the current reactor before execution. Distribution checksums
-and exact preparation commands are in [README.md](README.md).
+POM, and already present in the isolated cache. Distribution checksums and artifact
+preparation commands are in [README.md](README.md). No provenance skip was used.
+The default reactor passes 319 tests; the independent example packages successfully.
+
+This candidate depends on [Foy #47](https://codefloe.com/Vidocq/foy/pulls/47),
+signed commit `073288db47fa12460c5662fb6a4aff25ff4de2bb`, rebased on `9ab0971`.
+Its parent/API/core artifacts were installed only in the independent local cache;
+the global Maven repository was unchanged. The producer is not yet published,
+so this local result does not assert independent CI compatibility with the current
+published Foy snapshot. Publication order is Foy merge/deploy, then Ibarra validation.
 
 ## Recorded results
 
@@ -20,23 +32,31 @@ and exact preparation commands are in [README.md](README.md).
 | Official classes selected | 92 |
 | Declared runtime-visible JUnit `@Test` methods in the official binary | 682 |
 | Official Surefire entries reported | 682 |
-| Passing test methods | 518 |
-| Failing method entries | 164 |
+| Passing test methods | 519 |
+| Failing method entries | 163 |
 | Class-level setup/deployment errors | 0 |
-| Total reported errors | 164 |
+| Total reported errors | 163 |
 | Assertion failures reported as Surefire `failure` | 0 |
 | Skipped entries | 0 |
-| Adapter regression tests (separate invocation) | 33/33 |
-| CI smoke subset (factory/engine + character sequence/EL/encoding configuration) | 18/18 |
+| Adapter regression tests (separate invocation) | 34/34 |
+| Smoke subset methods passing within this full run | 18/18 |
 
-Surefire reports `Tests run: 682, Failures: 0, Errors: 164, Skipped: 0` and exits
+Surefire reports `Tests run: 682, Failures: 0, Errors: 163, Skipped: 0` and exits
 nonzero. The TCK's HTTP assertion helper reports failures as exceptions, hence
 `errors` rather than `failures`; zero in the failure column does not mean success.
 
-**518/682 = 76.0% measured full-suite pass rate**. All 682 declared method entries
+**519/682 = 76.1% measured full-suite pass rate**. All 682 declared method entries
 now execute across the 92 official classes; there are no class-level setup errors
 or skipped entries. This records complete method execution for this distribution,
-not certification: 164 methods still report errors.
+not certification: 163 methods still report errors.
+
+The typed-forward delivery restores exactly `positiveIncludeForwardTest` against
+the merged 518-pass baseline. Comparison by all 682 class/method keys finds no
+regression or missing entry. There are 48 completely passing classes, including
+all twelve include-action methods and all seven forward-action methods. The new
+HTTP fixture additionally verifies child-added wrapper headers, cached writer
+transformations, nested ancestors, stopped parent side effects and missing-target
+404 behavior; the original official assertion alone checks only rendered body.
 
 The deferred-signature simple-name fix was rechecked with the full suite on
 2026-10-13: the same 504 methods pass and the same 178 methods fail, with no

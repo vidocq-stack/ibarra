@@ -39,6 +39,10 @@ Directly declared TLD resources and their listeners are discovered at build time
 with separate URI alias and forced XML path resolution.
 Session/application beans now use coordinated lookup, direct construction and
 publication; their initialization body runs only for the creator, after unlocking.
+Forwarding from an included page preserves application response wrappers and cached
+writers, clears pending ancestor JSP buffers and stops including pages after success.
+The optional Foy binding delegates Servlet reset and asynchronous response policy
+through the typed container dispatcher; core remains container-neutral.
 The design of record is [PLAN.md](PLAN.md) (spec scope, build-time page
 compilation, Java Modules layout, Foy JSP-engine SPI, TCK plan, milestones I0–I9).
 
@@ -68,7 +72,14 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 | `ibarra-compiler` | JSP/JSPX parser, page model, Java generator, initial tag handlers and build-time compiler | I2 implemented; I3/I6 in progress |
 | `ibarra-maven-plugin` | `precompile` goal at process-classes; module service registration | Initial I4 implemented |
 | `ibarra-foy` | Optional Foy engine provider; application layer, routing and TLD listener lifecycle | Initial I5 implemented |
-| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; 18-test smoke passes, 76.0% measured full-suite pass rate |
+| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; 18-test smoke passes, 76.1% measured full-suite pass rate |
+
+The latest local full run passes 519/682 official methods with no regression against
+the previous 518 passes; 163 errors remain, so certification is pending.
+Typed forwarding currently requires the unpublished producer in
+[Foy #47](https://codefloe.com/Vidocq/foy/pulls/47). This result uses its signed
+candidate in an isolated Maven repository; ordinary CI needs that producer merged
+and published first. See [the exact baseline](ibarra-tck/BASELINE.md).
 
 Planned modules (`ibarra-bench`) are described in [PLAN.md](PLAN.md) and created by
 the milestone that needs them. JSTL is out of scope.

@@ -363,8 +363,9 @@
 
 ## IBARRA-098 · 2026-10-12 · Remaining official Pages assertions after deployment recovery
 
-- Symptom: the current full official run reports 164 method errors and no class-level
-  setup/deployment errors after 518 passing methods; the previous baseline was 510 passes.
+- Symptom: the 2026-10-14 full official run reports 163 method errors and no class-level
+  setup/deployment errors after 519 passing methods; the previous baseline was 518 passes.
+  The unchanged positiveIncludeForwardTest is restored with no previous-pass regression.
 - Minimal repro: `./run-official-tck-pages-4.0.sh all`; individual classes and
   failing method selectors are recorded under stable TCK ids in
   [ibarra-tck/FAILURES.md](ibarra-tck/FAILURES.md).

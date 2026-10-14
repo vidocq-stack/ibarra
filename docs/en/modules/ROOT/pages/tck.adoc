@@ -8,24 +8,31 @@ executes all declared methods but remains failing; Ibarra is not certified.
 
 == Recorded baseline
 
-Run date: 2026-10-13, Temurin Java 25 and Maven 3.9.16.
+Run date: 2026-10-14, Temurin Java 25 and Maven 3.9.16.
 
 [source,bash]
 ----
-./run-official-tck-pages-4.0.sh smoke --no-prepare
-./run-official-tck-pages-4.0.sh all --no-install --no-prepare
+./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 clean install
+./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 -Ptck -pl ibarra-tck clean test
+./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 -Ptck,tck-official -pl ibarra-tck clean test '-Dtest=ee.jakarta.tck.pages.**.*IT'
 ----
 
-Official artifacts had already been prepared; the smoke command clean-installs the reactor.
+Official artifacts had already been prepared. The isolated cache includes the
+unpublished typed-forward producer from
+link:https://codefloe.com/Vidocq/foy/pulls/47[Foy #47], signed commit `073288d`.
+The local result requires that producer; independent CI must wait for its merge
+and snapshot publication. No temporary workflow bootstrap or global cache install
+was used. The ordinary reactor passes 319 tests, adapter 34/34 and the independent
+Maven example packages; build provenance generation was enabled.
 The verified official binary contains 92 test classes and 682 declared JUnit
-`@Test` methods. The run records *518 passing methods* and *164 failing methods*,
+`@Test` methods. The run records *519 passing methods* and *163 failing methods*,
 with *zero class-level setup/deployment errors*. Surefire therefore reports 682
-entries, 164 errors, zero assertion failures and zero skips, and exits nonzero.
+entries, 163 errors, zero assertion failures and zero skips, and exits nonzero.
 The upstream HTTP assertion helper reports failures as exceptions.
 
-*518/682 = 76.0% measured full-suite pass rate*. All 682 declared test methods
+*519/682 = 76.1% measured full-suite pass rate*. All 682 declared test methods
 execute across 92 official classes, with no skipped methods or deployment blockers.
-The suite remains failing and uncertified because 164 methods report errors.
+The suite remains failing and uncertified because 163 methods report errors.
 
 The detailed command, binary inventory, counts and remaining categories are in
 link:{repo-ibarra}/src/branch/main/ibarra-tck/BASELINE.md[the recorded baseline].
@@ -75,9 +82,13 @@ Valid precompile requests now suppress the page body, including through jsp-file
 aliases; invalid decoded values send HTTP 500. The stronger HTTP counter test
 checks suppression beyond the official positive tests' text assertion.
 
-The include-forward prototype is withheld after a reproduced child response-wrapper
-regression. Its original official method remains failing (IBARRA-119/130); no
-prototype pass is credited here. The source evidence and follow-up are in
+The unsafe include-forward prototype was withheld after a reproduced child
+response-wrapper regression. Its typed replacement now restores the original
+positiveIncludeForwardTest (IBARRA-119/130), preserving all 518 prior passes.
+All twelve include-action methods pass and the full run has 48 completely passing
+classes. The stronger HTTP fixture checks wrapper headers, cached writers, nested
+ancestors, stopped parent side effects and missing-target 404 behavior.
+The source evidence and follow-up are in
 link:{repo-ibarra}/src/branch/main/studies/include-forward-wrapper-dispatch.md[the dispatch study].
 
 The signature/envelope follow-up restores eight more methods with no regression.
@@ -86,10 +97,10 @@ tagdependent named attributes use ordinary semantics while explicit bodies stay
 opaque. XML output accepts its specified yes/no omission aliases and rejects
 nonempty bodies before normalization. All JSP document general methods now pass;
 the final run has 47 completely passing classes. Broader XML prolog/doctype output
-semantics remain open, and typed include-forward dispatch is a separate slice.
+semantics remain open.
 
 `official-pages-tck-smoke` runs on pull requests and `main`. It clean-installs
-Ibarra, runs 33 adapter regression tests, then three official JspFactory
+Ibarra, runs 34 adapter regression tests, then three official JspFactory
 tests, one JspEngineInfo test and fourteen character-sequence/EL/encoding
 configuration tests. This deliberately bounded regression check
 does not claim 100% Pages coverage. Full-suite certification is milestone I8;

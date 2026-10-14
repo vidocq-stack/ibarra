@@ -1,13 +1,14 @@
 # Official Pages failure inventory
 
-Date: 2026-10-13, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-This inventory records the remaining 164 method errors and no setup errors
+Date: 2026-10-14, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
+This inventory records the remaining 163 method errors and no setup errors
 after legacy WAR library, JspIdConsumer, direct property and collection-method
 accessor generation and JSP forwarding output-state checks. All 682 official methods
 now execute. Each class keeps its previous stable id.
 The parallel compiler batch restores literal editor conversion, opaque tagdependent
-bodies and invalid precompile handling. Include-forward stays open: its prototype
-was withheld after the wrapper regression recorded in IBARRA-130.
+bodies and invalid precompile handling. The unsafe include-forward prototype was
+withheld; the typed dispatch replacement now restores positiveIncludeForwardTest
+without bypassing application wrappers (IBARRA-119/130).
 The signature/envelope follow-up restores eight more methods without a regression;
 the six pre-existing output errors remain tracked under TCK-033.
 Resolved method entries remain as a trace; other causes still need investigation.
@@ -469,12 +470,14 @@ Resolved methods (2026-10-13, JSP forwarding output-state checks):
 ## TCK-031 — ee.jakarta.tck.pages.spec.core_syntax.actions.include.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.spec.core_syntax.actions.include.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Status: RESOLVED; all twelve official methods now pass.
+- Symptom: pending ancestor JSP output previously survived an included page's forward.
+- Minimal repro: select `ee.jakarta.tck.pages.spec.core_syntax.actions.include.URLClientIT#positiveIncludeForwardTest`.
+- Cause: inclusion wrappers hid ancestor buffers and kept container INCLUDE policy.
+  Typed forwarding clears validated JSP buffers, preserves application wrappers and
+  propagates completion to generated including pages (IBARRA-119/130).
 
-Failing methods:
+Resolved methods (2026-10-14, typed include forwarding):
 
 - `positiveIncludeForwardTest`
 

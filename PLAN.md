@@ -462,6 +462,23 @@ eight methods restored and no previous-pass regression. Ordinary reactor 309,
 adapter 33, smoke 18 and the independent example package pass. Typed forwarding
 is a separate coordinated Foy/Ibarra slice, isolated from this publication branch.
 
+## Typed forwarding delivery (2026-10-14)
+
+The safe replacement for the withheld include-forward prototype preserves
+application response wrappers and retained writer transformations through Foy's
+typed dispatcher. Core validates every live JSP ancestor before clearing buffers;
+generated parents stop after success, failed dispatch restores inclusion routes,
+and successful writer routes survive page cleanup. No production module descriptor,
+dependency scope, export or open changes are required.
+
+On merged signature/envelope head e99434e plus signed consumer e0c5295, the default
+reactor passes 319 tests, adapter 34/34 and the independent example packages.
+The complete official run passes 519/682 (76.1%), with 163 method errors, zero
+setup/skips and 48 completely passing classes. Exactly positiveIncludeForwardTest
+is restored; all 518 previous passes remain. Provenance generation was enabled.
+This local run uses isolated unpublished Foy #47 commit073288d artifacts; merge
+and publication of that producer must precede independent Ibarra CI validation.
+
 ## Initial I4 implementation
 
 Initial I4 proof (2026-10-10): `examples/precompiled-pages` builds with the real
