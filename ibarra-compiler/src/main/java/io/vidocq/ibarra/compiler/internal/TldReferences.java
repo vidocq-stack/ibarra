@@ -22,6 +22,7 @@ package io.vidocq.ibarra.compiler.internal;
 import io.vidocq.ibarra.compiler.*;
 import io.vidocq.ibarra.spi.PageDescriptor;
 import java.io.*;
+import java.net.URI;
 import java.util.*;
 import java.util.jar.JarInputStream;
 
@@ -71,12 +72,32 @@ public final class TldReferences {
         return new Resolved(options.tagLibraries(), resources);
     }
 
+    /** Performs application-level validation for absolute taglib declarations. */
+    public static Resolved discoverStrict(Collection<TranslationUnit.Result> units, GenerationOptions options,
+            Map<String, TagLibraryDescriptor> suppliedResources) {
+        var resolved = discover(units, options, suppliedResources);
+        for (var unit : units) for (var reference : unit.tagLibraries()) {
+            String uri = reference.uri();
+            if (reference.forced() || resolved.libraries().containsKey(uri) || uri.startsWith("urn:jsptagdir:")) continue;
+            if (absoluteUri(uri, reference.location()))
+                throw new PageParseException(reference.location(), "No tag library is mapped to absolute URI: " + uri);
+        }
+        return resolved;
+    }
+
     private static String path(String uri, SourceLocation at) {
         if (uri.contains(":")) throw new PageParseException(at, "Forced TLD reference must be a web resource path: " + uri);
         try {
             String path = TranslationUnit.resolve(at.source(), uri);
             PageDescriptor.validatePath(path); return path;
         } catch (IllegalArgumentException invalid) { throw new PageParseException(at, "Invalid TLD resource path: " + uri, invalid); }
+    }
+
+    private static boolean absoluteUri(String value, SourceLocation at) {
+        try { return URI.create(value).isAbsolute(); }
+        catch (IllegalArgumentException invalid) {
+            throw new PageParseException(at, "Invalid tag library URI: " + value, invalid);
+        }
     }
 
     /** Explicit files need no .tld extension; JARs use their conventional descriptor. */

@@ -63,8 +63,10 @@ TCK-054 `implicitobjects.URLClientIT` (7/7). The subsequent focused TCK-056
 `tagfiles.semantics.URLClientIT` rerun after IBARRA-141 passes all eight methods,
 including dynamic attributes, declared attributes, context-wrapper scopes and
 literal-path forwarding. Its former unresolved `request` deployment error was
-fixed by IBARRA-140. The full-suite totals above predate IBARRA-141 and have not
-been rerun; certification remains pending.
+fixed by IBARRA-140. The focused TCK-057 `tldres.URLClientIT` rerun after
+IBARRA-142 passes all 12 methods, including `tldResPathAbsUriNotFoundTest`. The
+full-suite totals above predate IBARRA-141 and IBARRA-142 and have not been rerun;
+certification remains pending.
 
 Historical full-suite snapshots from 2026-10-14 are not directly comparable because
 the set of methods that reached execution changed. An earlier `all --no-install`

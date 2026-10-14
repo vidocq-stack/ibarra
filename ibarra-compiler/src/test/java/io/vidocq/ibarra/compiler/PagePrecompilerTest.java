@@ -37,6 +37,20 @@ class PagePrecompilerTest {
     private final List<Path> extraModules = new ArrayList<>();
 
     @Test
+    void deploymentRecordsMissingAbsoluteTagLibraryUriAsTranslationFailure() throws Exception {
+        prepare(false);
+        Files.writeString(web.resolve("index.jsp"), "<%@ page contentType='text/plain' %>"
+                + "<%@ taglib uri='https://example.invalid/no-such-library' prefix='missing' %>");
+
+        var deployment = new PagePrecompiler().precompileDeployment(web, classes, modulePaths(),
+                "demo.generated", GenerationOptions.DEFAULT);
+
+        assertTrue(deployment.failures().containsKey("/index.jsp"), deployment.failures().toString());
+        assertTrue(deployment.failures().get("/index.jsp").contains("https://example.invalid/no-such-library"),
+                deployment.failures().toString());
+    }
+
+    @Test
     void deploymentCompilationCannotResolveRemovedOwnedClassesFromPreviousRuns() throws Exception {
         prepare(false);
         Files.writeString(web.resolve("b.jsp"), "<%! public static class Helper { public static String value(){return \"old\";} } %>");

@@ -100,9 +100,10 @@ The latest `all` invocation reports 513 passes and 142 errors across 92 classes
 (78.3%). The previous comparable report was 525/682; this run reported 655 entries,
 so the 27-entry difference is being reconciled before comparing the aggregates.
 The SimpleTagSupport TCK class passes 11/11 methods, and the focused TCK-056 tag-file
-semantics class now passes 8/8 after IBARRA-141. The full suite has not been rerun
-after that fix, so the overall certification status remains pending. The ordinary
-reactor passes 362 tests, the adapter 35/35 and the independent example
+semantics class passes 8/8 after IBARRA-141. The TCK-057 TLD resource class passes
+12/12 after IBARRA-142. The full suite has not been rerun after these fixes, so the
+overall certification status remains pending. The ordinary reactor passes 363 tests,
+the adapter 35/35 and the independent example
 packages successfully. Typed forwarding uses the producer delivered in
 [Foy #47](https://codefloe.com/Vidocq/foy/pulls/47), now merged and published.
 See [the exact baseline](ibarra-tck/BASELINE.md).

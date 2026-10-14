@@ -1,5 +1,19 @@
 # BUG.md — Ibarra
 
+## IBARRA-142 · 2026-10-14 · Unmapped absolute tag-library URI escapes translation validation
+
+- Symptom: the TCK-057 fixture declares an absolute URI absent from the tag-library map,
+  but the page compiled when its tag prefix was unused instead of raising a translation error.
+- Minimal repro: run
+  `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.spec.tldres.URLClientIT`.
+- Cause: `TldReferences.discover` skipped every unforced URI containing a scheme, without
+  checking whether an absolute URI resolved through the discovered alias map.
+- Fix: validate absolute tag-library URIs during discovery and retain `urn:jsptagdir:`
+  as a separate directory reference. An unmapped URI now produces a per-page
+  `PageParseException` at its directive.
+- Status: FIXED (2026-10-14). The focused official TCK-057 class passes 12/12 methods.
+
 ## IBARRA-141 · 2026-10-14 · TCK-056 tag-file semantics fail after deployment
 
 - Symptom: after TCK-056 deploys, five of its eight HTTP assertions report
@@ -483,8 +497,9 @@ is resolved.
   setup/deployment errors after 525 passing methods; the previous baseline was 523 passes.
   Six XML output methods pass with no previous-pass regression. All 682
   method keys remain present; there are zero assertion failures or skips.
-- Targeted follow-up: TCK-005 now passes all 11 methods in `URLClientIT`, including
-  `bodyTagSupportVariableSynchronizationTest`; the full-suite aggregate still needs
+- Targeted follow-up: TCK-005 passes all 11 methods in `URLClientIT`, including
+  `bodyTagSupportVariableSynchronizationTest`; TCK-056 passes 8/8 after IBARRA-141,
+  and TCK-057 passes 12/12 after IBARRA-142. The full-suite aggregate still needs
   a fresh run before updating the baseline counts.
 - Minimal repro: `./run-official-tck-pages-4.0.sh all`; individual classes and
   failing method selectors are recorded under stable TCK ids in

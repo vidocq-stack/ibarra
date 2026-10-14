@@ -541,6 +541,15 @@ complete official Pages suite has not been rerun after these changes; its last
 full-run aggregate remains the separate diagnostic snapshot in
 `ibarra-tck/BASELINE.md`.
 
+## Absolute tag-library URI validation (2026-10-14)
+
+Standard taglib directives now validate absolute URIs against the discovered
+tag-library alias map even when the declared prefix is unused. Unknown absolute
+URIs become per-page translation errors; `urn:jsptagdir:` continues through the
+separate tag-directory path. The TCK-057 `tldres.URLClientIT` class passes all
+12 methods after IBARRA-142. The full official suite has not been rerun, so its
+recorded aggregate and pending certification status remain unchanged.
+
 ## Initial I4 implementation
 
 Initial I4 proof (2026-10-10): `examples/precompiled-pages` builds with the real

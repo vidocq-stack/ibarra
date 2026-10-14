@@ -3,8 +3,9 @@
 Date: 2026-10-14, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
 The latest comparable full suite recorded 119 method-level errors, no class-level
 setup errors and exercised all 682 official methods. IBARRA-140 fixes TCK-054 and
-the TCK-056 deployment blocker. A focused rerun after IBARRA-141 passes TCK-056
-8/8; the complete suite has not been rerun after that change.
+the TCK-056 deployment blocker. Focused reruns pass TCK-056 8/8 after IBARRA-141
+and TCK-057 12/12 after IBARRA-142; the complete suite has not been rerun after
+these changes.
 See [BASELINE.md](BASELINE.md) for current counts and historical snapshots. Each
 class keeps its previous stable id.
 The parallel compiler batch restores literal editor conversion, opaque tagdependent
@@ -933,16 +934,22 @@ Methods passed (8/8):
 
 ## TCK-057 — ee.jakarta.tck.pages.spec.tldres.URLClientIT
 
-- Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the newly runnable official HTTP assertions report errors.
-- Minimal repro: select `ee.jakarta.tck.pages.spec.tldres.URLClientIT` and any method below.
-- Hypothesis: the missing absolute tag-library URI translation/error response is incorrect; inspect retained page diagnostics and HTTP responses before assigning the cause.
+- Date: 2026-10-14.
+- Status: RESOLVED (IBARRA-142; focused official run).
+- Symptom: an absolute URI missing from the tag-library map did not raise a translation
+  error when the page did not use its declared prefix.
+- Minimal repro: run
+  `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.spec.tldres.URLClientIT`.
+- Cause: `TldReferences.discover` skipped every unforced URI containing a scheme, so
+  unused absolute-URI directives escaped validation.
+- Fix: resolve absolute URIs against the discovered alias map and report an unmapped
+  URI as a page translation error; keep `urn:jsptagdir:` directory references separate.
 
 Resolved setup error (2026-10-12, IBARRA-102): legacy WAR library bytecode now
 assembles into the existing private application module, preserving physical
 JAR references and separate build TLD discovery.
 
-Failing methods:
+The focused official run passes all 12 methods, including the formerly failing method:
 
 - `tldResPathAbsUriNotFoundTest`

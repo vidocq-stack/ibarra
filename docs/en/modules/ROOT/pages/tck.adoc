@@ -7,9 +7,10 @@ on Foy. The eighteen-test smoke subset passes. The last comparable full run
 executes all declared methods and passes 525/682; 157 method errors remain. A
 later full invocation reported 513/655, but its method-count discrepancy has not
 been reconciled. Subsequent targeted reruns pass 16 methods across tag-attribute,
-tag-data, tag-extra-info and function-info classes. A later focused TCK-056
-tag-file semantics run passes all 8 methods after IBARRA-141. Targeted results do
-not replace a full-suite result. Ibarra is not certified.
+tag-data, tag-extra-info and function-info classes. Focused TCK-056 tag-file
+semantics passes all 8 methods after IBARRA-141, and TCK-057 TLD resource
+resolution passes all 12 after IBARRA-142. Targeted results do not replace a
+full-suite result. Ibarra is not certified.
 
 == Recorded baseline
 

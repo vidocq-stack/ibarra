@@ -129,13 +129,13 @@ public final class PagePrecompiler {
         }
         var configured = new GenerationOptions(options.propertyGroups(), options.sources(), false, bytes, libraries);
         TldReferences.Resolved resolved;
-        if (!retainFailures) resolved = TldReferences.discover(units.values(), configured, options.tagLibraries());
+        if (!retainFailures) resolved = TldReferences.discoverStrict(units.values(), configured, options.tagLibraries());
         else {
             var resolvedResources = new LinkedHashMap<String, TagLibraryDescriptor>();
             var iterator = units.entrySet().iterator();
             while (iterator.hasNext()) {
                 var entry = iterator.next();
-                try { resolvedResources.putAll(TldReferences.discover(List.of(entry.getValue()), configured, options.tagLibraries()).resources()); }
+                try { resolvedResources.putAll(TldReferences.discoverStrict(List.of(entry.getValue()), configured, options.tagLibraries()).resources()); }
                 catch (PageParseException failure) { failures.put(entry.getKey(), failure.getMessage()); iterator.remove(); }
             }
             resolved = new TldReferences.Resolved(configured.tagLibraries(), resolvedResources);

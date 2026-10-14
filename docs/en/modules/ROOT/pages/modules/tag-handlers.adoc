@@ -10,7 +10,9 @@ precede loose WEB-INF resources. Relative taglib declarations retain their
 source origin across static includes. XML tag namespaces using `urn:jsptld:`
 force direct resource lookup, bypassing URI aliases. Ordinary XML namespaces use
 only URI mappings; discovering an external resource does not bind that namespace
-in unrelated pages.
+in unrelated pages. An unmapped absolute URI in a standard taglib directive is a
+translation error even when its prefix is unused. `urn:jsptagdir:` resolves a tag
+directory separately from TLD aliases.
 
 Direct TLD references retain immutable metadata from the raw per-file parse
 before normalization removes XML declaration wrappers. Includes, preludes and
