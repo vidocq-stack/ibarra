@@ -640,6 +640,30 @@ class PagePrecompilerTest {
     }
 
     @Test
+    void fragmentSetterPrefersExactTypeOverAssignableOverload() throws Exception {
+        prepareFunctions();
+        Path source = directory.resolve("OverloadedEcho.java");
+        Files.writeString(source, """
+                package demo;
+                public class OverloadedEcho extends jakarta.servlet.jsp.tagext.SimpleTagSupport {
+                    private String selected;
+                    public void setPiece(Object value) { selected = "Object"; }
+                    public void setPiece(jakarta.servlet.jsp.tagext.JspFragment value) { selected = "JspFragment"; }
+                    public void doTag() throws java.io.IOException { getJspContext().getOut().write(selected); }
+                }
+                """);
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, "--release", "25", "--module-path",
+                modulePath() + File.pathSeparator + classes, "--add-modules", "demo.web", "--patch-module", "demo.web=" + source.getParent(), "-d", classes.toString(), source.toString()));
+        Files.writeString(web.resolve("WEB-INF/overloaded.tld"), "<taglib><uri>urn:overloaded</uri><tag><name>echo</name><tag-class>demo.OverloadedEcho</tag-class><body-content>scriptless</body-content><attribute><name>piece</name><fragment>true</fragment></attribute></tag></taglib>");
+        Files.writeString(web.resolve("index.jspx"), "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:t='urn:overloaded' version='4.0'><jsp:directive.page session='false'/><t:echo><jsp:attribute name='piece'>fragment body</jsp:attribute></t:echo></jsp:root>");
+        Files.writeString(web.resolve("index.jsp"), "<%@ page session='false' %><%@ include file='index.jspx' %>");
+        precompile();
+        Path jar = directory.resolve("overloaded-fragment-setter.jar");
+        jar(classes, jar);
+        assertEquals("JspFragment", render(jar, true));
+    }
+
+    @Test
     void explicitJarLocationsUseMetaInfTaglibAndMissingLocationsFailTranslation() throws Exception {
         prepare(false); listenerClass();
         Files.createDirectories(web.resolve("WEB-INF"));
