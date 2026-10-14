@@ -26,6 +26,7 @@ import java.util.*;
 /** Evaluates literal TagExtraInfo variable declarations without loading application classes. */
 final class TagExtraInfoVariables {
     private static final String VARIABLE_INFO = "jakarta/servlet/jsp/tagext/VariableInfo";
+    private static final String TAG_EXTRA_INFO = "jakarta/servlet/jsp/tagext/TagExtraInfo";
     private static final String DEBUG = "ee/jakarta/tck/pages/common/util/JspTestUtil";
     private static final Object NULL = new Object();
 
@@ -44,6 +45,8 @@ final class TagExtraInfoVariables {
     private final Object instance = new Object();
 
     static Optional<List<Variable>> read(ClassModel model) {
+        // The specification's base implementation returns its empty VariableInfo array.
+        if (model.thisClass().asInternalName().equals(TAG_EXTRA_INFO)) return Optional.of(List.of());
         var method = model.methods().stream().filter(value -> value.methodName().equalsString("getVariableInfo")
                 && value.methodType().equalsString("(Ljakarta/servlet/jsp/tagext/TagData;)[Ljakarta/servlet/jsp/tagext/VariableInfo;"))
                 .findFirst();

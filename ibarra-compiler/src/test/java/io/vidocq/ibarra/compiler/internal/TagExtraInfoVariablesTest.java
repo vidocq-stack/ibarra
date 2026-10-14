@@ -56,6 +56,15 @@ class TagExtraInfoVariablesTest {
     }
 
     @Test
+    void inheritedTagExtraInfoDefaultDeclaresNoVariables() throws IOException {
+        try (var stream = TagExtraInfo.class.getResourceAsStream("TagExtraInfo.class")) {
+            assertNotNull(stream);
+            var model = ClassFile.of().parse(stream.readAllBytes());
+            assertEquals(List.of(), TagExtraInfoVariables.read(model).orElseThrow());
+        }
+    }
+
+    @Test
     void rejectsDynamicVariableMetadataWithoutExecutingTheTei() throws IOException {
         var model = model(DynamicTei.class.getName());
         assertThrows(IllegalArgumentException.class, () -> TagExtraInfoVariables.read(model));

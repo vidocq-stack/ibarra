@@ -103,7 +103,8 @@ Resolved methods (2026-10-13, direct WAR bean property access; 2026-10-14, TEI v
 - Status: OPEN.
 - Symptom: the official HTTP/signature assertion reported an error.
 - Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.functioninfo.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Cause (2026-10-14): the pages now translate with the inherited empty `TagExtraInfo.getVariableInfo` contract, but they still need `BaseTCKExtraInfo.validate(TagData)` to run against a complete `TagInfo`/`TagLibraryInfo` function catalogue. That validator sets a shared static flag which the JSP request checks; the build-side precompiler and request server are separate processes, so replaying build-time state cannot satisfy that assertion.
+- Follow-up: implement the TEI validation and metadata lifecycle with a specification-compliant solution for the runner's process boundary; see [the TEI/AOT study](../studies/tag-extra-info-aot.md).
 
 Failing methods:
 
