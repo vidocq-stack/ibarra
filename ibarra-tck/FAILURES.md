@@ -131,16 +131,19 @@ Resolved methods (2026-10-12, JspIdConsumer generation):
 
 ## TCK-008 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.pagedata.URLClientIT
 
-- Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
+- Date: 2026-10-12; resolved 2026-10-14.
+- Status: RESOLVED.
+- Symptom: both PageData tests failed because standard-page validators were not invoked with a complete XML view, and standard tag-file attributes/validators were unsupported.
 - Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.pagedata.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Cause: generated page initialization had no TagLibraryValidator invocation or XML view serializer. Standard `.tag` files did not expose `attribute` directives or validate their own PageData, and nested actions rejected declared attributes.
+- Fix: TLD validators now receive generated PageData XML for standard JSP pages and standard tag files; `.tag` supports scalar attribute declarations and nested declared tag attributes. The final official targeted run passes 2/2 methods.
 
-Failing methods:
+Methods failing in the original baseline:
 
 - `pageDataTest`
 - `pageDataTagFileTest`
+
+Resolved methods (2026-10-14): both methods above pass.
 
 ## TCK-009 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.simpletagsupport.URLClientIT
 
@@ -282,13 +285,13 @@ Failing methods:
 
 ## TCK-016 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.taglibraryvalidator.URLClientIT
 
-- Date: 2026-10-12.
-- Status: OPEN.
+- Date: 2026-10-12; resolved 2026-10-14.
+- Status: RESOLVED.
 - Symptom: the official HTTP/signature assertion reported an error.
 - Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.taglibraryvalidator.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Fix: generated servlet initialization invokes each referenced TLD validator once with PageData XML and fails initialization on validation messages. The final official targeted run passes 2/2 methods.
 
-Failing methods:
+Methods failing in the original baseline:
 
 - `tagLibraryValidatorAPITest`
 - `tagLibraryValidatorTranslationFailureTest`

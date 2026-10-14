@@ -40,7 +40,7 @@ public final class TldParser {
         var listeners = new ArrayList<String>();
         var tags = new LinkedHashMap<String, TagDescriptor>();
         var functions = new LinkedHashMap<String, TldFunction>();
-        boolean validationRequired = false;
+        TagLibraryValidatorDescriptor validator = null;
         for (var child : DeploymentXml.children(root)) {
             String name = child.getLocalName();
             if (!Set.of("uri", "listener", "tag", "tag-file", "validator", "function").contains(name)) continue;
@@ -62,8 +62,8 @@ public final class TldParser {
                 var tag = tag(child, namespace, at, name.equals("tag-file"));
                 if (tags.putIfAbsent(tag.name(), tag) != null) throw new PageParseException(at, "Duplicate tag: " + tag.name());
             } else if (name.equals("validator")) {
-                if (validationRequired) throw new PageParseException(at, "Duplicate tag library validator");
-                validationRequired = true;
+                if (validator != null) throw new PageParseException(at, "Duplicate tag library validator");
+                validator = validator(child, namespace, at);
             } else if (name.equals("uri")) {
                 if (uri != null) throw new PageParseException(at, "Duplicate taglib URI");
                 uri = child.getTextContent().trim();
@@ -82,7 +82,50 @@ public final class TldParser {
                 listeners.add(type);
             }
         }
-        return new TagLibraryDescriptor(path, uri, listeners, tags, validationRequired, functions);
+        return new TagLibraryDescriptor(path, uri, listeners, tags, validator, functions);
+    }
+
+    private TagLibraryValidatorDescriptor validator(Element element, String namespace, SourceLocation at) {
+        String className = null;
+        var initParameters = new LinkedHashMap<String, String>();
+        for (var field : DeploymentXml.children(element)) {
+            requireNamespace(field, namespace, at);
+            switch (field.getLocalName()) {
+                case "description" -> { }
+                case "validator-class" -> {
+                    if (className != null) throw new PageParseException(at, "Duplicate tag library validator class");
+                    className = field.getTextContent().trim();
+                }
+                case "init-param" -> {
+                    String parameterName = null;
+                    String parameterValue = null;
+                    for (var parameterField : DeploymentXml.children(field)) {
+                        requireNamespace(parameterField, namespace, at);
+                        switch (parameterField.getLocalName()) {
+                            case "description" -> { }
+                            case "param-name" -> {
+                                if (parameterName != null) throw new PageParseException(at, "Duplicate tag library validator parameter name");
+                                parameterName = parameterField.getTextContent().trim();
+                            }
+                            case "param-value" -> {
+                                if (parameterValue != null) throw new PageParseException(at, "Duplicate tag library validator parameter value");
+                                parameterValue = parameterField.getTextContent().trim();
+                            }
+                            default -> throw new PageParseException(at, "Invalid tag library validator parameter field: "
+                                    + parameterField.getLocalName());
+                        }
+                    }
+                    if (parameterName == null || parameterName.isBlank() || parameterValue == null)
+                        throw new PageParseException(at, "Missing tag library validator parameter name or value");
+                    if (initParameters.putIfAbsent(parameterName, parameterValue) != null)
+                        throw new PageParseException(at, "Duplicate tag library validator parameter: " + parameterName);
+                }
+                default -> throw new PageParseException(at, "Invalid tag library validator field: " + field.getLocalName());
+            }
+        }
+        if (className == null || !SourceVersion.isName(className))
+            throw new PageParseException(at, "Invalid or missing tag library validator class");
+        return new TagLibraryValidatorDescriptor(className, initParameters);
     }
 
     private TagDescriptor tag(Element element, String namespace, SourceLocation at, boolean tagFile) {

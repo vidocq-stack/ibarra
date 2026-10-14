@@ -519,8 +519,8 @@ is resolved.
 - Symptom: tagLibraryValidatorAPITest and tagLibraryValidatorTranslationFailureTest
   fail in `api.jakarta_servlet.jsp.tagext.taglibraryvalidator.URLClientIT`.
 - Minimal repro: select that fully qualified class with the official script.
-- Hypothesis: full TLV validation and XML-view handling remain incomplete.
-- Status: OPEN, I6 translation/runner investigation; full metadata is not claimed complete.
+- Cause: generated pages did not invoke TLD validators with their XML view, so valid and invalid validator outcomes were not applied.
+- Status: FIXED. Generated page initialization now creates PageData XML, invokes each referenced validator once and fails initialization when it returns messages. Standard `.tag` validators receive the tag-file XML view on first invocation. TCK-016 and TCK-008 each pass 2/2 methods in targeted official runs; complete tag metadata remains outside this fix.
 
 ## IBARRA-088 · 2026-10-12 · Official TryCatchFinally scenario fails
 

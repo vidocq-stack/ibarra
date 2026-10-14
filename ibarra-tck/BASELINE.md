@@ -181,11 +181,11 @@ ordinary Ibarra unit tests or Peano's independent EL TCK.
 |---|---|
 | Per-page translation failures | IBARRA-084 fixed: genuine parse/generation/javac failures become compiled error servlets, while valid pages still render. Global deployment metadata remains fatal. |
 | WAR adaptation | No setup failures remain. Legacy WAR libraries assemble into the private application module (IBARRA-102 fixed); explicit web.xml components use direct factories (IBARRA-100 fixed). Unadapted library metadata remains an explicit boundary. JSP property groups apply at build time; TLD keyword names no longer block deployment. Runtime JSP descriptor exposure remains pending upstream. |
-| Tag files and full tag metadata | `urn:jsptagdir`, variables, TEI/TLV and related metadata remain I6/I7 work. |
+| Tag files and full tag metadata | `urn:jsptagdir`, standard `.tag` scalar attributes, variables, nested declared tag attributes and initial PageData TLV coverage are implemented; `.tagx` actions, EL, fragments and complete tag metadata remain I6/I7 work. |
 | Ordinary TLD attributes | IBARRA-093/094 fixed: keyword names accepted and actual JavaBeans setter types selected/coerced from class files. Deferred/fragment protocols remain exact. |
 | BeanELResolver fixture access | IBARRA-085 fixed; the official method passes with qualified exports to `jakarta.el` only. |
 | JspIdConsumer | All three methods pass; IBARRA-086 fixed by stable per-occurrence generated identifiers. |
-| TagLibraryValidator | Two methods fail; IBARRA-087. |
+| TagLibraryValidator | IBARRA-087 fixed: both official validator methods pass. The PageData page and tag-file methods also pass in focused runs; refresh aggregate suite counts after the next complete run. |
 | TryCatchFinally | The official method passes; IBARRA-088 was an EL verifier-access issue, fixed through direct WAR property accessors. |
 | Unbuffered forward | The method passes; IBARRA-089 is fixed. |
 | PropertyEditor conversion | The method passes; IBARRA-090 is fixed. |

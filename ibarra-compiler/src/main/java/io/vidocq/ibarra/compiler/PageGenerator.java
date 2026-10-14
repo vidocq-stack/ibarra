@@ -73,6 +73,7 @@ public final class PageGenerator {
         private final Map<String, SourceLocation> importLocations = new HashMap<>();
         private final JavaSource declarations = new JavaSource();
         private final JavaSource serviceDeclarations = new JavaSource();
+        private final JavaSource libraryValidations = new JavaSource();
         private final JavaSource tagValidations = new JavaSource();
         private JavaSource body = new JavaSource();
         private final JavaSource fragments = new JavaSource();
@@ -123,6 +124,7 @@ public final class PageGenerator {
             if (settings.containsKey("language") && !settings.get("language").equals("java"))
                 throw error(page.nodes().isEmpty() ? new SourceLocation(page.source(), 1, 1) : page.nodes().getFirst().location(), "Only Java scripting is supported");
             emit(page.nodes());
+            validateTagLibraries();
             int dot = className.lastIndexOf('.');
             String packageName = className.substring(0, dot);
             String simple = className.substring(dot + 1);
@@ -200,6 +202,7 @@ public final class PageGenerator {
             }
             result.add("default -> null; }; }\n");
             result.add("protected abstract void _jspxInitialize();\nprivate final void _jspxValidateTagExtraInfo() {\n");
+            result.add(libraryValidations);
             result.add(tagValidations);
             result.add("}\npublic void jspInit() {}\npublic void jspDestroy() {}\n");
             result.add("@Override public final void init() throws jakarta.servlet.ServletException { super.init(); _jspxInitialize(); _jspxValidateTagExtraInfo(); jspInit(); }\n");
@@ -359,13 +362,11 @@ public final class PageGenerator {
             String local = node.name().substring(node.name().lastIndexOf(':') + 1);
             var tag = library.tags().get(local);
             if (tag == null) throw error(node.location(), "Unknown tag " + local + " in " + library.resourcePath());
-            if (library.validationRequired())
-                throw error(node.location(), "Tag validators, scripting variables or tag metadata are not supported yet");
             if (tag.unsupportedMetadata())
                 throw error(node.location(), tag.unsupportedReason() == null
                         ? "Tag validators, scripting variables or tag metadata are not supported yet" : tag.unsupportedReason());
-            if (tag.tagFile() && (!tag.attributes().isEmpty() || tag.dynamicAttributes()))
-                throw error(node.location(), "Attributes on XML tag files are not supported yet");
+            if (tag.tagFile() && tag.dynamicAttributes())
+                throw error(node.location(), "Dynamic attributes on standard tag files are not supported yet");
             var scriptingVariables = new ArrayList<ScriptingVariable>();
             if (tag.teiClass() != null) for (var variable : classes.tagVariables(tag.teiClass(), node.location()))
                 addScriptingVariable(scriptingVariables, variable.name(), variable.className(), variable.declare(), variable.scope(), node.location());
@@ -404,7 +405,8 @@ public final class PageGenerator {
                     body.add(handler + ".setDynamicAttribute(null, " + JavaSource.quote(supplied.getKey()) + ", " + value(supplied.getValue(), node.location(), false) + ");\n", node.location());
                 } else {
                     if (attribute.fragment()) throw error(node.location(), "Fragment attributes require jsp:attribute");
-                    var setter = attribute.fragment()
+                    var setter = tag.tagFile() ? tagFileSetter(attribute)
+                            : attribute.fragment()
                             ? classes.tagFragmentSetter(tag.handlerClass(), attribute.name(), attribute.setterType(), node.location())
                             : attribute.deferred() ? classes.tagSetter(tag.handlerClass(), attribute.name(), attribute.setterType(), node.location())
                             : classes.tagPropertySetter(tag.handlerClass(), attribute.name(), node.location());
@@ -426,7 +428,8 @@ public final class PageGenerator {
                     if (!tag.dynamicAttributes() || supplied.getKey().contains(":")) throw error(named.location(), "Unknown or namespaced tag attribute: " + supplied.getKey());
                     body.add(handler + ".setDynamicAttribute(null, " + JavaSource.quote(supplied.getKey()) + ", " + capture(content, named.location(), handler) + ");\n", named.location());
                 } else {
-                    var setter = attribute.fragment()
+                    var setter = tag.tagFile() ? tagFileSetter(attribute)
+                            : attribute.fragment()
                             ? classes.tagFragmentSetter(tag.handlerClass(), attribute.name(), attribute.setterType(), named.location())
                             : attribute.deferred() ? classes.tagSetter(tag.handlerClass(), attribute.name(), attribute.setterType(), named.location())
                             : classes.tagPropertySetter(tag.handlerClass(), attribute.name(), named.location());
@@ -520,6 +523,11 @@ public final class PageGenerator {
 
         private record TagInvocation(Map<String, PageNode.Element> attributes, List<PageNode> content) {}
 
+        private BeanClasses.Accessor tagFileSetter(TagAttribute attribute) {
+            String name = "set" + Character.toUpperCase(attribute.name().charAt(0)) + attribute.name().substring(1);
+            return new BeanClasses.Accessor(name, attribute.type());
+        }
+
         private void validateTagExtraInfo(TagDescriptor tag, TagLibraryDescriptor library, PageNode.Element node,
                 TagInvocation invocation) {
             if (tag.teiClass() == null) return;
@@ -566,6 +574,79 @@ public final class PageGenerator {
                     + "if (" + messages + " != null && " + messages + ".length != 0) throw new IllegalStateException("
                     + JavaSource.quote("TagExtraInfo validation failed for " + tag.name() + ": ") + " + " + messages + "[0].getMessage());\n",
                     node.location());
+        }
+
+        private record TagLibraryUse(String prefix, String uri, TagLibraryValidatorDescriptor validator) { }
+
+        private void validateTagLibraries() {
+            var uses = new LinkedHashMap<String, TagLibraryUse>();
+            var namespaces = new LinkedHashMap<String, String>();
+            collectTagLibraryUses(page.nodes(), uses, namespaces);
+            if (uses.isEmpty()) return;
+            String xmlView = PageDataXmlView.serialize(page.nodes(), namespaces);
+            int serial = 0;
+            for (var use : uses.values()) {
+                String suffix = String.valueOf(serial++);
+                String validator = "_jspxTagLibraryValidator" + suffix;
+                String xml = "_jspxPageDataXml" + suffix;
+                String messages = "_jspxTagLibraryMessages" + suffix;
+                libraryValidations.add("var " + validator + " = new " + use.validator().className().replace('$', '.') + "();\n");
+                if (!use.validator().initParameters().isEmpty()) {
+                    String parameters = use.validator().initParameters().entrySet().stream()
+                            .sorted(Map.Entry.comparingByKey())
+                            .map(parameter -> "java.util.Map.<String,Object>entry(" + JavaSource.quote(parameter.getKey())
+                                    + ", " + JavaSource.quote(parameter.getValue()) + ")")
+                            .collect(java.util.stream.Collectors.joining(", "));
+                    libraryValidations.add(validator + ".setInitParameters(java.util.Map.<String,Object>ofEntries(" + parameters + "));\n");
+                }
+                libraryValidations.add("var " + xml + " = " + JavaSource.quote(xmlView) + ";\n"
+                        + "try {\nvar " + messages + " = " + validator + ".validate(" + JavaSource.quote(use.prefix()) + ", "
+                        + JavaSource.quote(use.uri()) + ", new jakarta.servlet.jsp.tagext.PageData() {\n"
+                        + "@Override public java.io.InputStream getInputStream() { return new java.io.ByteArrayInputStream("
+                        + xml + ".getBytes(java.nio.charset.StandardCharsets.UTF_8)); }\n});\n"
+                        + "if (" + messages + " != null && " + messages + ".length != 0) throw new IllegalStateException("
+                        + JavaSource.quote("TagLibraryValidator validation failed for " + use.uri() + ": ")
+                        + " + " + messages + "[0].getMessage());\n"
+                        + "} finally { " + validator + ".release(); }\n");
+            }
+        }
+
+        private void collectTagLibraryUses(List<PageNode> nodes, Map<String, TagLibraryUse> uses,
+                Map<String, String> namespaces) {
+            for (var node : nodes) {
+                if (node instanceof PageNode.Directive directive && directive.name().equals("taglib")) {
+                    String prefix = directive.attributes().get("prefix");
+                    String uri = directive.attributes().get("uri");
+                    if (prefix != null && uri != null) {
+                        namespaces.putIfAbsent(prefix, uri);
+                        addTagLibraryUse(prefix, uri, directive.location(), true, uses);
+                    }
+                } else if (node instanceof PageNode.Element element) {
+                    for (var attribute : element.attributes().entrySet()) {
+                        String prefix = attribute.getKey().startsWith("xmlns:") ? attribute.getKey().substring(6)
+                                : attribute.getKey().equals("xmlns") ? "" : null;
+                        if (prefix != null) {
+                            namespaces.putIfAbsent(prefix, attribute.getValue());
+                            addTagLibraryUse(prefix, attribute.getValue(), element.location(), false, uses);
+                        }
+                    }
+                    if (!element.namespace().isEmpty() && !element.namespace().equals(PageParser.JSP_NAMESPACE)) {
+                        String prefix = element.name().contains(":") ? element.name().substring(0, element.name().indexOf(':')) : "";
+                        namespaces.putIfAbsent(prefix, element.namespace());
+                        addTagLibraryUse(prefix, element.namespace(), element.location(),
+                                sourceSyntaxes.get(element.location().source()) == Page.Syntax.STANDARD, uses);
+                    }
+                    collectTagLibraryUses(element.children(), uses, namespaces);
+                }
+            }
+        }
+
+        private void addTagLibraryUse(String prefix, String uri, SourceLocation at, boolean standard,
+                Map<String, TagLibraryUse> uses) {
+            if (uri.isBlank() || uri.equals(PageParser.JSP_NAMESPACE)) return;
+            var library = resolvedLibraries.resolve(uri, at, standard);
+            if (library == null || library.validator() == null) return;
+            uses.putIfAbsent(uri, new TagLibraryUse(prefix, uri, library.validator()));
         }
 
         private String tagLibraryInfoSource(TagLibraryDescriptor library, PageNode.Element node) {
@@ -1101,7 +1182,6 @@ public final class PageGenerator {
                 if (uri == null) throw error(at, "Unknown function prefix: " + reference.prefix());
                 var library = resolvedLibraries.resolve(uri, origin, namespace == null && directive != null);
                 if (library == null) throw error(at, "No build-time function library for " + uri);
-                if (library.validationRequired()) throw error(at, "Tag library validators are not supported yet");
                 var declaration = library.functions().get(reference.name());
                 if (declaration == null) throw error(at, "Unknown TLD function: " + reference.prefix() + ":" + reference.name());
                 var function = classes.function(declaration, at);

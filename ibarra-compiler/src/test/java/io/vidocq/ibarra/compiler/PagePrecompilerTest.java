@@ -393,12 +393,14 @@ class PagePrecompilerTest {
             assertThrows(PageParseException.class,this::precompile,expression);
         }
     }
-    @Test void functionLibrariesCannotBypassValidatorRequirements() throws Exception {
+    @Test void functionLibrariesInvokeValidatorsDuringPageInitialization() throws Exception {
         prepareFunctions();
         Path tld=web.resolve("WEB-INF/functions.tld");
-        Files.writeString(tld,Files.readString(tld).replace("</taglib>","<validator><validator-class>demo.Validator</validator-class></validator></taglib>"));
-        Files.writeString(web.resolve("index.jsp"),functionPrefix()+"${f:sum(1,2)}");
-        assertThrows(PageParseException.class,this::precompile);
+        Files.writeString(tld,Files.readString(tld).replace("</taglib>","<validator><validator-class>demo.Functions.PageDataValidator</validator-class></validator></taglib>"));
+        Files.writeString(web.resolve("index.jsp"),functionPrefix()+"${f:sum(1,2)}<% if (!demo.Functions.PageDataValidator.called) throw new IllegalStateException(\"Tag library validator was not called\"); %>");
+        precompile();
+        Path jar=directory.resolve("functions-validator.jar"); jar(classes,jar);
+        assertEquals("3",render(jar,true));
     }
     @Test void relativeFunctionBindingsCaptureEachIncludeDeclaration() throws Exception {
         prepareFunctions();
@@ -440,7 +442,15 @@ class PagePrecompilerTest {
                     public static String over(String value){return "string";}
                     public int instance(){return 1;} private static int hidden(){return 1;}
                     public static int wide(String... values){return values.length;}
-                    private static class Secret{} public static int secret(Secret value){return 1;}
+                     private static class Secret{} public static int secret(Secret value){return 1;}
+                     public static class PageDataValidator extends jakarta.servlet.jsp.tagext.TagLibraryValidator {
+                         public static boolean called;
+                         public jakarta.servlet.jsp.tagext.ValidationMessage[] validate(String prefix, String uri,
+                                 jakarta.servlet.jsp.tagext.PageData page) {
+                             called = true;
+                             return null;
+                         }
+                     }
                 }
                 """);
         assertEquals(0,ToolProvider.getSystemJavaCompiler().run(null,null,null,"--release","25","--module-path",
@@ -818,6 +828,55 @@ class PagePrecompilerTest {
     }
 
     @Test
+    void standardSyntaxTagFilesExposeAttributesAndValidateNestedTagLibraries() throws Exception {
+        prepare(false, false, true);
+        Path validatorSource = directory.resolve("validator/demo/Validator.java");
+        Files.createDirectories(validatorSource.getParent());
+        Files.writeString(validatorSource, """
+                package demo;
+                public final class Validator extends jakarta.servlet.jsp.tagext.TagLibraryValidator {
+                    public static int calls;
+                    @Override public jakarta.servlet.jsp.tagext.ValidationMessage[] validate(String prefix, String uri,
+                            jakarta.servlet.jsp.tagext.PageData page) {
+                        calls++;
+                        try {
+                            String xml = new String(page.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                            if (!"v".equals(prefix) || !"urn:validated".equals(uri)
+                                    || !xml.contains("<jsp:directive.attribute") || !xml.contains("<v:check"))
+                                return new jakarta.servlet.jsp.tagext.ValidationMessage[]{
+                                        new jakarta.servlet.jsp.tagext.ValidationMessage(null, "Unexpected PageData: " + xml)};
+                            return null;
+                        } catch (java.io.IOException failure) {
+                            return new jakarta.servlet.jsp.tagext.ValidationMessage[]{
+                                    new jakarta.servlet.jsp.tagext.ValidationMessage(null, failure.toString())};
+                        }
+                    }
+                }
+                """);
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, "--release", "25", "--module-path",
+                modulePath() + File.pathSeparator + classes, "--add-modules", "demo.web", "--patch-module",
+                "demo.web=" + validatorSource.getParent(), "-d", classes.toString(), validatorSource.toString()));
+
+        Path tags = web.resolve("WEB-INF/tags"); Files.createDirectories(tags);
+        Files.writeString(web.resolve("WEB-INF/validated.tld"), """
+                <taglib><uri>urn:validated</uri><validator><validator-class>demo.Validator</validator-class></validator>
+                  <tag><name>check</name><tag-class>jakarta.servlet.jsp.tagext.SimpleTagSupport</tag-class><body-content>empty</body-content></tag>
+                </taglib>
+                """);
+        Files.writeString(tags.resolve("page.tag"), "<%@ tag import='demo.Validator' %>"
+                + "<%@ attribute name='att1' required='true' %>"
+                + "<%@ taglib prefix='v' uri='urn:validated' %><v:check/>"
+                + "<% out.write(Validator.calls + \":\" + att1); %>");
+        Files.writeString(web.resolve("index.jsp"), "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:page att1='att1 value'/>");
+
+        precompile();
+        Path jar = directory.resolve("validated-tag-file.jar"); jar(classes, jar);
+        assertEquals("1:att1 value", render(jar));
+        Files.writeString(web.resolve("index.jsp"), "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:page/>");
+        assertThrows(PageParseException.class, this::precompile);
+    }
+
+    @Test
     void standardSyntaxTagFilesGenerateEmptyNestedSimpleAndClassicTags() throws Exception {
         prepare(false);
         Path tags = web.resolve("WEB-INF/tags"); Files.createDirectories(tags);
@@ -994,11 +1053,15 @@ class PagePrecompilerTest {
         prepare(manual, false);
     }
     private void prepare(boolean manual, boolean el) throws Exception {
+        prepare(manual, el, false);
+    }
+    private void prepare(boolean manual, boolean el, boolean jsp) throws Exception {
         classes = directory.resolve("classes"); web = directory.resolve("web");
         Files.createDirectories(classes); Files.createDirectories(web);
         Path sources = directory.resolve("original"); Files.createDirectories(sources.resolve("demo"));
         Files.writeString(sources.resolve("module-info.java"), "module demo.web { requires io.vidocq.ibarra.api;"
                 + (el ? " requires io.vidocq.peano.api;" : "")
+                + (jsp ? " requires jakarta.servlet.jsp;" : "")
                 + (manual ? " provides io.vidocq.ibarra.spi.PageIndex with demo.ManualIndex;" : "") + " }");
         Files.writeString(sources.resolve("demo/Bean.java"), "package demo; public class Bean { public String getValue() { return \"B\"; } }");
         var inputs = new ArrayList<String>(List.of("--release", "25", "-proc:none", "--module-path", modulePath(), "-d", classes.toString(),

@@ -68,6 +68,29 @@ class TagGenerationTest {
     }
 
     @Test
+    void validatesTagLibraryXmlViewOncePerLibraryDuringPageInitialization() throws Exception {
+        var library = new TldParser().parse("/WEB-INF/pagedata.tld", """
+                <taglib><uri>urn:test</uri>
+                  <validator><validator-class>fixture.Tags$PageDataValidator</validator-class>
+                    <init-param><param-name>expected</param-name><param-value>configured</param-value></init-param>
+                  </validator>
+                  <tag><name>check</name><tag-class>fixture.Tags$PageDataTag</tag-class><body-content>empty</body-content>
+                    <attribute><name>test</name><required>true</required></attribute>
+                    <attribute><name>runtime</name><type>java.lang.String</type><rtexprvalue>true</rtexprvalue></attribute>
+                  </tag>
+                </taglib>
+                """.getBytes(StandardCharsets.UTF_8));
+        var configured = options().withTagLibraries(Map.of("urn:test", library));
+        String page = "<%@ page contentType=\"text/plain\" %>"
+                + "<%! public String declared() { return \"declared\"; } %>"
+                + "<% int scriptlet = 1; %>"
+                + "<x:check test=\"PageData\" runtime='<%= \"dynamic\" %>'/>"
+                + "<x:check test=\"PageData\"/><%= \"Expression Text\" %>template";
+        assertEquals("1:PageData1:PageDataExpression Texttemplate1:PageData1:PageDataExpression Texttemplate",
+                render(page, false, configured, 2));
+    }
+
+    @Test
     void doesNotGenerateAssignmentsForUndeclaredTldVariables() throws Exception {
         assertEquals("done", render("<x:simpleTldUndeclared/>done"));
     }
@@ -102,7 +125,7 @@ class TagGenerationTest {
         tags.put("rawFragment", new TagDescriptor("rawFragment", "fixture.Tags$Fragment", "tagdependent",
                 library.tags().get("fragment").attributes(), false, false));
         return options.withTagLibraries(Map.of("urn:test", new TagLibraryDescriptor(library.resourcePath(), library.uri(), library.listenerClasses(), tags,
-                library.validationRequired(), library.functions())));
+                library.validator(), library.functions())));
     }
 
     @Test
@@ -339,7 +362,7 @@ class TagGenerationTest {
 
     private TagLibraryDescriptor mergeJspIds(TagLibraryDescriptor ids, TagLibraryDescriptor ordinary) {
         var tags = new LinkedHashMap<>(ordinary.tags()); tags.putAll(ids.tags());
-        return new TagLibraryDescriptor(ids.resourcePath(), ids.uri(), ids.listenerClasses(), tags, ids.validationRequired(), ids.functions());
+        return new TagLibraryDescriptor(ids.resourcePath(), ids.uri(), ids.listenerClasses(), tags, ids.validator(), ids.functions());
     }
 
     @Test
@@ -594,7 +617,7 @@ class TagGenerationTest {
         var defaults=options(); var first=defaults.tagLibraries().get("urn:test");
         var tags=new HashMap<>(first.tags()); var echo=tags.get("echo");
         tags.put("echo",new TagDescriptor("echo","fixture.Tags$Second",echo.bodyContent(),echo.attributes(),false,false));
-        var second=new TagLibraryDescriptor("/two/lib.tld",null,List.of(),tags,false);
+        var second=new TagLibraryDescriptor("/two/lib.tld",null,List.of(),tags,null,Map.of());
         var libraries=new HashMap<>(defaults.tagLibraries()); libraries.put("/one/lib.tld",first); libraries.put("/two/lib.tld",second);
         var options=new GenerationOptions(List.of(),Map.of(
                 "/one/bind.jspf","<%@ taglib prefix='q' uri='lib.tld' %><q:echo label='a'>body</q:echo>",
@@ -769,6 +792,38 @@ class TagGenerationTest {
                                 return new ValidationMessage[]{new ValidationMessage(data.getId(), "Unexpected tag library function metadata")};
                             functionMetadata=function.getName()+":"+function.getFunctionClass()+":"+function.getFunctionSignature();
                             return null;
+                        }
+                    }
+                    public static class PageDataValidator extends TagLibraryValidator {
+                        static int calls;
+                        public ValidationMessage[] validate(String prefix, String uri, PageData page) {
+                            calls++;
+                            try {
+                                String first = new String(page.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                                String second = new String(page.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                                if (!"x".equals(prefix) || !"urn:test".equals(uri)
+                                        || !"configured".equals(getInitParameters().get("expected")) || !first.equals(second)
+                                        || !first.startsWith("<jsp:root") || !first.contains("xmlns:jsp=" + (char) 34 + "http://java.sun.com/JSP/Page" + (char) 34)
+                                        || !first.contains("xmlns:x=" + (char) 34 + "urn:test" + (char) 34)
+                                        || !first.contains("version=" + (char) 34 + "2.0" + (char) 34)
+                                        || !first.contains("<jsp:declaration") || !first.contains("<jsp:scriptlet")
+                                        || !first.contains("<jsp:expression") || !first.contains("<jsp:text")
+                                        || !first.contains("<x:check") || !first.contains("runtime=" + (char) 34)
+                                        || !first.contains("%= &quot;dynamic&quot; %")
+                                        || !first.contains("jsp:id=" + (char) 34))
+                                    return new ValidationMessage[]{new ValidationMessage(null, "Unexpected PageData XML view: " + first)};
+                                return null;
+                            } catch (java.io.IOException failure) {
+                                return new ValidationMessage[]{new ValidationMessage(null, failure.toString())};
+                            }
+                        }
+                    }
+                    public static class PageDataTag extends SimpleTagSupport {
+                        private String test;
+                        public void setTest(String value) { test = value; }
+                        public void setRuntime(String value) { }
+                        public void doTag() throws java.io.IOException {
+                            getJspContext().getOut().write(PageDataValidator.calls + ":" + test);
                         }
                     }
                     public static class Validate extends SimpleTagSupport {

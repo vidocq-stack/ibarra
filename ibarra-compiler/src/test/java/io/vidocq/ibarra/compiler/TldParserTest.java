@@ -22,6 +22,7 @@ package io.vidocq.ibarra.compiler;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -54,6 +55,24 @@ class TldParserTest {
         assertEquals("urn:test", library.uri());
         assertEquals(List.of("example.Startup", "example.Outer$Listener"), library.listenerClasses());
         assertThrows(UnsupportedOperationException.class, () -> library.listenerClasses().clear());
+    }
+
+    @Test
+    void tagLibraryValidatorClassAndInitParametersAreRetainedAsImmutableMetadata() {
+        var library = parse("""
+                <taglib xmlns="https://jakarta.ee/xml/ns/jakartaee" version="3.0">
+                  <validator>
+                    <description>Validate page data</description>
+                    <validator-class>example.PageValidator</validator-class>
+                    <init-param><param-name>mode</param-name><param-value>strict</param-value></init-param>
+                    <init-param><param-name>empty</param-name><param-value></param-value></init-param>
+                  </validator>
+                </taglib>
+                """);
+        assertEquals(new TagLibraryValidatorDescriptor("example.PageValidator", Map.of("mode", "strict", "empty", "")),
+                library.validator());
+        assertTrue(library.validationRequired());
+        assertThrows(UnsupportedOperationException.class, () -> library.validator().initParameters().clear());
     }
 
     @Test
@@ -103,6 +122,10 @@ class TldParserTest {
                 "<listener><listener-class>example.Bad()</listener-class></listener>",
                 "<listener/>",
                 "<listener><listener-class>example.A</listener-class><listener-class>example.B</listener-class></listener>",
+                "<validator/>",
+                "<validator><validator-class>example.A</validator-class><validator-class>example.B</validator-class></validator>",
+                "<validator><validator-class>example.A</validator-class><init-param><param-name>x</param-name><param-value>1</param-value></init-param><init-param><param-name>x</param-name><param-value>2</param-value></init-param></validator>",
+                "<validator><validator-class>not a class</validator-class></validator>",
                 "<uri>urn:a</uri><uri>urn:b</uri>",
                 "<tag><name>x</name><tag-class>example.Handler</tag-class><variable><name-given>v</name-given><scope>BAD</scope></variable></tag>",
                 "<tag><name>x</name><tag-class>example.Handler</tag-class><variable><name-given>v</name-given></variable><variable><name-given>v</name-given></variable></tag>")) {

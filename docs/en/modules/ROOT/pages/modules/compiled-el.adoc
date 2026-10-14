@@ -130,8 +130,10 @@ resolution; these bindings apply to qualified TLD functions.
 The catalogue discovers WEB-INF resources and library resources, plus explicit
 web.xml aliases or supplied generation metadata. Direct declarations also load
 TLD/JAR snapshots outside those roots, keeping resource bindings separate from
-URI aliases and registering their listeners. Invoked libraries with
-TagLibraryValidator metadata are rejected, including function-only libraries.
+URI aliases and registering their listeners. Libraries with `TagLibraryValidator`
+metadata receive the generated PageData XML during servlet initialization,
+including function-only libraries. Request-time attribute expressions in that
+XML view use the JSP XML syntax `%=`.
 Interpreter preview does not support these descriptor-only bindings and fails
 explicitly. Deferred attributes and runtime function-map mutation remain outside
 this implementation.

@@ -40,12 +40,16 @@ Identifiers stay stable across requests while handler instances remain fresh.
 Classic handlers synchronize statically declared `TagExtraInfo` and TLD
 `<name-given>` variables across their lifecycle. Simple handlers synchronize
 `AT_BEGIN` and `AT_END` variables after `doTag`. Dynamic TEI metadata, TLD
-`<name-from-attribute>` variables, validators and full tag metadata APIs remain pending.
-Standard `.tag` files now support tag/import/variable/taglib directives, scriptlets,
-scripting expressions, declared variables, and empty nested simple/classic custom tags.
-Nested tags cannot have attributes or bodies, and classic handlers with body or
-exception callbacks remain unsupported. EL, tag-file attributes, fragments, XML
-tag-file actions and complete tag-file metadata remain pending.
+`<name-from-attribute>` variables and full `TagInfo`/`TagLibraryInfo` metadata remain
+pending. TLD `TagLibraryValidator` declarations receive generated PageData XML during
+standard-page servlet initialization; validators referenced by a standard tag file
+receive its XML view when the generated handler is first invoked.
+Standard `.tag` files support tag/import/attribute/variable/taglib directives,
+scriptlets, scripting expressions, declared variables and scalar attribute setters.
+Nested simple/classic custom tags accept declared scalar attributes, including
+request-time Java expressions. Nested tag bodies, classic handlers with body or
+exception callbacks, EL, fragments, XML tag-file actions and complete tag-file
+metadata remain pending.
 Page type/package imports now resolve through build-generated class references.
 TLD functions use generated direct static calls. Typed deferred tag values/methods
 are compiled and constructed per invocation. Dynamic import changes and official TCK
