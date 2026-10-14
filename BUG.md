@@ -58,6 +58,19 @@
   declaration emission must precede the DOCTYPE in the integrated generator. XML tag-file
   semantics remain pending, and the official output fixture has not been rewritten.
 
+Prolog/omission slice (2026-10-14): declaration policy is collected statically
+over the expanded translation unit; jsp:output does not emit at its body position.
+Top-level XML documents without a JSP root add a declaration by default, whereas
+namespace-qualified JSP roots omit it. Included roots do not change the requested
+document's default. Explicit yes/true/no/false values apply regardless of runtime
+control flow. Differing repeated literal settings receive a conservative
+compatibility diagnostic, including equivalent aliases. Generated declarations
+precede all template output and use the actual response character encoding,
+never the source pageEncoding. Seven compiled-rendering regressions were red
+before the fix; default namespaces, mixed includes and all aliases are also covered.
+DOCTYPE collection is a separately integrated companion change; no full official
+coverage gain is credited by this worktree.
+
 ## IBARRA-118 · 2026-10-13 · Valid precompile queries still execute the JSP body
 
 - Symptom: bare, empty, true and false jsp_precompile parameters execute user code;

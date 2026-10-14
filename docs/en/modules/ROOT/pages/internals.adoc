@@ -231,6 +231,17 @@ Mixed-syntax includes/preludes/codas structure each file before expanding the
 translation unit, then apply the global EL policy. Source syntax remains available
 for text escapes and XML markup generation. Each file's `pageEncoding` is validated
 independently; only the requested page influences response encoding defaults.
+
+XML declaration metadata is collected over the translation unit before page-body
+generation. XML documents without a JSP root include a declaration by default;
+JSP roots recognized by namespace URI and local name omit it. An included resource's
+root does not change the requested document's default, while its explicit
+`jsp:output` settings contribute statically even inside an unexecuted body.
+Declarations precede all template output and use the effective response character
+encoding rather than source `pageEncoding`. Output actions emit no body instructions;
+tagdependent raw payloads are not metadata. As a conservative compatibility guard,
+differing repeated omission literals are diagnosed, including equivalent aliases.
+DOCTYPE generation is a separately integrated companion slice.
 New shared-scope beans use direct construction; existing
 typed shared beans are supported. This is not TCK certification.
 

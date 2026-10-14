@@ -113,6 +113,7 @@ public final class PageGenerator {
 
         GeneratedPage generate() {
             directives(page.nodes());
+            boolean xmlDeclaration = XmlDeclaration.collect(page);
             var doctype = XmlDoctype.collect(page);
             if (settings.containsKey("language") && !settings.get("language").equals("java"))
                 throw error(page.nodes().isEmpty() ? new SourceLocation(page.source(), 1, 1) : page.nodes().getFirst().location(), "Only Java scripting is supported");
@@ -167,6 +168,7 @@ public final class PageGenerator {
             if (bool("session", true)) result.add("var session = pageContext.getSession();\n");
             if (bool("isErrorPage", false)) result.add("Throwable exception = pageContext.getErrorData().getThrowable();\n");
             result.add("boolean _jspxFailed = false, _jspxHandled = false; boolean[] _jspxForwarded = {false};\ntry {\n");
+            if (xmlDeclaration) result.add("out.write(\"<?xml version=\\\"1.0\\\" encoding=\\\"\" + response.getCharacterEncoding() + \"\\\"?>\");\n");
             if (!doctype.declaration().isEmpty()) result.add("out.write(" + JavaSource.quote(doctype.declaration()) + ");\n", doctype.location());
             if (needsFactory) result.add("var _jspxExpressionFactory = _jspxFactory.getJspApplicationContext(application).getExpressionFactory();\n");
             result.add(body);
@@ -315,15 +317,7 @@ public final class PageGenerator {
                 case "getProperty" -> getProperty(node);
                 case "setProperty" -> setProperty(node);
                 case "output" -> {
-                    allowed(node, Set.of("omit-xml-declaration", "doctype-root-element", "doctype-system", "doctype-public"));
-                    String omission = node.attributes().getOrDefault("omit-xml-declaration", "false");
-                    boolean omit = switch (omission) {
-                        case "yes", "true" -> true;
-                        case "no", "false" -> false;
-                        default -> throw error(node.location(), "omit-xml-declaration requires yes, no, true or false");
-                    };
-                    if (!omit)
-                        write("<?xml version=\"1.0\" encoding=\"" + settings.getOrDefault("pageEncoding", "UTF-8") + "\"?>", node.location());
+                    // Prolog metadata is collected for the whole translation unit before body generation.
                 }
                 default -> throw error(node.location(), "Unsupported standard action: " + node.name());
             }

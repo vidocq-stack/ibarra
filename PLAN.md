@@ -479,6 +479,21 @@ is restored; all 518 previous passes remain. Provenance generation was enabled.
 This local run uses isolated unpublished Foy #47 commit073288d artifacts; merge
 and publication of that producer must precede independent Ibarra CI validation.
 
+## XML declaration generation (2026-10-14)
+
+The build collects jsp:output omission metadata for the entire expanded translation
+unit and emits a declaration before the generated body. XML requested documents
+without jsp:root default to including it; JSP roots recognized by namespace URI
+and local name default to omission. Root elements belonging to included resources
+do not change that default, but their explicit output metadata contributes normally.
+All four specified omission strings are supported individually. Differing repeated
+literals are rejected as a conservative compatibility guard matching established
+implementation behavior, including equivalent aliases. Runtime response character
+encoding selects the declaration
+encoding independently of source decoding/pageEncoding. Output nodes generate no
+runtime instructions and RawText payloads stay opaque. DOCTYPE emission is the
+companion slice; full-suite counts are updated only after combined validation.
+
 ## Initial I4 implementation
 
 Initial I4 proof (2026-10-10): `examples/precompiled-pages` builds with the real

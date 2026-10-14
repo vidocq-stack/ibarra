@@ -66,6 +66,116 @@ class PageGeneratorTest {
     }
 
     @Test
+    void xmlDocumentWithoutJspRootAddsDefaultDeclarationBeforeTemplate() throws Exception {
+        assertEquals("<?xml version=\"1.0\" encoding=\"UTF-8\"?><hello/>",
+                run(generator().generate("/document.jspx", "\n<hello/>\n", PAGE_CLASS, GenerationOptions.DEFAULT), "", ""));
+    }
+
+    @Test
+    void explicitXmlDeclarationIsStaticAndPrecedesUnexecutedOutputAction() throws Exception {
+        String source = "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='4.0'>"
+                + "<jsp:directive.page session='false'/><jsp:text> leading </jsp:text><hello/>"
+                + "<jsp:scriptlet>if (false) {</jsp:scriptlet>"
+                + "<jsp:output omit-xml-declaration='no'/><jsp:scriptlet>}</jsp:scriptlet></jsp:root>";
+        assertEquals("<?xml version=\"1.0\" encoding=\"UTF-8\"?> leading <hello/>",
+                run(generator().generate("/document.jspx", source, PAGE_CLASS, GenerationOptions.DEFAULT), "", ""));
+    }
+
+    @Test
+    void emptyOutputActionKeepsJspRootOmissionDefault() throws Exception {
+        String source = "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='4.0'>"
+                + "<hello/><jsp:output/></jsp:root>";
+        assertEquals("<hello/>", run(generator().generate("/document.jspx", source, PAGE_CLASS, GenerationOptions.DEFAULT), "", ""));
+    }
+
+    @Test
+    void xmlDeclarationUsesEffectiveResponseEncodingInsteadOfPageEncoding() throws Exception {
+        String source = "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='4.0'>"
+                + "<jsp:directive.page session='false' pageEncoding='UTF-8' contentType='text/xml;charset=ISO-8859-1'/>"
+                + "<hello/><jsp:output omit-xml-declaration='false'/></jsp:root>";
+        assertEquals("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><hello/>",
+                run(generator().generate("/document.jspx", source, PAGE_CLASS, GenerationOptions.DEFAULT),
+                        "response.setCharacterEncoding(\"ISO-8859-1\");", ""));
+    }
+
+    @Test
+    void repeatedXmlOmissionValuesEmitOnlyOnePrologueAcrossIncludes() throws Exception {
+        String source = "<hello xmlns:jsp='" + PageParser.JSP_NAMESPACE + "'>"
+                + "<jsp:directive.include file='/included.jspx'/><jsp:output omit-xml-declaration='false'/></hello>";
+        var options = new GenerationOptions(List.of(), Map.of("/included.jspx",
+                "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='4.0'>"
+                        + "<jsp:output omit-xml-declaration='false'/><part/></jsp:root>"));
+        assertEquals("<?xml version=\"1.0\" encoding=\"UTF-8\"?><hello><part/></hello>",
+                run(generator().generate("/document.jspx", source, PAGE_CLASS, options), "", ""));
+    }
+
+    @Test
+    void conflictingXmlOmissionAcrossIncludesReportsSecondSource() {
+        String source = "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='4.0'>"
+                + "<jsp:output omit-xml-declaration='yes'/><jsp:directive.include file='/included.jspx'/></jsp:root>";
+        var options = new GenerationOptions(List.of(), Map.of("/included.jspx",
+                "<jsp:output xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' omit-xml-declaration='false'/>"));
+        var failure = assertThrows(PageParseException.class,
+                () -> generator().generate("/document.jspx", source, PAGE_CLASS, options));
+        assertTrue(failure.getMessage().contains("/included.jspx"), failure.getMessage());
+        assertTrue(failure.getMessage().contains("Conflicting omit-xml-declaration"), failure.getMessage());
+    }
+
+    @Test
+    void repeatedXmlOmissionMustUseTheSameLiteralValue() {
+        for (String[] values : List.of(new String[]{"yes", "true"}, new String[]{"no", "false"})) {
+            String source = "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='4.0'>"
+                    + "<jsp:output omit-xml-declaration='" + values[0] + "'/>"
+                    + "<jsp:output omit-xml-declaration='" + values[1] + "'/></jsp:root>";
+            assertThrows(PageParseException.class,
+                    () -> generator().generate("/document.jspx", source, PAGE_CLASS, GenerationOptions.DEFAULT));
+        }
+    }
+
+    @Test
+    void includedJspRootDoesNotChangeTopDocumentDeclarationDefault() throws Exception {
+        String source = "<hello xmlns:jsp='" + PageParser.JSP_NAMESPACE + "'>"
+                + "<jsp:directive.include file='/included.jspx'/></hello>";
+        var options = new GenerationOptions(List.of(), Map.of("/included.jspx",
+                "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='4.0'><part/></jsp:root>"));
+        assertEquals("<?xml version=\"1.0\" encoding=\"UTF-8\"?><hello><part/></hello>",
+                run(generator().generate("/document.jspx", source, PAGE_CLASS, options), "", ""));
+    }
+
+    @Test
+    void aliasedAndDefaultNamespaceJspRootsKeepTheirOmissionDefaultWithIncludes() throws Exception {
+        var options = new GenerationOptions(List.of(), Map.of("/included.jspx", "<part/>"));
+        for (String prefix : List.of("p:", "")) {
+            String declaration = prefix.isEmpty() ? "xmlns" : "xmlns:p";
+            String source = "<" + prefix + "root " + declaration + "='" + PageParser.JSP_NAMESPACE + "' version='4.0'>"
+                    + "<" + prefix + "directive.include file='/included.jspx'/></" + prefix + "root>";
+            assertEquals("<part/>", run(generator().generate("/document.jspx", source, PAGE_CLASS, options), "", ""));
+        }
+    }
+
+    @Test
+    void everyXmlOmissionAliasAppliesToWholeDocumentBeforeMarkup() throws Exception {
+        for (String value : List.of("yes", "true", "no", "false")) {
+            String source = "<hello xmlns:jsp='" + PageParser.JSP_NAMESPACE + "'>"
+                    + "<part/><jsp:output omit-xml-declaration='" + value + "'/></hello>";
+            String expected = (Set.of("yes", "true").contains(value) ? ""
+                    : "<?xml version=\"1.0\" encoding=\"UTF-8\"?>") + "<hello><part/></hello>";
+            assertEquals(expected, run(generator().generate("/document.jspx", source, PAGE_CLASS,
+                    GenerationOptions.DEFAULT), "", ""));
+        }
+    }
+
+    @Test
+    void includedXmlOutputContributesToAStandardTranslationUnit() throws Exception {
+        var options = new GenerationOptions(List.of(), Map.of("/included.jspx",
+                "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='4.0'>"
+                        + "<jsp:output omit-xml-declaration='false'/><part/></jsp:root>"));
+        assertEquals("<?xml version=\"1.0\" encoding=\"UTF-8\"?>before<part/>after",
+                run(generator().generate("/document.jsp", "before<%@ include file='/included.jspx' %>after",
+                        PAGE_CLASS, options), "", ""));
+    }
+
+    @Test
     void includesRespectOrderAndEncodeParameters() throws Exception {
         String jsp = "<%@ page session='false' %>before<jsp:include page='/part.jsp' flush='false'>"
                 + "<jsp:param name='q' value='a &amp; b'/></jsp:include>after";
@@ -196,7 +306,7 @@ class PageGeneratorTest {
         var options = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jspx"),
                 Map.of("el-ignored", "true"), List.of(), List.of())), Map.of());
         var generated = generator().generate("/attributes.jspx", "<p title='${literal}'/>", PAGE_CLASS, options);
-        assertEquals("<p title=\"${literal}\"/>", run(generated, "", ""));
+        assertEquals("<?xml version=\"1.0\" encoding=\"UTF-8\"?><p title=\"${literal}\"/>", run(generated, "", ""));
     }
 
     @Test
@@ -602,7 +712,7 @@ class PageGeneratorTest {
     @Test
     void xmlIncludeMayDeclareItsJspNamespaceLocally() throws Exception {
         var options = new GenerationOptions(List.of(), Map.of("/part.jspf", "included"));
-        assertEquals("<p>included</p>", run(generator().generate("/main.jspx", "<p><j:directive.include xmlns:j='"
+        assertEquals("<?xml version=\"1.0\" encoding=\"UTF-8\"?><p>included</p>", run(generator().generate("/main.jspx", "<p><j:directive.include xmlns:j='"
                 + PageParser.JSP_NAMESPACE + "' file='part.jspf'/></p>", PAGE_CLASS, options), "", ""));
     }
 
@@ -633,7 +743,7 @@ class PageGeneratorTest {
     @Test
     void ordinaryXmlAttributeValuesKeepWhitespace() throws Exception {
         var generated = generator().generate("/main.jspx", "<p title='  '/>", PAGE_CLASS, GenerationOptions.DEFAULT);
-        assertEquals("<p title=\"  \"/>", run(generated, "", ""));
+        assertEquals("<?xml version=\"1.0\" encoding=\"UTF-8\"?><p title=\"  \"/>", run(generated, "", ""));
     }
 
     @Test
@@ -655,7 +765,7 @@ class PageGeneratorTest {
     @Test
     void xmlPrologDecodesBytesWithoutChangingXmlResponseDefaults() throws Exception {
         byte[] bytes = "<?xml version='1.0' encoding='ISO-8859-1'?><p>é</p>".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
-        assertEquals("<p>é</p>", run(generator().generate("/main.jspx", bytes, PAGE_CLASS, GenerationOptions.DEFAULT), "",
+        assertEquals("<?xml version=\"1.0\" encoding=\"UTF-8\"?><p>é</p>", run(generator().generate("/main.jspx", bytes, PAGE_CLASS, GenerationOptions.DEFAULT), "",
                 "if (!response.contentType.equals(\"text/xml;charset=UTF-8\")) throw new AssertionError(response.contentType);"));
     }
 
