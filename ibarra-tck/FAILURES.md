@@ -1,7 +1,7 @@
 # Official Pages failure inventory
 
 Date: 2026-10-14, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-This inventory records the remaining 159 method errors and no setup errors
+This inventory records the remaining 157 method errors and no setup errors
 after legacy WAR library, JspIdConsumer, direct property and collection-method
 accessor generation and JSP forwarding output-state checks. All 682 official methods
 now execute. Each class keeps its previous stable id.
@@ -11,7 +11,8 @@ withheld; the typed dispatch replacement now restores positiveIncludeForwardTest
 without bypassing application wrappers (IBARRA-119/130).
 The signature/envelope follow-up restores eight more methods without a regression;
 static XML prolog/DOCTYPE generation restores four of the six pre-existing output
-errors. The two XML tag-file methods remain tracked under TCK-033.
+errors. The XML output class now passes its six previously failing methods; TCK-033 is
+resolved. Other causes still need investigation.
 Resolved method entries remain as a trace; other causes still need investigation.
 Append new ids when discovering new failing classes, without renumbering records.
 
@@ -503,23 +504,22 @@ Failing methods:
 ## TCK-033 — ee.jakarta.tck.pages.spec.core_syntax.actions.output.URLClientIT
 
 - Date: 2026-10-12.
-- Status: PARTIALLY RESOLVED (2026-10-14); two method errors remain.
-- Symptom: XML tag-file output scenarios still report errors; the pure JSP-document
-  declaration/default/DOCTYPE methods now pass.
+- Status: RESOLVED (2026-10-14); all six previously failing methods pass.
+- Symptom: XML tag-file output scenarios reported errors before the static `.tagx`
+  subset was added; the pure JSP-document declaration/default/DOCTYPE methods already
+  passed.
 - Minimal repro: select `ee.jakarta.tck.pages.spec.core_syntax.actions.output.URLClientIT` and any method below.
-- Cause: the remaining methods use unsupported XML tag files (IBARRA-136).
+- Cause: the two remaining methods use XML tag files with static markup and
+  `jsp:output` omission metadata (IBARRA-136).
 
-Failing methods:
-
-- `jspOutputOmitDeclValidValuesTest`
-- `jspOutputUsageContextTest`
-
-Resolved methods (2026-10-14, static XML output prolog and DOCTYPE):
+Resolved methods (2026-10-14, static XML output prolog, DOCTYPE and tag-file output):
 
 - `doctypeSystemPublicTest`
 - `simpleDefaultTest`
 - `doctypeSystemTest`
 - `jspOutputJspRootOmitDeclDefaultTest`
+- `jspOutputOmitDeclValidValuesTest`
+- `jspOutputUsageContextTest`
 
 ## TCK-034 — ee.jakarta.tck.pages.spec.core_syntax.actions.param.URLClientIT
 

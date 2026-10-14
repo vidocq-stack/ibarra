@@ -37,11 +37,13 @@
 - Cause: the initial generator emits explicit declarations at action position;
   full translation-unit prolog defaults, context/body validation and DOCTYPE
   output are not yet implemented.
-- Status: PARTIALLY FIXED (2026-10-14). Static XML declaration/DOCTYPE output restores
-  four original methods: `doctypeSystemPublicTest`, `simpleDefaultTest`,
-  `doctypeSystemTest` and `jspOutputJspRootOmitDeclDefaultTest`.
-  `jspOutputOmitDeclValidValuesTest` and `jspOutputUsageContextTest` remain errors
-  because their XML tag files are unsupported. No official fixtures are rewritten.
+- Status: FIXED for the six previously failing official `actions.output` methods
+  (2026-10-14). Static
+  XML declaration/DOCTYPE output restores `doctypeSystemPublicTest`,
+  `simpleDefaultTest`, `doctypeSystemTest` and
+  `jspOutputJspRootOmitDeclDefaultTest`. Initial XML `.tagx` support restores
+  `jspOutputOmitDeclValidValuesTest` and `jspOutputUsageContextTest`. No official
+  fixtures are rewritten.
 - DOCTYPE progress (2026-10-14): translation-time metadata now collects all structured
   `jsp:output` occurrences, including unexecuted action bodies and static includes.
   Each action requires root/system together and PUBLIC requires SYSTEM; identical
@@ -58,8 +60,9 @@
   decoded LF/CR and unsupported foreign-qualified attributes. Command:
   `./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 -pl ibarra-compiler -am test`.
   The integrated generator emits the response-encoding declaration, then DOCTYPE,
-  then body; output actions have no runtime instructions. XML tag-file semantics
-  remain pending, and the official output fixture has not been rewritten.
+  then body; output actions have no runtime instructions. The later static XML
+  `.tagx` slice is documented below; standard `.tag` files and broader tag-file
+  metadata remain pending. The official output fixture has not been rewritten.
 - Integration investigation (2026-10-14): the first combined compiler run rejected a
   foreign-qualified output attribute correctly but changed its established diagnostic;
   `xmlDoctypeValuesStayStaticLiteralsAndRecognizeJspNamespaceAliases` reproduced the
@@ -73,14 +76,20 @@ Top-level XML documents without a JSP root add a declaration by default, whereas
 namespace-qualified JSP roots omit it. Included roots do not change the requested
 document's default. Explicit yes/true/no/false values apply regardless of runtime
 control flow. Differing repeated literal settings receive a conservative
-compatibility diagnostic, including equivalent aliases. Generated declarations
-precede all template output and use the actual response character encoding,
-never the source pageEncoding. Seven compiled-rendering regressions were red
-before the fix; default namespaces, mixed includes and all aliases are also covered.
-The integrated delivery passes 338 ordinary reactor tests, adapter 34/34 and the
-independent example package. The full official run passes 523/682 with 159 method
-errors, zero assertion failures/setup/skips and no regression against all 519
-previous passes. The four restored selectors are tracked under TCK-033.
+compatibility diagnostic, including equivalent aliases. Page declarations precede
+all template output and use the actual response character encoding, never the source
+pageEncoding. XML `.tagx` files now support static markup and empty `jsp:output`
+omission metadata; when requested, the generated tag emits its UTF-8 declaration at
+each invocation without changing the calling page's response charset. This matches
+the unchanged Pages TCK/Jasper output for these XML tag-file cases, including when
+the caller responds as ISO-8859-1. Directives, expressions, scripting, nested actions
+and tag attributes remain unsupported.
+Seven compiled-rendering regressions were red before the fix; default namespaces,
+mixed includes and all aliases are also covered. The integrated delivery passes 341
+ordinary reactor tests and adapter tests 35/35. The full official run passes 525/682
+with 157 method errors, zero assertion failures/setup/skips and no regression against
+all 523 previous passes. All six previously failing output selectors pass; TCK-033
+is resolved.
 
 ## IBARRA-118 · 2026-10-13 · Valid precompile queries still execute the JSP body
 
@@ -405,9 +414,9 @@ previous passes. The four restored selectors are tracked under TCK-033.
 
 ## IBARRA-098 · 2026-10-12 · Remaining official Pages assertions after deployment recovery
 
-- Symptom: the 2026-10-14 full official run reports 159 method errors and no class-level
-  setup/deployment errors after 523 passing methods; the previous baseline was 519 passes.
-  Four XML output methods are restored with no previous-pass regression. All 682
+- Symptom: the 2026-10-14 full official run reports 157 method errors and no class-level
+  setup/deployment errors after 525 passing methods; the previous baseline was 523 passes.
+  Six XML output methods pass with no previous-pass regression. All 682
   method keys remain present; there are zero assertion failures or skips.
 - Minimal repro: `./run-official-tck-pages-4.0.sh all`; individual classes and
   failing method selectors are recorded under stable TCK ids in

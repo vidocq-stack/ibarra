@@ -22,6 +22,7 @@ package io.vidocq.ibarra.compiler;
 import io.vidocq.ibarra.compiler.internal.JavaSource;
 import io.vidocq.ibarra.compiler.internal.TldListeners;
 import io.vidocq.ibarra.compiler.internal.TldReferences;
+import io.vidocq.ibarra.compiler.internal.TagFileCompiler;
 import io.vidocq.ibarra.compiler.internal.TranslationUnit;
 import io.vidocq.ibarra.spi.PageDescriptor;
 import java.io.*;
@@ -93,19 +94,40 @@ public final class PagePrecompiler {
             if (previousLibrary != null && !previousLibrary.equals(entry.getValue()))
                 throw new IllegalArgumentException("Conflicting supplied tag library: " + entry.getKey());
         }
-        var configured = new GenerationOptions(options.propertyGroups(), options.sources(), false, bytes, libraries);
+        var initial = new GenerationOptions(options.propertyGroups(), options.sources(), false, bytes, libraries);
         var failures = new TreeMap<String, String>();
         var pagePaths = new TreeSet<String>();
         var units = new TreeMap<String, TranslationUnit.Result>();
         for (var entry : resources.entrySet()) if (entry.getKey().endsWith(".jsp") || entry.getKey().endsWith(".jspx")) {
             PageDescriptor.validatePath(entry.getKey());
             pagePaths.add(entry.getKey());
-            try { units.put(entry.getKey(), new TranslationUnit(configured).read(entry.getKey(), entry.getValue())); }
+            try { units.put(entry.getKey(), new TranslationUnit(initial).read(entry.getKey(), entry.getValue())); }
             catch (PageParseException failure) {
                 if (!retainFailures) throw failure;
                 failures.put(entry.getKey(), failure.getMessage());
             }
         }
+        TagFileCompiler.Result tagFiles;
+        while (true) {
+            try { tagFiles = TagFileCompiler.compile(units.values(), initial, packageName); break; }
+            catch (PageParseException failure) {
+                if (!retainFailures) throw failure;
+                String source = failure.location().source();
+                int slash = source.lastIndexOf('/');
+                String failedDirectory = slash <= 0 ? null : source.substring(0, slash);
+                var affected = units.entrySet().stream().filter(entry -> entry.getKey().equals(source)
+                        || failedDirectory != null && TagFileCompiler.referencesDirectory(entry.getValue(), failedDirectory))
+                        .map(Map.Entry::getKey).toList();
+                if (affected.isEmpty()) throw failure;
+                for (String page : affected) { failures.put(page, failure.getMessage()); units.remove(page); }
+            }
+        }
+        for (var entry : tagFiles.libraries().entrySet()) {
+            var previousLibrary = libraries.putIfAbsent(entry.getKey(), entry.getValue());
+            if (previousLibrary != null && !previousLibrary.equals(entry.getValue()))
+                throw new IllegalArgumentException("Conflicting tagdir library: " + entry.getKey());
+        }
+        var configured = new GenerationOptions(options.propertyGroups(), options.sources(), false, bytes, libraries);
         TldReferences.Resolved resolved;
         if (!retainFailures) resolved = TldReferences.discover(units.values(), configured, options.tagLibraries());
         else {
@@ -118,7 +140,7 @@ public final class PagePrecompiler {
             }
             resolved = new TldReferences.Resolved(configured.tagLibraries(), resolvedResources);
         }
-        var referencedLibraries = new ArrayList<>(libraries.values()); referencedLibraries.addAll(resolved.resources().values());
+        var referencedLibraries = new ArrayList<>(configured.tagLibraries().values()); referencedLibraries.addAll(resolved.resources().values());
         var listeners = TldListeners.referenced(catalog, referencedLibraries, paths);
         var generator = new PageGenerator(paths, descriptor);
         var sources = new ArrayList<GeneratedPage>();
@@ -151,7 +173,7 @@ public final class PagePrecompiler {
         Path stage = Files.createTempDirectory(output.getParent(), "ibarra-precompile-");
         try {
             Path compiledOutput = stage.resolve("compiled"); Files.createDirectories(compiledOutput);
-            if (!sources.isEmpty()) {
+            if (!sources.isEmpty() || !tagFiles.sources().isEmpty()) {
                 Path application = stage.resolve("application"); Files.createDirectories(application);
                 byte[] bootstrap = module(originalModule, previous.provider(), null, originalPackages);
                 var cf = ClassFile.of();
@@ -168,9 +190,23 @@ public final class PagePrecompiler {
                 }
                 var compilePath = new ArrayList<>(modulePath); compilePath.add(application);
                 String path = compilePath.stream().map(Path::toString).collect(java.util.stream.Collectors.joining(File.pathSeparator));
-                if (!retainFailures) new PageCompiler().compile(sources, compiledOutput, List.of("--module-path", path, "--add-modules", descriptor.name(),
-                        "--patch-module", descriptor.name() + "=" + output + File.pathSeparator + compiledOutput + File.pathSeparator + compiledOutput.resolve(".ibarra-sources")));
+                if (!retainFailures) {
+                    var allSources = new ArrayList<>(tagFiles.sources()); allSources.addAll(sources);
+                    new PageCompiler().compile(allSources, compiledOutput, List.of("--module-path", path, "--add-modules", descriptor.name(),
+                            "--patch-module", descriptor.name() + "=" + output + File.pathSeparator + compiledOutput + File.pathSeparator + compiledOutput.resolve(".ibarra-sources")));
+                }
                 else {
+                    if (!tagFiles.sources().isEmpty()) {
+                        var arguments = List.of("--module-path", path, "--add-modules", descriptor.name(), "--patch-module",
+                                descriptor.name() + "=" + application + File.pathSeparator + compiledOutput + File.pathSeparator + compiledOutput.resolve(".ibarra-sources"));
+                        new PageCompiler().compile(tagFiles.sources(), compiledOutput, arguments);
+                        try (var files = Files.walk(compiledOutput)) {
+                            for (Path file : files.filter(Files::isRegularFile).filter(f -> f.toString().endsWith(".class")).toList()) {
+                                Path target = application.resolve(compiledOutput.relativize(file));
+                                Files.createDirectories(target.getParent()); Files.copy(file, target, StandardCopyOption.REPLACE_EXISTING);
+                            }
+                        }
+                    }
                     var sourcePaths = new HashMap<String, String>(); pages.forEach((key, value) -> sourcePaths.put(value, key));
                     for (var source : sources) {
                         Path isolated = Files.createTempDirectory(stage, "page-");

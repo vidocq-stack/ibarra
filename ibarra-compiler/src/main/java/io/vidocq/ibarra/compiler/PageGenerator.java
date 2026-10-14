@@ -328,9 +328,15 @@ public final class PageGenerator {
             String local = node.name().substring(node.name().lastIndexOf(':') + 1);
             var tag = library.tags().get(local);
             if (tag == null) throw error(node.location(), "Unknown tag " + local + " in " + library.resourcePath());
-            if (library.validationRequired() || tag.unsupportedMetadata())
-                throw error(node.location(), "Tag validators, scripting variables and tag files are not supported yet");
-            var kind = classes.handler(tag.handlerClass(), node.location());
+            if (library.validationRequired())
+                throw error(node.location(), "Tag validators, scripting variables or tag metadata are not supported yet");
+            if (tag.unsupportedMetadata())
+                throw error(node.location(), tag.unsupportedReason() == null
+                        ? "Tag validators, scripting variables or tag metadata are not supported yet" : tag.unsupportedReason());
+            if (tag.tagFile() && (!tag.attributes().isEmpty() || tag.dynamicAttributes()))
+                throw error(node.location(), "Attributes on XML tag files are not supported yet");
+            var kind = tag.tagFile() ? new BeanClasses.Handler(tag.handlerClass(), true, false, false, false, false, false)
+                    : classes.handler(tag.handlerClass(), node.location());
             if (kind.simple() && tag.bodyContent().equals("JSP")) throw error(node.location(), "SimpleTag cannot have JSP body-content");
             if (tag.dynamicAttributes() && !kind.dynamic()) throw error(node.location(), "Handler does not implement DynamicAttributes");
             var invocation = tagInvocation(node);

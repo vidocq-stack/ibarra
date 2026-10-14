@@ -26,6 +26,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.List;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
@@ -33,6 +34,32 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PagesContainerTest {
+    @Test
+    void xmlTagFileDeclarationKeepsItsUtf8EncodingWithoutChangingTheResponseCharset() throws Exception {
+        String jsp = "<%@ page contentType='text/plain' %><%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:declaration/>";
+        String utf8Jsp = "<%@ page contentType='text/plain;charset=UTF-8' %>"
+                + "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:declaration/>";
+        String tagx = "<root xmlns:jsp='http://java.sun.com/JSP/Page'><jsp:output omit-xml-declaration='false'/></root>";
+        var war = ShrinkWrap.create(WebArchive.class, "tag-file-encoding.war")
+                .addAsWebResource(new StringAsset(jsp), "index.jsp")
+                .addAsWebResource(new StringAsset(utf8Jsp), "utf8.jsp")
+                .addAsWebResource(new StringAsset(tagx), "WEB-INF/tags/declaration.tagx");
+        var container = new PagesContainer(); container.setup(new PagesConfiguration());
+        try {
+            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            for (var path : List.of("index.jsp", "utf8.jsp")) {
+                var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort()
+                        + "/tag-file-encoding/" + path)).GET().build();
+                var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, response.statusCode(), response.body());
+                String expectedCharset = path.equals("index.jsp") ? "ISO-8859-1" : "UTF-8";
+                assertTrue(response.headers().firstValue("content-type").orElse("")
+                        .contains("charset=" + expectedCharset), response.headers().toString());
+                assertTrue(response.body().contains("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"), response.body());
+            }
+        } finally { container.undeploy(war); }
+    }
+
     @Test
     void nestedIncludedForwardPreservesApplicationHeaderAndCachedWriterTransformations() throws Exception {
         var war = ShrinkWrap.create(WebArchive.class, "typed-forward.war")

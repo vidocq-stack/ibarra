@@ -270,7 +270,7 @@ the runtime's packaging goal, after I8.
 | I4 | `ibarra-maven-plugin` precompile goal + page index; extend `ibarra-api` SPI | initial implementation: independent application JAR precompiled and rendered; web fragments and broader configuration pending |
 | I5 | `ibarra-foy` + Foy's JSP-engine SPI (Foy-side PR), `*.jsp` mapping, `addJspFile`, `getJspConfigDescriptor`, TLD listeners | initial HTTP implementation with build-generated TLD listeners; broader deployment/TCK coverage pending |
 | I6 | Custom tags: TLD parsing, classic + simple handlers, scripting variables, validators | initial rendering: Tag/IterationTag/BodyTag/TryCatchFinally, SimpleTag bodies, named scalar/fragment attributes, explicit bodies and unqualified dynamic attributes; variables/validators/full metadata pending |
-| I7 | Tag files, fragments, `jsp:invoke` / `jsp:doBody`; Peano compiled expressions in pages | |
+| I7 | Tag files, fragments, `jsp:invoke` / `jsp:doBody`; Peano compiled expressions in pages | initial XML `.tagx` subset: static markup and per-invocation `jsp:output`; standard `.tag`, attributes, directives, expressions, scripting, nested actions and fragments remain pending |
 | I8 | Official TCK through `ibarra-tck` (Arquillian adapter on Foy) | in progress: initial adapter and smoke delivered, full diagnostic baseline failing; acceptance remains 100 % PASS recorded in docs `tck` page |
 | I9 | Degraded runtime translation polish, Class-File API path for scriptless pages, `ibarra-bench` (vs Jasper), Vidocq Runtime extension | numbers in `BENCH.md` only |
 
@@ -499,14 +499,16 @@ DOCTYPE and normal body output. Input DOCTYPE declarations and external entities
 remain rejected; output identifiers never trigger document lookup. Identifier
 lexical validity remains the page author's responsibility.
 
-On combined code head `119151d`, the reactor install passes 338 tests (core 71,
-compiler 260, plugin 4 and binding 3); adapter 34 and the independent example
-clean-package also pass. The complete official run passes 523/682 (76.7%), with
-159 method errors, zero assertion failures/setup/skips, 92 classes and 48 completely
-passing classes. Exactly `doctypeSystemPublicTest`, `simpleDefaultTest`,
-`doctypeSystemTest` and `jspOutputJspRootOmitDeclDefaultTest` are restored;
-all 519 prior passes remain and all 682 method keys match. The two remaining
-output methods require unsupported XML tag files (IBARRA-136/TCK-033). No official
+On feature worktree changes based on code head `2331263`, the reactor install passes
+341 tests; adapter tests pass 35/35 and the independent example clean-package also
+passes. The complete official run passes 525/682 (77.0%), with 157 method errors,
+zero assertion failures/setup/skips, 92 classes and 49 completely passing classes.
+The two XML tag-file output methods are now restored alongside the four previously
+restored XML output methods; all 523 previous passes remain and all 682 method keys
+match. The `.tagx` implementation currently supports static markup and empty
+`jsp:output` omission metadata, emitting UTF-8 declarations at each invocation while
+preserving the caller's response charset. Standard `.tag` files and directives,
+expressions, scripting, nested actions and fragments remain pending. No official
 fixtures were changed. Typed forwarding's Foy #47 producer has since merged and
 completed snapshot publication; that earlier milestone's results remain recorded above.
 

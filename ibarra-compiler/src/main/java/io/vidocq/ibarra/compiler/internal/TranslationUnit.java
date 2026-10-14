@@ -185,8 +185,9 @@ public final class TranslationUnit {
     private void tagLibraries(List<PageNode> nodes) {
         for (var node : nodes) {
             if (node instanceof PageNode.Directive directive && directive.name().equals("taglib")
-                    && directive.attributes().containsKey("uri"))
-                tagLibraries.add(new TldReferences.Reference(directive.attributes().get("uri"), directive.location(), false));
+                    && (directive.attributes().containsKey("uri") || directive.attributes().containsKey("tagdir")))
+                tagLibraries.add(new TldReferences.Reference(directive.attributes().getOrDefault("uri",
+                        "urn:jsptagdir:" + directive.attributes().get("tagdir")), directive.location(), false));
             else if (node instanceof PageNode.Element element) {
                 for (var attribute : element.attributes().entrySet())
                     if ((attribute.getKey().equals("xmlns") || attribute.getKey().startsWith("xmlns:"))

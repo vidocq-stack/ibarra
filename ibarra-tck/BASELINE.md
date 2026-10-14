@@ -1,7 +1,8 @@
 # Jakarta Pages 4.0.0 diagnostic baseline
 
 Date: 2026-10-14. Temurin Java 25, Maven 3.9.16, macOS; Ibarra development
-version `0.4.0-SNAPSHOT` at code head `119151d`, modular Foy/Chappe and published Peano snapshots.
+version `0.4.0-SNAPSHOT` on feature worktree changes based on code head `2331263`,
+modular Foy/Chappe and published Peano snapshots.
 This records compatibility checks, not a performance benchmark or certification.
 
 ```bash
@@ -15,10 +16,8 @@ MAVEN_ARGS='-o -Dmaven.repo.local=/private/tmp/ibarra-forward-m2' rtk ./run-offi
 Prerequisites were prepared by `prepare-tck.py`, preserving the official embedded
 POM, and already present in the isolated cache. Distribution checksums and artifact
 preparation commands are in [README.md](README.md). No provenance skip was used.
-The default reactor install passes 338 tests; the independent example clean-package
-succeeds. The first clean install exposed an established diagnostic mismatch for a
-foreign-qualified output attribute; code head `119151d` fixes it and the final install
-passes without skipping build provenance generation.
+The default reactor install passes 341 tests; the independent example clean-package
+also passes. The final clean install ran without skipping build provenance generation.
 
 This candidate depends on [Foy #47](https://codefloe.com/Vidocq/foy/pulls/47),
 signed commit `073288db47fa12460c5662fb6a4aff25ff4de2bb`, rebased on `9ab0971`.
@@ -35,31 +34,36 @@ a separate validation result.
 | Official classes selected | 92 |
 | Declared runtime-visible JUnit `@Test` methods in the official binary | 682 |
 | Official Surefire entries reported | 682 |
-| Passing test methods | 523 |
-| Failing method entries | 159 |
+| Passing test methods | 525 |
+| Failing method entries | 157 |
 | Class-level setup/deployment errors | 0 |
-| Total reported errors | 159 |
+| Total reported errors | 157 |
 | Assertion failures reported as Surefire `failure` | 0 |
 | Skipped entries | 0 |
-| Adapter regression tests (separate invocation) | 34/34 |
+| Adapter regression tests (separate invocation) | 35/35 |
 | Smoke subset methods passing within this full run | 18/18 |
 
-Surefire reports `Tests run: 682, Failures: 0, Errors: 159, Skipped: 0` and exits
+Surefire reports `Tests run: 682, Failures: 0, Errors: 157, Skipped: 0` and exits
 nonzero. The TCK's HTTP assertion helper reports failures as exceptions, hence
 `errors` rather than `failures`; zero in the failure column does not mean success.
 
-**523/682 = 76.7% measured full-suite pass rate**. All 682 declared method entries
+**525/682 = 77.0% measured full-suite pass rate**. All 682 declared method entries
 now execute across the 92 official classes; there are no class-level setup errors
-or skipped entries. This records complete method execution for this distribution,
-not certification: 159 methods still report errors.
+or skipped entries. Compared with the previous 523-pass run, the two XML tag-file
+output methods now pass and none of the prior passes regressed. This records complete
+method execution for this distribution, not certification: 157 methods still report
+errors.
 
-Static XML output restores exactly `doctypeSystemPublicTest`, `simpleDefaultTest`,
-`doctypeSystemTest` and `jspOutputJspRootOmitDeclDefaultTest` in the output-action
-class against the merged 519-pass baseline. Comparison by all 682 class/method keys
-finds no regression, missing or extra entry. The two remaining output errors,
-`jspOutputOmitDeclValidValuesTest` and `jspOutputUsageContextTest`, require unsupported
-XML tag files. Declarations use the response encoding and precede static SYSTEM/PUBLIC
-DOCTYPE metadata and page output. All original official fixtures remain unchanged.
+Static XML output and the initial XML `.tagx` subset restore all six previously
+failing output-action methods: `doctypeSystemPublicTest`, `simpleDefaultTest`, `doctypeSystemTest`,
+`jspOutputJspRootOmitDeclDefaultTest`, `jspOutputOmitDeclValidValuesTest` and
+`jspOutputUsageContextTest`. The two tag-file methods now compile static markup and
+`jsp:output` omission metadata; requested declarations are UTF-8 and emitted at each
+invocation without changing the caller's response charset. Standard `.tag` files,
+directives, expressions, scripting, nested JSP actions and tag attributes remain
+unsupported. Page declarations continue to use the response encoding and precede
+static SYSTEM/PUBLIC DOCTYPE metadata and page output. All original official fixtures
+remain unchanged.
 
 The preceding typed-forward delivery restored exactly `positiveIncludeForwardTest`
 against the merged 518-pass baseline, reaching 519 passes and 163 method errors.

@@ -24,10 +24,24 @@ import java.util.*;
 
 /** Immutable handler metadata; unsupported semantics must be rejected before generation. */
 public record TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
-        boolean dynamicAttributes, boolean unsupportedMetadata) {
+        boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile, String unsupportedReason,
+        boolean emitsXmlDeclaration) {
+    public TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
+            boolean dynamicAttributes, boolean unsupportedMetadata) {
+        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, false, null, false);
+    }
+    public TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
+            boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile) {
+        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, tagFile, null, false);
+    }
+    public TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
+            boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile, String unsupportedReason) {
+        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, tagFile, unsupportedReason, false);
+    }
     public TagDescriptor {
         Objects.requireNonNull(name); Objects.requireNonNull(bodyContent);
         if (handlerClass == null && !unsupportedMetadata) throw new IllegalArgumentException("A handler class is required");
+        if (unsupportedReason != null && !unsupportedMetadata) throw new IllegalArgumentException("An unsupported reason requires unsupported metadata");
         attributes = Collections.unmodifiableMap(new LinkedHashMap<>(attributes));
     }
 }

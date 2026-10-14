@@ -1,10 +1,11 @@
 = TCK status
-:description: Initial official Jakarta Pages 4.0 results; full certification remains pending.
+:description: Latest Jakarta Pages 4.0 TCK result: 525 of 682 methods pass; certification remains pending.
 
 [.lead]
-The official Jakarta Pages 4.0.0 TCK now runs through a build-side Arquillian
-adapter on Foy. The eighteen-test smoke subset passes. The full diagnostic attempt
-executes all declared methods but remains failing; Ibarra is not certified.
+The official Jakarta Pages 4.0.0 TCK runs through a build-side Arquillian adapter
+on Foy. The eighteen-test smoke subset passes. The latest full run executes all
+declared methods and passes 525/682; 157 method errors remain, so Ibarra is not
+certified.
 
 == Recorded baseline
 
@@ -23,23 +24,29 @@ link:https://codefloe.com/Vidocq/foy/pulls/47[Foy #47], signed commit `073288d`.
 The measured run used its isolated artifacts; Foy #47 has now merged and completed
 snapshot publication. Independent Ibarra CI remains a separate validation result.
 No temporary workflow bootstrap or global cache install
-was used. The ordinary reactor install passes 338 tests, adapter 34/34 and the independent
+was used. The ordinary reactor install passes 341 tests, adapter 35/35 and the independent
 Maven example packages; build provenance generation was enabled.
 The verified official binary contains 92 test classes and 682 declared JUnit
-`@Test` methods. Code head `119151d` records *523 passing methods* and *159 failing methods*,
+`@Test` methods. The feature-worktree run on code base `2331263` records *525 passing
+methods* and *157 failing methods*,
 with *zero class-level setup/deployment errors*. Surefire therefore reports 682
-entries, 159 errors, zero assertion failures and zero skips, and exits nonzero.
+entries, 157 errors, zero assertion failures and zero skips, and exits nonzero.
 The upstream HTTP assertion helper reports failures as exceptions.
 
-*523/682 = 76.7% measured full-suite pass rate*. All 682 declared test methods
+*525/682 = 77.0% measured full-suite pass rate*. All 682 declared test methods
 execute across 92 official classes, with no skipped methods or deployment blockers.
-The suite remains failing and uncertified because 159 methods report errors.
+The suite remains failing and uncertified because 157 methods report errors.
 
-Static XML output restores exactly `doctypeSystemPublicTest`, `simpleDefaultTest`,
-`doctypeSystemTest` and `jspOutputJspRootOmitDeclDefaultTest`. All 519 previous passes
-remain, and all 682 class/method keys match with no missing or extra entry. The run
-has 48 completely passing classes. Two output methods still require unsupported
-XML tag files: `jspOutputOmitDeclValidValuesTest` and `jspOutputUsageContextTest`.
+Static XML output and the initial `.tagx` subset restore all six previously failing
+methods in the output-action class: `doctypeSystemPublicTest`, `simpleDefaultTest`,
+`doctypeSystemTest`, `jspOutputJspRootOmitDeclDefaultTest`,
+`jspOutputOmitDeclValidValuesTest` and `jspOutputUsageContextTest`. All 523 previous
+passes remain, and all 682 class/method keys match with no missing or extra entry.
+The run has 49 completely passing classes. XML tag files support static markup and
+empty `jsp:output` omission metadata; requested declarations use UTF-8 and are emitted
+at each invocation without changing the caller's response charset. Standard `.tag`
+files, directives, expressions, scripting, nested actions and tag attributes remain
+unsupported.
 
 The detailed command, binary inventory, counts and remaining categories are in
 link:{repo-ibarra}/src/branch/main/ibarra-tck/BASELINE.md[the recorded baseline].

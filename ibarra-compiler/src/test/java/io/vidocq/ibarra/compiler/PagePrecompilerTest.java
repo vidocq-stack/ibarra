@@ -754,6 +754,55 @@ class PagePrecompilerTest {
     }
 
     @Test
+    void xmlTagFilesKeepOutputMetadataAtEachInvocation() throws Exception {
+        prepare(false);
+        Path tags = web.resolve("WEB-INF/tags"); Files.createDirectories(tags);
+        String namespace = "http://java.sun.com/JSP/Page";
+        for (String value : List.of("true", "yes", "false", "no"))
+            Files.writeString(tags.resolve(value + ".tagx"), "<root xmlns:jsp='" + namespace
+                    + "'><jsp:output omit-xml-declaration='" + value + "'/></root>");
+        Files.writeString(tags.resolve("default.tagx"), "<root xmlns:jsp='" + namespace + "'></root>");
+        Files.writeString(web.resolve("index.jsp"), "<%@ page session='false' %>"
+                + "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %>A<t:true/>B<t:yes/>C<t:false/>D<t:no/>E<t:false/>F<t:default/>G");
+
+        var deployment = new PagePrecompiler().precompileDeployment(web, classes, modulePaths(), "demo.generated", GenerationOptions.DEFAULT);
+        assertTrue(deployment.failures().isEmpty(), deployment.failures().toString());
+        Path jar = directory.resolve("tag-files.jar"); jar(classes, jar);
+        String declaration = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>";
+        assertEquals("A<root></root>B<root></root>C" + declaration + "<root></root>D" + declaration
+                + "<root></root>E" + declaration + "<root></root>F<root></root>G", render(jar));
+    }
+
+    @Test
+    void standardSyntaxTagFilesAreDiagnosedAtTheirInvocation() throws Exception {
+        prepare(false);
+        Path tags = web.resolve("WEB-INF/tags"); Files.createDirectories(tags);
+        Files.writeString(tags.resolve("standard.tag"), "<%@ tag %><jsp:output omit-xml-declaration='false'/>");
+        Files.writeString(web.resolve("index.jsp"), "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:standard/>");
+
+        var deployment = new PagePrecompiler().precompileDeployment(web, classes, modulePaths(), "demo.generated", GenerationOptions.DEFAULT);
+
+        assertEquals(Set.of("/index.jsp"), deployment.failures().keySet());
+        assertTrue(deployment.failures().get("/index.jsp").contains("Tag validators"));
+    }
+
+    @Test
+    void unsupportedXmlTagFileActionsStayPageScopedInDeploymentMode() throws Exception {
+        prepare(false);
+        Path tags = web.resolve("WEB-INF/tags"); Files.createDirectories(tags);
+        Files.writeString(tags.resolve("include.tagx"), "<root xmlns:jsp='http://java.sun.com/JSP/Page'>"
+                + "<jsp:include page='/missing.jsp'/></root>");
+        Files.writeString(web.resolve("index.jsp"), "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:include/>");
+        Files.writeString(web.resolve("healthy.jsp"), "ready");
+
+        var deployment = new PagePrecompiler().precompileDeployment(web, classes, modulePaths(), "demo.generated", GenerationOptions.DEFAULT);
+
+        assertEquals(Set.of("/index.jsp"), deployment.failures().keySet());
+        assertTrue(deployment.failures().get("/index.jsp").contains("Action in XML tag files"));
+        assertEquals(Set.of("/healthy.jsp", "/index.jsp"), deployment.pages().pagePaths());
+    }
+
+    @Test
     void packagedApplicationIsDiscoveredAndRendersWithoutCompilerAtRuntime() throws Exception {
         prepare(false);
         Files.writeString(web.resolve("index.jsp"), "A<jsp:useBean id='b' class='demo.Bean'/><jsp:getProperty name='b' property='value'/><%@ include file='part.jspf' %>");

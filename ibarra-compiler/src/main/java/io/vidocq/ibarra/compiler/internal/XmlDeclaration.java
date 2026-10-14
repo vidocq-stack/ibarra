@@ -37,11 +37,24 @@ public final class XmlDeclaration {
 
     /** Whether to add a declaration before any template or executable page body. */
     public static boolean collect(Page page) {
+        boolean root = hasDocumentRoot(page);
+        return collect(page, page.syntax() == Page.Syntax.XML && !root);
+    }
+
+    /** Whether a tag file emits its declaration at each tag invocation. */
+    public static boolean collectTagFile(Page page) {
+        return collect(page, false);
+    }
+
+    private static boolean collect(Page page, boolean defaultEmission) {
         var declaration = new XmlDeclaration();
         declaration.collect(page.nodes());
-        boolean root = page.nodes().stream().anyMatch(node -> node instanceof PageNode.Element element
+        return declaration.omission == null ? defaultEmission : !declaration.omission;
+    }
+
+    private static boolean hasDocumentRoot(Page page) {
+        return page.nodes().stream().anyMatch(node -> node instanceof PageNode.Element element
                 && element.location().source().equals(page.source()) && jsp(element, "root"));
-        return declaration.omission == null ? page.syntax() == Page.Syntax.XML && !root : !declaration.omission;
     }
 
     private void collect(List<PageNode> nodes) {

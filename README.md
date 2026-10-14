@@ -23,8 +23,11 @@ Static includes can mix JSP/JSPX syntax; source encodings are validated per file
 Byte sources support BOM/prolog detection and strict decoding before translation.
 XML output declarations and SYSTEM/PUBLIC DOCTYPE metadata are collected at
 translation time across static includes, then emitted before the page body.
-Declarations use the response encoding; input DTDs and external entities remain
-rejected. XML tag-file output semantics remain pending.
+Page declarations use the response encoding; input DTDs and external entities
+remain rejected. XML `.tagx` files support static markup and `jsp:output`
+omission metadata, emitting a UTF-8 declaration at each invocation when requested
+without changing the caller's response charset. Standard `.tag` files remain
+unsupported.
 The Maven `precompile` goal emits pages and an index into an application module;
 a packaged application JAR is discovered and rendered without compiler modules.
 EL compiles at build time through Peano into application-owned classes; startup
@@ -34,7 +37,8 @@ Initial classic/simple tag handlers now render through direct constructors,
 setters and generated scriptless body/named fragments. Named scalar attributes,
 explicit bodies and compiler-provided JspIdConsumer identifiers are supported.
 Identifiers stay stable across requests while handler instances remain fresh.
-Full tag metadata and tag files remain pending.
+Standard `.tag` files and full tag-file metadata, attributes, directives,
+expressions, scripting, nested actions and fragments remain pending.
 Page type/package imports now resolve through build-generated class references.
 TLD functions use generated direct static calls. Typed deferred tag values/methods
 are compiled and constructed per invocation. Dynamic import changes and official TCK
@@ -76,11 +80,11 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 | `ibarra-compiler` | JSP/JSPX parser, page model, Java generator, initial tag handlers and build-time compiler | I2 implemented; I3/I6 in progress |
 | `ibarra-maven-plugin` | `precompile` goal at process-classes; module service registration | Initial I4 implemented |
 | `ibarra-foy` | Optional Foy engine provider; application layer, routing and TLD listener lifecycle | Initial I5 implemented |
-| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; 18-test smoke passes, 76.7% measured full-suite pass rate |
+| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; 18-test smoke passes, 77.0% measured full-suite pass rate |
 
-The latest local full run passes 523/682 official methods with no regression against
-the previous 519 passes; 159 method errors remain, so certification is pending.
-The ordinary reactor passes 338 tests, the adapter 34/34 and the independent example
+The latest local full run passes 525/682 official methods with no regression against
+the previous 523 passes; 157 method errors remain, so certification is pending.
+The ordinary reactor passes 341 tests, the adapter 35/35 and the independent example
 packages successfully. Typed forwarding uses the producer delivered in
 [Foy #47](https://codefloe.com/Vidocq/foy/pulls/47), now merged and published.
 See [the exact baseline](ibarra-tck/BASELINE.md).
