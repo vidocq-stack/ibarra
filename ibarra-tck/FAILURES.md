@@ -299,23 +299,17 @@ Methods failing in the original baseline:
 ## TCK-017 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagsupport.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagsupport.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
-
-Failing methods:
-
-- `tagSupportVariableSynchronizationTest`
-
-Resolved methods (2026-10-13, direct WAR bean property access):
-
-- `tagSupportDoEndTagSkipPageTest`
-- `tagSupportDoStartEvalBodyIncludeTest`
-- `tagSupportDoEndTagEvalPageTest`
-- `tagSupportDoStartSkipBodyTest`
-- `tagSupportDoAfterBodySkipBodyTest`
-- `tagSupportDoAfterBodyEvalBodyAgainTest`
+- Status: RESOLVED (2026-10-14).
+- Symptom: the official `tagsupport.tld` used `<declare>yes</declare>`, and
+  precompilation rejected the WAR before any method ran.
+- Minimal repro: `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagsupport.URLClientIT`.
+- Cause: TLD tag-variable `declare` was parsed with a strict `true`/`false`
+  boolean helper, although this unchanged official fixture uses the `yes` alias.
+- Fix: accept `yes`/`no` only for TLD tag-variable declarations. Other TLD boolean
+  fields remain strict.
+- Evidence: the unchanged official class passes all 15 methods; the full-suite
+  rerun also deploys it successfully.
 
 
 ## TCK-018 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagvariableinfo.URLClientIT
@@ -863,11 +857,17 @@ Failing methods:
 
 - Date: 2026-10-12.
 - Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.spec.tagfiles.implicitobjects.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Symptom: the class fails during WAR precompilation. Generated tag-file sources
+  reference unresolved `application`, `config`, `request`, `response` and
+  `session` identifiers.
+- Minimal repro: `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.spec.tagfiles.implicitobjects.URLClientIT`.
+- Cause: the generated standard tag-file class does not bind JSP tag-file
+  implicit objects from its JSP context.
+- Latest full-suite state: class-level deployment failure; its test methods did
+  not execute in the current run.
 
-Failing methods:
+Methods previously reported as failing (blocked by current class setup):
 
 - `checkApplicationTest`
 - `checkSessionTest`
@@ -903,11 +903,16 @@ Failing methods:
 
 - Date: 2026-10-12.
 - Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.spec.tagfiles.semantics.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Symptom: the class fails during WAR precompilation because a generated tag-file
+  source references unresolved `request`.
+- Minimal repro: `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.spec.tagfiles.semantics.URLClientIT`.
+- Cause: the generated standard tag-file class does not bind JSP tag-file
+  implicit objects from its JSP context.
+- Latest full-suite state: class-level deployment failure; its test methods did
+  not execute in the current run.
 
-Failing methods:
+Methods previously reported as failing (blocked by current class setup):
 
 - `jspTagSemanticsAttributeNotSpecifiedTest`
 - `semanticsInvokeSimpleTagTest`

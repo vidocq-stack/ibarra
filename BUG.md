@@ -1,5 +1,34 @@
 # BUG.md — Ibarra
 
+## IBARRA-140 · 2026-10-14 · Generated tag files omit JSP implicit objects
+
+- Symptom: the unchanged official `TCK-054` and `TCK-056` classes fail during
+  precompilation before their test methods execute. Generated tag-file sources
+  reference unresolved `application`, `config`, `request`, `response` and
+  `session` variables; the semantics fixture also references `request`.
+- Minimal repro: run
+  `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.spec.tagfiles.implicitobjects.URLClientIT`, then
+  repeat with `ee.jakarta.tck.pages.spec.tagfiles.semantics.URLClientIT`.
+- Cause: generated standard tag-file classes do not bind the tag-file implicit
+  objects from their JSP context.
+- Status: OPEN. The latest complete official run records two class-level
+  deployment errors; those classes' method selectors remain blocked until the
+  generated bindings are implemented.
+
+## IBARRA-139 · 2026-10-14 · TLD tag-variable declaration rejects yes/no values
+
+- Symptom: the official `tagsupport.tld` fixture uses `<declare>yes</declare>`;
+  translation rejected the whole WAR with `Expected true or false for declare`.
+- Minimal repro: run
+  `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagsupport.URLClientIT`.
+- Cause: TLD tag-variable declarations were passed through the strict XML Schema
+  boolean parser, which accepts only `true` and `false`.
+- Status: FIXED. Only the TLD tag-variable `declare` field now accepts `yes` and
+  `no` aliases as well. The unchanged official class passes all 15 methods; other
+  TLD boolean fields remain strict.
+
 ## IBARRA-138 · 2026-10-14 · Fragment tag setters reject compatible supertypes
 
 - Symptom: the unchanged Pages TCK `jspFragmentGetJspContextTest` fails during

@@ -227,7 +227,7 @@ public final class TldParser {
         if (!SourceVersion.isIdentifier(given)) throw new PageParseException(at, "Invalid tag variable name: " + given);
         String className = fields.getOrDefault("variable-class", "java.lang.String");
         if (!SourceVersion.isName(className)) throw new PageParseException(at, "Invalid tag variable class: " + className);
-        boolean declare = bool(fields, "declare", true, at);
+        boolean declare = tagVariableDeclare(fields, at);
         int scope = switch (fields.getOrDefault("scope", "NESTED")) {
             case "NESTED" -> TagVariableDescriptor.NESTED;
             case "AT_BEGIN" -> TagVariableDescriptor.AT_BEGIN;
@@ -246,6 +246,14 @@ public final class TldParser {
         if (value == null) return fallback;
         if (!value.equals("true") && !value.equals("false")) throw new PageParseException(at, "Expected true or false for " + key);
         return Boolean.parseBoolean(value);
+    }
+
+    private static boolean tagVariableDeclare(Map<String, String> fields, SourceLocation at) {
+        return switch (fields.getOrDefault("declare", "true")) {
+            case "true", "yes" -> true;
+            case "false", "no" -> false;
+            default -> throw new PageParseException(at, "Expected true, false, yes, or no for declare");
+        };
     }
 
     private static String namespace(Element element) { return Objects.toString(element.getNamespaceURI(), ""); }

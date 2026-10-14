@@ -99,6 +99,17 @@ class TldParserTest {
     }
 
     @Test
+    void tagVariableDeclareAcceptsLegacyYesAndNoValues() {
+        var declared = parse("<taglib><tag><name>x</name><tag-class>example.Handler</tag-class>"
+                + "<variable><name-given>yesValue</name-given><declare>yes</declare></variable></tag></taglib>");
+        var undeclared = parse("<taglib><tag><name>x</name><tag-class>example.Handler</tag-class>"
+                + "<variable><name-given>noValue</name-given><declare>no</declare></variable></tag></taglib>");
+
+        assertTrue(declared.tags().get("x").variables().getFirst().declare());
+        assertFalse(undeclared.tags().get("x").variables().getFirst().declare());
+    }
+
+    @Test
     void nameFromAttributeVariablesRemainExplicitlyUnsupported() {
         var tag = parse("<taglib><tag><name>x</name><tag-class>example.Handler</tag-class>"
                 + "<variable><name-from-attribute>name</name-from-attribute></variable></tag></taglib>").tags().get("x");
