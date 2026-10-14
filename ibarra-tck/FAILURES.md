@@ -1,11 +1,11 @@
 # Official Pages failure inventory
 
 Date: 2026-10-14, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-The last complete suite recorded 157 method errors and no setup errors after legacy
-WAR library, JspIdConsumer, direct property and collection-method accessor generation
-and JSP forwarding output-state checks. A later targeted rerun resolved TCK-005's
-remaining method; refresh the aggregate counts after the next complete suite. All 682
-official methods execute. Each class keeps its previous stable id.
+The latest complete suite recorded 119 method-level errors, no class-level setup
+errors and exercised all 682 official methods. IBARRA-140 fixes TCK-054 and the
+TCK-056 deployment blocker; five TCK-056 method errors remain under IBARRA-141.
+See [BASELINE.md](BASELINE.md) for current counts and historical snapshots. Each
+class keeps its previous stable id.
 The parallel compiler batch restores literal editor conversion, opaque tagdependent
 bodies and invalid precompile handling. The unsafe include-forward prototype was
 withheld; the typed dispatch replacement now restores positiveIncludeForwardTest
@@ -856,7 +856,7 @@ Failing methods:
 ## TCK-054 — ee.jakarta.tck.pages.spec.tagfiles.implicitobjects.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
+- Status: FIXED (IBARRA-140).
 - Symptom: the class fails during WAR precompilation. Generated tag-file sources
   reference unresolved `application`, `config`, `request`, `response` and
   `session` identifiers.
@@ -864,10 +864,13 @@ Failing methods:
   -Dtest=ee.jakarta.tck.pages.spec.tagfiles.implicitobjects.URLClientIT`.
 - Cause: the generated standard tag-file class does not bind JSP tag-file
   implicit objects from its JSP context.
-- Latest full-suite state: class-level deployment failure; its test methods did
-  not execute in the current run.
+- Resolution: generated tag-file methods now obtain `application`, `config`,
+  `request`, `response` and `session` from the `PageContext`; HTTP request and
+  response are exposed with their HTTP types.
+- Latest focused run (2026-10-14): WAR deployment succeeds and all 7 methods
+  pass; the latest complete official run confirms 7/7.
 
-Methods previously reported as failing (blocked by current class setup):
+Methods passed (7/7):
 
 - `checkApplicationTest`
 - `checkSessionTest`
@@ -903,20 +906,23 @@ Failing methods:
 
 - Date: 2026-10-12.
 - Status: OPEN.
-- Symptom: the class fails during WAR precompilation because a generated tag-file
-  source references unresolved `request`.
+- Symptom: the former WAR-precompilation error for unresolved `request` is fixed;
+  five of eight methods now report HTTP assertion errors after deployment.
 - Minimal repro: `./run-official-tck-pages-4.0.sh --no-install --no-prepare
   -Dtest=ee.jakarta.tck.pages.spec.tagfiles.semantics.URLClientIT`.
-- Cause: the generated standard tag-file class does not bind JSP tag-file
-  implicit objects from its JSP context.
-- Latest full-suite state: class-level deployment failure; its test methods did
-  not execute in the current run.
+- Original cause: the generated standard tag-file class did not bind `request`
+  from its JSP context; fixed by IBARRA-140.
+- Latest full and focused runs (2026-10-14): deployment succeeds; 3 methods pass
+  and 5 report errors. The remaining semantics are tracked separately in IBARRA-141.
 
-Methods previously reported as failing (blocked by current class setup):
+Methods passed (3/8):
 
 - `jspTagSemanticsAttributeNotSpecifiedTest`
 - `semanticsInvokeSimpleTagTest`
 - `semanticsInvokeClassicTagTest`
+
+Methods still reporting errors (5/8):
+
 - `jspTagSemanticsDynamicAttributesTest`
 - `jspTagSemanticsJspContextWrapperScopesTest`
 - `jspTagSemanticsDeclaredAttributesTest`

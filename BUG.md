@@ -1,5 +1,19 @@
 # BUG.md — Ibarra
 
+## IBARRA-141 · 2026-10-14 · TCK-056 tag-file semantics fail after deployment
+
+- Symptom: after TCK-056 deploys, five of its eight HTTP assertions report
+  errors: dynamic attributes, `JspContextWrapper` scopes, declared attributes,
+  `jsp:forward`, and the `JspContextWrapper` contract.
+- Minimal repro: run
+  `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.spec.tagfiles.semantics.URLClientIT`.
+- Hypothesis: these failures cover several tag-file runtime semantics and need
+  separate diagnosis against their HTTP responses and generated tag handlers.
+- Status: OPEN. The latest complete official run executes all eight methods:
+  three pass and five remain errors. The former class-deployment failure is
+  fixed by IBARRA-140.
+
 ## IBARRA-140 · 2026-10-14 · Generated tag files omit JSP implicit objects
 
 - Symptom: the unchanged official `TCK-054` and `TCK-056` classes fail during
@@ -12,9 +26,10 @@
   repeat with `ee.jakarta.tck.pages.spec.tagfiles.semantics.URLClientIT`.
 - Cause: generated standard tag-file classes do not bind the tag-file implicit
   objects from their JSP context.
-- Status: OPEN. The latest complete official run records two class-level
-  deployment errors; those classes' method selectors remain blocked until the
-  generated bindings are implemented.
+- Status: FIXED on 2026-10-14. Generated `doTag` methods now bind the Servlet
+  objects from `PageContext`, including HTTP request and response types. The
+  unchanged official TCK-054 class passes 7/7 methods; TCK-056 now deploys, with
+  its five remaining method errors tracked separately in IBARRA-141.
 
 ## IBARRA-139 · 2026-10-14 · TLD tag-variable declaration rejects yes/no values
 

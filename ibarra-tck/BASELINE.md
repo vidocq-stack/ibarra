@@ -1,19 +1,21 @@
 # Jakarta Pages 4.0.0 diagnostic baseline
 
 Date: 2026-10-14. Temurin Java 25, Maven 3.9.16, macOS; Ibarra development
-version `0.4.0-SNAPSHOT` at source commit `99a794f`, based on merged main
-`06a12bb`, with modular Foy/Chappe and published Peano snapshots.
+version `0.4.0-SNAPSHOT` at source commit `0c9207f`, based on merged main
+`5dd157e`, with modular Foy/Chappe and published Peano snapshots.
 This records compatibility checks, not a performance benchmark or certification.
 
 ```bash
 sdk env
-./run-official-tck-pages-4.0.sh all
+./mvnw -ntp install -DskipTests
+./run-official-tck-pages-4.0.sh --no-install --no-prepare all
 ```
 
-The script verifies and prepares the official artifacts, performs a clean reactor
-install, runs the adapter regression tests and then selects all official classes.
-Distribution checksums and artifact preparation commands are in [README.md](README.md).
-No provenance skip was used.
+The reactor install placed the tested Ibarra artifacts in the local Maven
+repository. The official TCK artifacts had already been prepared and installed;
+the script then ran the adapter regression tests and selected all official
+classes. Distribution checksums and artifact preparation commands are in
+[README.md](README.md). No provenance skip was used.
 
 Foy #47 has merged; its parent/API/core snapshots are available to this run. The
 post-merge Ibarra build and official smoke workflows also completed successfully.
@@ -24,25 +26,26 @@ post-merge Ibarra build and official smoke workflows also completed successfully
 |---|---:|
 | Official classes selected | 92 |
 | Declared runtime-visible JUnit `@Test` methods in the official binary | 682 |
-| Official Surefire entries reported | 669 |
-| Passing test entries | 553 |
-| Method-level errors | 114 |
-| Class-level setup/deployment errors | 2 |
-| Total reported errors | 116 |
+| Official Surefire entries reported | 682 |
+| Passing test entries | 563 |
+| Method-level errors | 119 |
+| Class-level setup/deployment errors | 0 |
+| Total reported errors | 119 |
 | Assertion failures reported as Surefire `failure` | 0 |
 | Skipped entries | 0 |
-| Classes with no reported errors | 60/92 |
+| Classes with no reported errors | 61/92 |
 | Adapter regression tests (separate invocation) | 35/35 |
 | Smoke subset methods passing within this full run | 18/18 |
 
-Surefire reports `Tests run: 669, Failures: 0, Errors: 116, Skipped: 0` and exits
-nonzero. The 114 method-level errors are TCK failures; two further errors occur
-during class deployment for TCK-054 and TCK-056. Those classes' 15 declared methods
-do not execute in this run. The TCK's HTTP assertion helper reports method failures
-as exceptions, hence `errors` rather than `failures`; zero in the failure column does
-not mean success. TCK-017 now deploys and passes all 15 methods.
+Surefire reports `Tests run: 682, Failures: 0, Errors: 119, Skipped: 0` and exits
+nonzero. All 92 selected classes deploy and all 682 declared methods execute; the
+119 errors are method-level TCK errors. The TCK's HTTP assertion helper reports
+method failures as exceptions, hence `errors` rather than `failures`; zero in the
+failure column does not mean success. TCK-017 passes all 15 methods, TCK-054 passes
+all 7 methods, and TCK-056 runs all 8 methods with 5 errors. Certification remains
+pending.
 
-After this full-suite snapshot, a targeted rerun passed all 11 methods in
+Before this full-suite snapshot, targeted reruns on 2026-10-14 passed all 11 methods in
 `bodytagsupport.URLClientIT`, including `bodyTagSupportVariableSynchronizationTest`.
 On 2026-10-14, another targeted rerun passed all 11 methods in
 `simpletagsupport.URLClientIT`, including `simpleTagSupportVariableSynchronizationTest`
@@ -52,18 +55,26 @@ The combined targeted rerun on 2026-10-14 passed all four TEI metadata classes:
 `tagdata.URLClientIT` (5/5) and `tagextrainfo.URLClientIT` (1/1), for 16/16
 methods. The adapter passed 35/35. Generated page initialization invokes
 `TagExtraInfo.validate` with the available `TagInfo`/`TagData`, and the generated
-`TagLibraryInfo` exposes the TLD function catalogue. The full suite was not
-rerun, so the aggregate totals below are unchanged.
+`TagLibraryInfo` exposes the TLD function catalogue. These results are included in
+the complete run reported above.
+
+On 2026-10-14, the focused official rerun for tag-file implicit objects passed
+TCK-054 `implicitobjects.URLClientIT` (7/7). TCK-056
+`tagfiles.semantics.URLClientIT` now deploys and runs all eight methods: three
+pass and five report method errors (IBARRA-141). Its former unresolved `request`
+deployment error is fixed by IBARRA-140. The complete run above includes this fix;
+the remaining method-level errors mean certification is still pending.
 
 Historical full-suite snapshots from 2026-10-14 are not directly comparable because
 the set of methods that reached execution changed. An earlier `all --no-install`
 run recorded 655 entries (513 passes, 142 errors, no setup errors). A fresh run on
 merged commit `06a12bb`, before IBARRA-139, also recorded 655 entries but had 538
 passes, 114 method errors and three class-level deployment errors (TCK-017, TCK-054
-and TCK-056). After IBARRA-139, the current run reports 669 entries: all 15 TCK-017
-methods execute successfully, while the two tag-file classes remain blocked at
-deployment. The declared-method inventory remains 682; no certification claim is
-made while methods are blocked and errors remain.
+and TCK-056). The run after IBARRA-139 but before IBARRA-140 reported 669 entries,
+553 passes, 114 method errors and two class-level deployment errors. The current
+run on `0c9207f` reports 682 entries, 563 passes and 119 method errors, with no
+class-level deployment errors. The declared-method inventory remains 682; no
+certification claim is made while method errors remain.
 
 Static XML output and the initial XML `.tagx` subset restore all six previously
 failing output-action methods: `doctypeSystemPublicTest`, `simpleDefaultTest`, `doctypeSystemTest`,
@@ -171,7 +182,7 @@ ordinary Ibarra unit tests or Peano's independent EL TCK.
 |---|---|
 | Per-page translation failures | IBARRA-084 fixed: genuine parse/generation/javac failures become compiled error servlets, while valid pages still render. Global deployment metadata remains fatal. |
 | WAR adaptation | No setup failures remain. Legacy WAR libraries assemble into the private application module (IBARRA-102 fixed); explicit web.xml components use direct factories (IBARRA-100 fixed). Unadapted library metadata remains an explicit boundary. JSP property groups apply at build time; TLD keyword names no longer block deployment. Runtime JSP descriptor exposure remains pending upstream. |
-| Tag files and full tag metadata | `urn:jsptagdir`, standard `.tag` scalar attributes, variables, nested declared tag attributes and initial PageData TLV coverage are implemented. Generated tag-file implicit objects remain unsupported and block TCK-054/056 deployment; `.tagx` actions, EL, fragments and complete tag metadata remain I6/I7 work. |
+| Tag files and full tag metadata | `urn:jsptagdir`, standard `.tag` scalar attributes, variables, nested declared tag attributes, initial PageData TLV coverage and generated tag-file implicit objects are implemented (IBARRA-140; TCK-054 passes 7/7). TCK-056 deploys but five method errors remain (IBARRA-141); `.tagx` actions, EL, fragments and complete tag metadata remain I6/I7 work. |
 | Ordinary TLD attributes | IBARRA-093/094 fixed: keyword names accepted and actual JavaBeans setter types selected/coerced from class files. Deferred/fragment protocols remain exact. |
 | BeanELResolver fixture access | IBARRA-085 fixed; the official method passes with qualified exports to `jakarta.el` only. |
 | JspIdConsumer | All three methods pass; IBARRA-086 fixed by stable per-occurrence generated identifiers. |
