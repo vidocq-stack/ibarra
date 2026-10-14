@@ -8,11 +8,14 @@
 - Minimal repro: run
   `./run-official-tck-pages-4.0.sh --no-install --no-prepare
   -Dtest=ee.jakarta.tck.pages.spec.tagfiles.semantics.URLClientIT`.
-- Hypothesis: these failures cover several tag-file runtime semantics and need
-  separate diagnosis against their HTTP responses and generated tag handlers.
-- Status: OPEN. The latest complete official run executes all eight methods:
-  three pass and five remain errors. The former class-deployment failure is
-  fixed by IBARRA-140.
+- Cause: generated handlers reused the invoking page scope, did not expose
+  declared attributes and dynamic attributes through the tag-file context, and
+  did not translate `jsp:forward` inside a standard `.tag` file.
+- Fix: generated handlers now use an isolated `PageContext` wrapper, publish
+  declared and dynamic attributes into its page scope, synchronize tag-file
+  variables back to the caller and stop execution after a literal-path forward.
+- Status: FIXED (2026-10-14). The focused official TCK-056 class passes 8/8;
+  the latest complete-suite aggregate has not been rerun.
 
 ## IBARRA-140 · 2026-10-14 · Generated tag files omit JSP implicit objects
 

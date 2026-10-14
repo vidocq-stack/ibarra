@@ -42,8 +42,8 @@ nonzero. All 92 selected classes deploy and all 682 declared methods execute; th
 119 errors are method-level TCK errors. The TCK's HTTP assertion helper reports
 method failures as exceptions, hence `errors` rather than `failures`; zero in the
 failure column does not mean success. TCK-017 passes all 15 methods, TCK-054 passes
-all 7 methods, and TCK-056 runs all 8 methods with 5 errors. Certification remains
-pending.
+all 7 methods, and TCK-056 recorded 5 method errors in this full-suite snapshot;
+its later focused rerun passes 8/8 after IBARRA-141. Certification remains pending.
 
 Before this full-suite snapshot, targeted reruns on 2026-10-14 passed all 11 methods in
 `bodytagsupport.URLClientIT`, including `bodyTagSupportVariableSynchronizationTest`.
@@ -59,11 +59,12 @@ methods. The adapter passed 35/35. Generated page initialization invokes
 the complete run reported above.
 
 On 2026-10-14, the focused official rerun for tag-file implicit objects passed
-TCK-054 `implicitobjects.URLClientIT` (7/7). TCK-056
-`tagfiles.semantics.URLClientIT` now deploys and runs all eight methods: three
-pass and five report method errors (IBARRA-141). Its former unresolved `request`
-deployment error is fixed by IBARRA-140. The complete run above includes this fix;
-the remaining method-level errors mean certification is still pending.
+TCK-054 `implicitobjects.URLClientIT` (7/7). The subsequent focused TCK-056
+`tagfiles.semantics.URLClientIT` rerun after IBARRA-141 passes all eight methods,
+including dynamic attributes, declared attributes, context-wrapper scopes and
+literal-path forwarding. Its former unresolved `request` deployment error was
+fixed by IBARRA-140. The full-suite totals above predate IBARRA-141 and have not
+been rerun; certification remains pending.
 
 Historical full-suite snapshots from 2026-10-14 are not directly comparable because
 the set of methods that reached execution changed. An earlier `all --no-install`
@@ -182,7 +183,7 @@ ordinary Ibarra unit tests or Peano's independent EL TCK.
 |---|---|
 | Per-page translation failures | IBARRA-084 fixed: genuine parse/generation/javac failures become compiled error servlets, while valid pages still render. Global deployment metadata remains fatal. |
 | WAR adaptation | No setup failures remain. Legacy WAR libraries assemble into the private application module (IBARRA-102 fixed); explicit web.xml components use direct factories (IBARRA-100 fixed). Unadapted library metadata remains an explicit boundary. JSP property groups apply at build time; TLD keyword names no longer block deployment. Runtime JSP descriptor exposure remains pending upstream. |
-| Tag files and full tag metadata | `urn:jsptagdir`, standard `.tag` scalar attributes, variables, nested declared tag attributes, initial PageData TLV coverage and generated tag-file implicit objects are implemented (IBARRA-140; TCK-054 passes 7/7). TCK-056 deploys but five method errors remain (IBARRA-141); `.tagx` actions, EL, fragments and complete tag metadata remain I6/I7 work. |
+| Tag files and full tag metadata | `urn:jsptagdir`, standard `.tag` scalar and dynamic attributes, isolated per-invocation page scopes, declared tag-file variables, literal-path `jsp:forward`, PageData TLV coverage and generated implicit objects are implemented (IBARRA-140/141; focused TCK-054 7/7 and TCK-056 8/8). `.tagx` actions, EL, fragments, forward parameters and complete tag metadata remain I6/I7 work. |
 | Ordinary TLD attributes | IBARRA-093/094 fixed: keyword names accepted and actual JavaBeans setter types selected/coerced from class files. Deferred/fragment protocols remain exact. |
 | BeanELResolver fixture access | IBARRA-085 fixed; the official method passes with qualified exports to `jakarta.el` only. |
 | JspIdConsumer | All three methods pass; IBARRA-086 fixed by stable per-occurrence generated identifiers. |

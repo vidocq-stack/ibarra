@@ -365,14 +365,12 @@ public final class PageGenerator {
             if (tag.unsupportedMetadata())
                 throw error(node.location(), tag.unsupportedReason() == null
                         ? "Tag validators, scripting variables or tag metadata are not supported yet" : tag.unsupportedReason());
-            if (tag.tagFile() && tag.dynamicAttributes())
-                throw error(node.location(), "Dynamic attributes on standard tag files are not supported yet");
             var scriptingVariables = new ArrayList<ScriptingVariable>();
             if (tag.teiClass() != null) for (var variable : classes.tagVariables(tag.teiClass(), node.location()))
                 addScriptingVariable(scriptingVariables, variable.name(), variable.className(), variable.declare(), variable.scope(), node.location());
             for (var variable : tag.variables())
                 addScriptingVariable(scriptingVariables, variable.name(), variable.className(), variable.declare(), variable.scope(), node.location());
-            var kind = tag.tagFile() ? new BeanClasses.Handler(tag.handlerClass(), true, false, false, false, false, false)
+            var kind = tag.tagFile() ? new BeanClasses.Handler(tag.handlerClass(), true, false, false, false, tag.dynamicAttributes(), false)
                     : classes.handler(tag.handlerClass(), node.location());
             if (kind.simple() && tag.bodyContent().equals("JSP")) throw error(node.location(), "SimpleTag cannot have JSP body-content");
             if (tag.dynamicAttributes() && !kind.dynamic()) throw error(node.location(), "Handler does not implement DynamicAttributes");
@@ -477,6 +475,7 @@ public final class PageGenerator {
                     }
                     body.add("}\n");
                 }
+                if (tag.tagFile()) synchronizeTagFileVariables(handler, scriptingVariables, node.location());
                 synchronizeVariables(scriptingVariables, 1, 2);
             } else {
                 if (kind.catchFinally()) body.add("boolean _jspxSetterFailed" + handler + " = false;\n");
@@ -519,6 +518,20 @@ public final class PageGenerator {
                 body.add("} finally { " + handler + ".release(); }\n");
             }
             parentTag = previousParent; body.add("}\n");
+        }
+
+        private void synchronizeTagFileVariables(String handler, List<ScriptingVariable> variables, SourceLocation at) {
+            int index = 0;
+            for (var variable : variables) {
+                if (variable.scope() == TagVariableDescriptor.NESTED) { index++; continue; }
+                String value = handler + "_jspxScopeOutput" + index++;
+                String name = JavaSource.quote(variable.name());
+                body.add("Object " + value + " = " + handler + "._jspxTagFileContext().getAttribute(" + name
+                        + ", jakarta.servlet.jsp.PageContext.PAGE_SCOPE);\n"
+                        + "pageContext.removeAttribute(" + name + ", jakarta.servlet.jsp.PageContext.PAGE_SCOPE);\n"
+                        + "if (" + value + " != null) pageContext.setAttribute(" + name + ", " + value
+                        + ", jakarta.servlet.jsp.PageContext.PAGE_SCOPE);\n", at);
+            }
         }
 
         private record TagInvocation(Map<String, PageNode.Element> attributes, List<PageNode> content) {}

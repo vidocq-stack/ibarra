@@ -26,8 +26,7 @@ translation time across static includes, then emitted before the page body.
 Page declarations use the response encoding; input DTDs and external entities
 remain rejected. XML `.tagx` files support static markup and `jsp:output`
 omission metadata, emitting a UTF-8 declaration at each invocation when requested
-without changing the caller's response charset. Standard `.tag` files remain
-unsupported.
+without changing the caller's response charset.
 The Maven `precompile` goal emits pages and an index into an application module;
 a packaged application JAR is discovered and rendered without compiler modules.
 EL compiles at build time through Peano into application-owned classes; startup
@@ -46,10 +45,14 @@ standard-page servlet initialization; validators referenced by a standard tag fi
 receive its XML view when the generated handler is first invoked.
 Standard `.tag` files support tag/import/attribute/variable/taglib directives,
 scriptlets, scripting expressions, declared variables and scalar attribute setters.
+Each invocation receives a `PageContext` wrapper with an isolated page scope;
+declared attributes and the declared dynamic-attribute map live there, while
+request, session and application scopes delegate to the invoking page. A literal
+`jsp:forward` dispatches and stops processing the tag file and its caller.
 Nested simple/classic custom tags accept declared scalar attributes, including
 request-time Java expressions. Nested tag bodies, classic handlers with body or
-exception callbacks, EL, fragments, XML tag-file actions and complete tag-file
-metadata remain pending.
+exception callbacks, EL, fragments, `jsp:param` in tag-file forwards, XML tag-file
+actions and complete tag-file metadata remain pending.
 Page type/package imports now resolve through build-generated class references.
 TLD functions use generated direct static calls. Typed deferred tag values/methods
 are compiled and constructed per invocation. Dynamic import changes and official TCK
@@ -87,8 +90,8 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 | Module | Role | State |
 |---|---|---|
 | `ibarra-api` | Immutable page/listener factories and constructor-based index SPI | I3/I4/I5 SPI implemented |
-| `ibarra-core` | Page runtime: factory, context, scopes, output, dispatch and application EL context; tags planned | I1 runtime implemented |
-| `ibarra-compiler` | JSP/JSPX parser, page model, Java generator, initial tag handlers and build-time compiler | I2 implemented; I3/I6 in progress |
+| `ibarra-core` | Page runtime: factory, context, scopes, output, dispatch and application EL context | I1 runtime implemented |
+| `ibarra-compiler` | JSP/JSPX parser, page model, Java generator, initial tag handlers and build-time compiler | I2 implemented; I3/I6/I7 in progress |
 | `ibarra-maven-plugin` | `precompile` goal at process-classes; module service registration | Initial I4 implemented |
 | `ibarra-foy` | Optional Foy engine provider; application layer, routing and TLD listener lifecycle | Initial I5 implemented |
 | `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; smoke 18/18; latest `all` run reports 513/655 across 92 classes |
@@ -96,8 +99,10 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 The latest `all` invocation reports 513 passes and 142 errors across 92 classes
 (78.3%). The previous comparable report was 525/682; this run reported 655 entries,
 so the 27-entry difference is being reconciled before comparing the aggregates.
-The SimpleTagSupport TCK class now passes 11/11 methods. Certification remains pending.
-The ordinary reactor passes 341 tests, the adapter 35/35 and the independent example
+The SimpleTagSupport TCK class passes 11/11 methods, and the focused TCK-056 tag-file
+semantics class now passes 8/8 after IBARRA-141. The full suite has not been rerun
+after that fix, so the overall certification status remains pending. The ordinary
+reactor passes 362 tests, the adapter 35/35 and the independent example
 packages successfully. Typed forwarding uses the producer delivered in
 [Foy #47](https://codefloe.com/Vidocq/foy/pulls/47), now merged and published.
 See [the exact baseline](ibarra-tck/BASELINE.md).

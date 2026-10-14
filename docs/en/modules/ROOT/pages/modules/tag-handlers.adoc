@@ -118,11 +118,17 @@ handler is first invoked.
 Referenced standard `.tag` files support tag/import/attribute/variable/taglib
 directives, static text, Java declarations, scriptlets and scripting expressions.
 Declared scalar attributes generate setters; tag-file variables follow their
-declared scopes; `NESTED` page-scope attributes are hidden during invocation and
-restored afterward. Nested custom actions with declared attributes generate direct
-calls to simple or classic handlers, including request-time Java expressions.
-Nested action bodies, classic body and exception callbacks, EL, XML tag-file actions,
-fragments and complete tag-file metadata remain unsupported.
+declared scopes. Every invocation receives a `PageContext` wrapper with an empty,
+isolated page scope; declared attributes and the declared dynamic-attribute map
+are placed there, while request, session and application scopes delegate to the
+invoking page. `AT_BEGIN` and `AT_END` values synchronize back to the caller, and
+`NESTED` values are restored after invocation. Nested custom actions with declared
+attributes generate direct calls to simple or classic handlers, including
+request-time Java expressions. Literal-path `jsp:forward` dispatches and throws
+`SkipPageException` so neither the rest of the tag file nor its caller continues.
+Nested action bodies, `jsp:param` in tag-file forwards, classic body and exception
+callbacks, EL, XML tag-file actions, fragments and complete tag-file metadata
+remain unsupported.
 
 TLD `<name-from-attribute>` variables and the complete `TagInfo` and
 `TagLibraryInfo` APIs remain unsupported.
@@ -200,10 +206,11 @@ bean declarations, directives or actions creates no page variables or metadata.
 
 == Current boundary
 
-This is an initial I6 implementation. Broader standard-action named-attribute
-support, namespaced dynamic attributes, dynamic TEI metadata, TagLibraryValidator
-and tag files remain follow-up work. Unsupported invoked metadata fails
-translation; no reflective fallback or handler pooling is enabled.
+This is an initial I6/I7 implementation. Broader standard-action named-attribute
+support, namespaced dynamic attributes, dynamic TEI metadata, complete tag
+metadata, tag-file bodies and fragments, and broader XML tag-file actions remain
+follow-up work. Unsupported invoked metadata fails translation; no reflective
+fallback or handler pooling is enabled.
 
 Some official TEI validation fixtures share and reset translation-time static state
 with JSP requests. Build-side validation alone does not preserve that state in the

@@ -844,6 +844,54 @@ class PagePrecompilerTest {
     }
 
     @Test
+    void standardSyntaxTagFilesUseAnIsolatedPageScopeAndExposeDeclaredAttributes() throws Exception {
+        prepare(false);
+        Path tags = web.resolve("WEB-INF/tags"); Files.createDirectories(tags);
+        Files.writeString(tags.resolve("scoped.tag"), "<%@ tag %><%@ attribute name='label' required='true' %><%"
+                + " if (!\"value\".equals(jspContext.getAttribute(\"label\"))) throw new IllegalStateException(\"declared attribute missing from tag scope\");"
+                + " if (jspContext.getAttribute(\"outerOnly\") != null || jspContext.getAttribute(\"innerOnly\") != null) throw new IllegalStateException(\"tag page scope was not clean\");"
+                + " jspContext.setAttribute(\"innerOnly\", \"private\");"
+                + " jspContext.setAttribute(\"shared\", \"updated\", jakarta.servlet.jsp.PageContext.REQUEST_SCOPE);"
+                + " out.write(label + \"|\"); %>");
+        Files.writeString(web.resolve("index.jsp"), "<%@ page session='false' %><%@ taglib prefix='t' tagdir='/WEB-INF/tags' %>"
+                + "<% pageContext.setAttribute(\"outerOnly\", \"outer\"); request.setAttribute(\"shared\", \"before\"); %>"
+                + "<t:scoped label='value'/><t:scoped label='value'/>"
+                + "<% out.write(pageContext.getAttribute(\"outerOnly\") + \"|\" + pageContext.getAttribute(\"innerOnly\")"
+                + " + \"|\" + request.getAttribute(\"shared\")); %>");
+
+        precompile();
+        Path jar = directory.resolve("scoped-tag-file.jar"); jar(classes, jar);
+        assertEquals("value|value|outer|null|updated", render(jar));
+    }
+
+    @Test
+    void standardSyntaxTagFilesExposeDynamicAttributesInTheirDeclaredMap() throws Exception {
+        prepare(false);
+        Path tags = web.resolve("WEB-INF/tags"); Files.createDirectories(tags);
+        Files.writeString(tags.resolve("dynamic.tag"), "<%@ tag dynamic-attributes='dynamicAttributes' %>"
+                + "<%@ tag import='java.util.Map' %><% Map<?, ?> values = (Map<?, ?>) jspContext.getAttribute(\"dynamicAttributes\");"
+                + " out.write(values.get(\"attr1\") + \"|\" + values.get(\"attr2\")); %>");
+        Files.writeString(web.resolve("index.jsp"), "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %>"
+                + "<t:dynamic attr1='first' attr2='second'/>");
+
+        precompile();
+        Path jar = directory.resolve("dynamic-tag-file.jar"); jar(classes, jar);
+        assertEquals("first|second", render(jar));
+    }
+
+    @Test
+    void standardSyntaxTagFileForwardActionCompiles() throws Exception {
+        prepare(false);
+        Path tags = web.resolve("WEB-INF/tags"); Files.createDirectories(tags);
+        Files.writeString(tags.resolve("forward.tag"), "<%@ tag %><jsp:forward page='/target.jsp'/>tag tail");
+        Files.writeString(web.resolve("index.jsp"), "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:forward/>page tail");
+        Files.writeString(web.resolve("target.jsp"), "target");
+
+        var deployment = new PagePrecompiler().precompileDeployment(web, classes, modulePaths(), "demo.generated", GenerationOptions.DEFAULT);
+        assertTrue(deployment.failures().isEmpty(), deployment.failures().toString());
+    }
+
+    @Test
     void standardSyntaxTagFilesExposeAttributesAndValidateNestedTagLibraries() throws Exception {
         prepare(false, false, true);
         Path validatorSource = directory.resolve("validator/demo/Validator.java");

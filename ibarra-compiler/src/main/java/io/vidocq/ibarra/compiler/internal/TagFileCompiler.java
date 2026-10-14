@@ -39,7 +39,7 @@ public final class TagFileCompiler {
     private record TagLibraryUse(String prefix, String uri, TagLibraryValidatorDescriptor validator) { }
     private record StandardTagFile(String bodyContent, List<TagVariableDescriptor> variables,
             Map<String, TagAttribute> attributes, List<String> imports, String declarations, String body,
-            String libraryValidationDeclarations) { }
+            String libraryValidationDeclarations, String dynamicAttributesName) { }
 
     private TagFileCompiler() { }
 
@@ -90,7 +90,7 @@ public final class TagFileCompiler {
                             var unit = new TranslationUnit(options).read(path, resource.getValue());
                             var tag = standardTagFile(unit, options, classes);
                             generated.add(new GeneratedPage(handler, source(handler, tag), Map.of()));
-                            tags.put(name, new TagDescriptor(name, handler, tag.bodyContent(), tag.attributes(), false,
+                            tags.put(name, new TagDescriptor(name, handler, tag.bodyContent(), tag.attributes(), tag.dynamicAttributesName() != null,
                                     false, true, null, false, null, tag.variables()));
                         } catch (PageParseException failure) {
                             tags.put(name, new TagDescriptor(name, null, "empty", Map.of(), false, true,
@@ -135,6 +135,8 @@ public final class TagFileCompiler {
         var declarations = new StringBuilder();
         var body = new StringBuilder();
         var bodyContent = "scriptless";
+        String dynamicAttributesName = null;
+        SourceLocation dynamicAttributesLocation = null;
         int nestedActionIndex = 0;
         for (var node : nodes) {
             if (node instanceof PageNode.Directive directive) {
@@ -150,8 +152,18 @@ public final class TagFileCompiler {
                                     bodyContent = value;
                                 }
                                 case "isELIgnored", "deferredSyntaxAllowedAsLiteral", "errorOnELNotFound" -> { }
-                                case "dynamic-attributes" -> throw new PageParseException(directive.location(),
-                                        "Dynamic attributes in standard tag files are not supported yet");
+                                case "dynamic-attributes" -> {
+                                    String name = attribute.getValue();
+                                    if (!javax.lang.model.SourceVersion.isIdentifier(name)
+                                            || javax.lang.model.SourceVersion.isKeyword(name))
+                                        throw new PageParseException(directive.location(),
+                                                "Tag-file dynamic-attributes must name a Java identifier");
+                                    if (dynamicAttributesName != null && !dynamicAttributesName.equals(name))
+                                        throw new PageParseException(directive.location(),
+                                                "Conflicting tag-file dynamic-attributes declarations");
+                                    dynamicAttributesName = name;
+                                    dynamicAttributesLocation = directive.location();
+                                }
                                 case "description", "display-name", "small-icon", "large-icon" -> { }
                                 default -> throw new PageParseException(directive.location(),
                                         "Tag directive attribute is not supported: " + attribute.getKey());
@@ -184,13 +196,39 @@ public final class TagFileCompiler {
             } else if (node instanceof PageNode.Expression expression) {
                 throw new PageParseException(expression.location(), "EL in standard tag files is not supported yet");
             } else if (node instanceof PageNode.Element element) {
-                body.append(nestedAction(element, referencedLibraries, classes, nestedActionIndex++));
+                if (element.namespace().equals(JSP_NAMESPACE)) body.append(standardAction(element, nestedActionIndex++));
+                else body.append(nestedAction(element, referencedLibraries, classes, nestedActionIndex++));
             }
         }
+        if (dynamicAttributesName != null
+                && (attributes.containsKey(dynamicAttributesName) || variableNames.contains(dynamicAttributesName)))
+            throw new PageParseException(dynamicAttributesLocation,
+                    "Tag-file dynamic-attributes name conflicts with a declared attribute or variable: " + dynamicAttributesName);
         var libraryUses = tagLibraryUses(nodes, referencedLibraries);
         String xmlView = PageDataXmlView.serialize(nodes, taglibNamespaces(nodes));
         return new StandardTagFile(bodyContent, List.copyOf(variables), Collections.unmodifiableMap(new LinkedHashMap<>(attributes)), List.copyOf(imports),
-                declarations.toString(), body.toString(), libraryValidationDeclarations(libraryUses, xmlView));
+                declarations.toString(), body.toString(), libraryValidationDeclarations(libraryUses, xmlView), dynamicAttributesName);
+    }
+
+    private static String standardAction(PageNode.Element action, int index) {
+        String local = action.name().substring(action.name().lastIndexOf(':') + 1);
+        if (!local.equals("forward"))
+            throw new PageParseException(action.location(), "Standard action in tag files is not supported yet: " + action.name());
+        String page = action.attributes().get("page");
+        if (page == null || page.isBlank())
+            throw new PageParseException(action.location(), "jsp:forward in a tag file requires a page attribute");
+        for (String name : action.attributes().keySet())
+            if (!name.equals("page") && !name.equals("xmlns") && !name.startsWith("xmlns:"))
+                throw new PageParseException(action.location(), "Unsupported jsp:forward attribute in a tag file: " + name);
+        for (var child : action.children())
+            if (!(child instanceof PageNode.Text text) || !text.value().isBlank())
+                throw new PageParseException(action.location(), "jsp:param in tag-file jsp:forward is not supported yet");
+        if (page.contains("${") || page.contains("#{") || page.contains("<%"))
+            throw new PageParseException(action.location(), "Dynamic jsp:forward paths in tag files are not supported yet");
+        String failure = "_jspxTagFileForwardFailure" + index;
+        return "try { pageContext.forward(" + JavaSource.quote(page) + "); } catch (jakarta.servlet.ServletException "
+                + failure + ") { throw new JspException(\"Could not forward from tag file\", " + failure + "); }\n"
+                + "if (true) throw new jakarta.servlet.jsp.SkipPageException();\n";
     }
 
     private static TagAttribute attribute(PageNode.Directive directive) {
@@ -432,17 +470,36 @@ public final class TagFileCompiler {
         int split = className.lastIndexOf('.');
         var source = new StringBuilder("package ").append(className, 0, split).append(";\n")
                 .append("import jakarta.servlet.jsp.*;\n")
-                .append("import jakarta.servlet.jsp.tagext.SimpleTagSupport;\n");
+                .append("import jakarta.servlet.jsp.tagext.SimpleTagSupport;\n")
+                .append("import io.vidocq.ibarra.spi.TagFileJspContext;\n");
         for (String name : tag.imports()) source.append("import ").append(name).append(";\n");
         source.append("public final class ").append(className.substring(split + 1))
-                .append(" extends SimpleTagSupport {\n")
+                .append(" extends SimpleTagSupport")
+                .append(tag.dynamicAttributesName() == null ? " {\n"
+                        : " implements jakarta.servlet.jsp.tagext.DynamicAttributes {\n")
                 .append(tag.libraryValidationDeclarations());
+        if (tag.dynamicAttributesName() != null)
+            source.append("private final java.util.Map<String, Object> ").append(tag.dynamicAttributesName())
+                    .append(" = new java.util.LinkedHashMap<>();\n");
         for (var attribute : tag.attributes().values()) {
             String setter = "set" + Character.toUpperCase(attribute.name().charAt(0)) + attribute.name().substring(1);
             source.append("private ").append(attribute.type()).append(' ').append(attribute.name()).append(";\n")
                     .append("public void ").append(setter).append('(').append(attribute.type()).append(" value) {")
-                    .append(" this.").append(attribute.name()).append(" = value; }\n");
+                    .append(" this.").append(attribute.name()).append(" = value; getJspContext().setAttribute(")
+                    .append(JavaSource.quote(attribute.name())).append(", value); }\n");
         }
+        source.append("@Override public void setJspContext(JspContext context) {\n")
+                .append("if (context instanceof PageContext page) super.setJspContext(new TagFileJspContext(page));\n")
+                .append("else super.setJspContext(context);\n");
+        if (tag.dynamicAttributesName() != null)
+            source.append("getJspContext().setAttribute(").append(JavaSource.quote(tag.dynamicAttributesName())).append(", ")
+                    .append(tag.dynamicAttributesName()).append(");\n");
+        source.append("}\n")
+                .append("public JspContext _jspxTagFileContext() { return getJspContext(); }\n");
+        if (tag.dynamicAttributesName() != null)
+            source.append("@Override public void setDynamicAttribute(String uri, String localName, Object value) throws JspException {\n")
+                    .append("if (uri != null && !uri.isEmpty()) throw new JspException(\"Namespaced dynamic attributes are not supported on standard tag files\");\n")
+                    .append(tag.dynamicAttributesName()).append(".put(localName, value);\n}\n");
         source
                 .append(tag.declarations())
                 .append("@Override public void doTag() throws java.io.IOException, jakarta.servlet.jsp.JspException {\n")

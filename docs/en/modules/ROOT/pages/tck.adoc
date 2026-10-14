@@ -7,8 +7,9 @@ on Foy. The eighteen-test smoke subset passes. The last comparable full run
 executes all declared methods and passes 525/682; 157 method errors remain. A
 later full invocation reported 513/655, but its method-count discrepancy has not
 been reconciled. Subsequent targeted reruns pass 16 methods across tag-attribute,
-tag-data, tag-extra-info and function-info classes; they do not replace a full-suite result.
-Ibarra is not certified.
+tag-data, tag-extra-info and function-info classes. A later focused TCK-056
+tag-file semantics run passes all 8 methods after IBARRA-141. Targeted results do
+not replace a full-suite result. Ibarra is not certified.
 
 == Recorded baseline
 
@@ -62,9 +63,12 @@ passes remain, and all 682 class/method keys match with no missing or extra entr
 The run has 49 completely passing classes. XML tag files support static markup and
 empty `jsp:output` omission metadata; requested declarations use UTF-8 and are emitted
 at each invocation without changing the caller's response charset. Standard `.tag`
-files support directives, scripting, variables and empty nested simple/classic actions.
-Nested tag attributes and bodies, classic body or exception callbacks, EL, fragments
-and XML tag-file actions remain unsupported.
+files support directives, scripting, variables, dynamic-attribute maps, declared
+attributes and empty nested simple/classic actions. Each invocation has an isolated
+page scope with other scopes delegated to its caller; literal-path `jsp:forward`
+stops both the tag file and caller page. Nested tag attributes and bodies, classic
+body or exception callbacks, EL, fragments, forward parameters and XML tag-file
+actions remain unsupported.
 
 The detailed command, binary inventory, counts and remaining categories are in
 link:{repo-ibarra}/src/branch/main/ibarra-tck/BASELINE.md[the recorded baseline].

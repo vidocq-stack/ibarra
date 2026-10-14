@@ -270,7 +270,7 @@ the runtime's packaging goal, after I8.
 | I4 | `ibarra-maven-plugin` precompile goal + page index; extend `ibarra-api` SPI | initial implementation: independent application JAR precompiled and rendered; web fragments and broader configuration pending |
 | I5 | `ibarra-foy` + Foy's JSP-engine SPI (Foy-side PR), `*.jsp` mapping, `addJspFile`, `getJspConfigDescriptor`, TLD listeners | initial HTTP implementation with build-generated TLD listeners; broader deployment/TCK coverage pending |
 | I6 | Custom tags: TLD parsing, classic + simple handlers, scripting variables, validators | initial rendering: Tag/IterationTag/BodyTag/TryCatchFinally, SimpleTag bodies, named scalar/fragment attributes, explicit bodies and unqualified dynamic attributes; static TEI and name-given TLD variables synchronize across tag lifecycles; generated page initialization invokes `TagExtraInfo.validate` and TLD `TagLibraryValidator.validate` with available metadata and PageData XML; complete `TagInfo`/`TagLibraryInfo` metadata remains pending |
-| I7 | Tag files, fragments, `jsp:invoke` / `jsp:doBody`; Peano compiled expressions in pages | initial standard `.tag` support: import/attribute/variable/taglib directives, scripting, scalar setters, nested declared attributes and PageData validators; initial XML `.tagx` subset remains static markup and per-invocation `jsp:output`; EL, bodies, fragments and broader XML tag-file actions remain pending |
+| I7 | Tag files, fragments, `jsp:invoke` / `jsp:doBody`; Peano compiled expressions in pages | initial standard `.tag` support: import/attribute/variable/taglib directives, scripting, scalar setters, nested declared attributes, PageData validators, per-invocation page-scope wrappers, dynamic-attribute maps and literal-page `jsp:forward`; initial XML `.tagx` subset remains static markup and per-invocation `jsp:output`; EL, bodies, fragments, forward parameters and broader XML tag-file actions remain pending |
 | I8 | Official TCK through `ibarra-tck` (Arquillian adapter on Foy) | in progress: initial adapter and smoke delivered, full diagnostic baseline failing; acceptance remains 100 % PASS recorded in docs `tck` page |
 | I9 | Degraded runtime translation polish, Class-File API path for scriptless pages, `ibarra-bench` (vs Jasper), Vidocq Runtime extension | numbers in `BENCH.md` only |
 
@@ -519,6 +519,27 @@ variable synchronization and both SkipPageException wrappers. No official fixtur
 were changed. Typed forwarding's
 Foy #47 producer has since merged and completed snapshot publication; that earlier
 milestone's results remain recorded above.
+
+## Standard tag-file context semantics (2026-10-14)
+
+Generated standard tag files now receive a per-invocation `TagFileJspContext`, a
+`PageContext` wrapper exported by the generated-page API module. Its page scope
+starts empty; declared attributes and the directive's dynamic-attribute map are
+stored there. Request, session and application scopes, writers and dispatch calls
+delegate to the invoking page. `AT_BEGIN` and `AT_END` tag-file variables are
+copied from the wrapper back to the caller; `NESTED` values are restored after
+invocation.
+
+The initial standard tag-file action subset now includes literal-path
+`jsp:forward`. A successful dispatch throws `SkipPageException`, ending tag-file
+and caller-page processing. `jsp:param`, EL, fragments, nested bodies and XML
+tag-file actions remain pending.
+
+The full Ibarra reactor passes 362 tests, and the focused official
+`tagfiles.semantics.URLClientIT` run passes all 8 methods after IBARRA-141. The
+complete official Pages suite has not been rerun after these changes; its last
+full-run aggregate remains the separate diagnostic snapshot in
+`ibarra-tck/BASELINE.md`.
 
 ## Initial I4 implementation
 

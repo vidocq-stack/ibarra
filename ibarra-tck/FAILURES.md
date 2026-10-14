@@ -1,9 +1,10 @@
 # Official Pages failure inventory
 
 Date: 2026-10-14, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-The latest complete suite recorded 119 method-level errors, no class-level setup
-errors and exercised all 682 official methods. IBARRA-140 fixes TCK-054 and the
-TCK-056 deployment blocker; five TCK-056 method errors remain under IBARRA-141.
+The latest comparable full suite recorded 119 method-level errors, no class-level
+setup errors and exercised all 682 official methods. IBARRA-140 fixes TCK-054 and
+the TCK-056 deployment blocker. A focused rerun after IBARRA-141 passes TCK-056
+8/8; the complete suite has not been rerun after that change.
 See [BASELINE.md](BASELINE.md) for current counts and historical snapshots. Each
 class keeps its previous stable id.
 The parallel compiler batch restores literal editor conversion, opaque tagdependent
@@ -904,25 +905,26 @@ Failing methods:
 
 ## TCK-056 — ee.jakarta.tck.pages.spec.tagfiles.semantics.URLClientIT
 
-- Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the former WAR-precompilation error for unresolved `request` is fixed;
-  five of eight methods now report HTTP assertion errors after deployment.
+- Date: 2026-10-14.
+- Status: RESOLVED (IBARRA-141; focused official run).
+- Symptom: after the former deployment error for unresolved `request` was fixed,
+  five methods still reported HTTP assertion errors for tag-file semantics.
 - Minimal repro: `./run-official-tck-pages-4.0.sh --no-install --no-prepare
   -Dtest=ee.jakarta.tck.pages.spec.tagfiles.semantics.URLClientIT`.
-- Original cause: the generated standard tag-file class did not bind `request`
-  from its JSP context; fixed by IBARRA-140.
-- Latest full and focused runs (2026-10-14): deployment succeeds; 3 methods pass
-  and 5 report errors. The remaining semantics are tracked separately in IBARRA-141.
+- Cause: generated tag files reused the invoking page scope, did not expose
+  declared/dynamic attributes through their JSP context and did not handle
+  `jsp:forward`; IBARRA-140 separately fixed implicit-object binding.
+- Fix: use an isolated `PageContext` wrapper, publish declared and dynamic
+  attributes into its page scope, synchronize tag-file variables and stop after
+  literal-path forwarding.
+- Latest focused run (2026-10-14): all 8 methods pass. The full-suite aggregate
+  recorded above predates IBARRA-141 and has not been rerun.
 
-Methods passed (3/8):
+Methods passed (8/8):
 
 - `jspTagSemanticsAttributeNotSpecifiedTest`
 - `semanticsInvokeSimpleTagTest`
 - `semanticsInvokeClassicTagTest`
-
-Methods still reporting errors (5/8):
-
 - `jspTagSemanticsDynamicAttributesTest`
 - `jspTagSemanticsJspContextWrapperScopesTest`
 - `jspTagSemanticsDeclaredAttributesTest`
