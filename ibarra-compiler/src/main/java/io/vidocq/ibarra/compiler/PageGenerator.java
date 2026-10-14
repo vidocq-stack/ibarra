@@ -364,8 +364,6 @@ public final class PageGenerator {
             }
             var kind = tag.tagFile() ? new BeanClasses.Handler(tag.handlerClass(), true, false, false, false, false, false)
                     : classes.handler(tag.handlerClass(), node.location());
-            if (kind.simple() && !scriptingVariables.isEmpty())
-                throw error(node.location(), "TagExtraInfo scripting variables for SimpleTag handlers are not supported yet");
             if (kind.simple() && tag.bodyContent().equals("JSP")) throw error(node.location(), "SimpleTag cannot have JSP body-content");
             if (tag.dynamicAttributes() && !kind.dynamic()) throw error(node.location(), "Handler does not implement DynamicAttributes");
             var invocation = tagInvocation(node);
@@ -436,6 +434,7 @@ public final class PageGenerator {
             if (kind.simple()) {
                 if (!children.isEmpty()) body.add(handler + ".setJspBody(" + fragment(children, node.location(), handler) + ");\n", node.location());
                 body.add(handler + ".doTag();\n", node.location());
+                synchronizeVariables(scriptingVariables, 1, 2);
             } else {
                 if (kind.catchFinally()) body.add("boolean _jspxSetterFailed" + handler + " = false;\n");
                 body.add("int _jspxEnd" + handler + " = jakarta.servlet.jsp.tagext.Tag.EVAL_PAGE;\n");

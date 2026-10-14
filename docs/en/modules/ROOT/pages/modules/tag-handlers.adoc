@@ -82,6 +82,9 @@ and synchronizes them from `PageContext` after `doStartTag`, `doInitBody`, each
 scope. The TEI class is not loaded or executed. Metadata that depends on `TagData`,
 non-diagnostic helper calls or other dynamic computation is rejected during translation.
 
+For simple handlers, declared `AT_BEGIN` and `AT_END` variables synchronize once
+after `doTag` returns. Scriptlets remain forbidden in scriptless simple-tag bodies.
+
 This support does not implement `TagExtraInfo.validate`, `TagLibraryValidator`,
 TLD `<variable>` declarations or the complete `TagInfo` and `TagLibraryInfo` APIs.
 

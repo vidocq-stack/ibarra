@@ -58,6 +58,11 @@ class TagGenerationTest {
     }
 
     @Test
+    void synchronizesStaticTagExtraInfoVariablesAfterSimpleTagExecution() throws Exception {
+        assertEquals("1:2", render("<x:simpleSync/><% out.print(begin + \":\" + end); %>"));
+    }
+
+    @Test
     void tagDependentBindingCanComeFromTranslationTimeInclude() throws Exception {
         var options = rawOptions();
         var included = new GenerationOptions(options.propertyGroups(), Map.of("/binding.jspf", "<%@ taglib prefix='r' uri='urn:test' %>"),
@@ -609,6 +614,7 @@ class TagGenerationTest {
                 <tag><name>repeat</name><tag-class>fixture.Tags$Repeat</tag-class><body-content>JSP</body-content>
                   <attribute><name>count</name><type>int</type><required>true</required></attribute></tag>
                 <tag><name>sync</name><tag-class>fixture.Tags$SyncVariables</tag-class><tei-class>fixture.Tags$Variables</tei-class><body-content>JSP</body-content></tag>
+                <tag><name>simpleSync</name><tag-class>fixture.Tags$SimpleSyncVariables</tag-class><tei-class>fixture.Tags$Variables</tei-class><body-content>empty</body-content></tag>
                 <tag><name>buffer</name><tag-class>fixture.Tags$Buffer</tag-class><body-content>scriptless</body-content></tag>
                 <tag><name>guard</name><tag-class>fixture.Tags$Guard</tag-class><body-content>scriptless</body-content></tag>
                 <tag><name>setterFailure</name><tag-class>fixture.Tags$SetterFailure</tag-class><body-content>scriptless</body-content></tag>
@@ -818,6 +824,12 @@ class TagGenerationTest {
                             new VariableInfo("nested", "java.lang.Integer", true, VariableInfo.NESTED),
                             new VariableInfo("end", "java.lang.Integer", true, VariableInfo.AT_END)
                         }; }
+                    }
+                    public static class SimpleSyncVariables extends SimpleTagSupport {
+                        public void doTag() {
+                            getJspContext().setAttribute("begin", Integer.valueOf(1));
+                            getJspContext().setAttribute("end", Integer.valueOf(2));
+                        }
                     }
                     public static class SyncVariables extends BodyTagSupport {
                         private int iterations;

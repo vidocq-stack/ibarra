@@ -155,8 +155,17 @@ Failing methods:
 - Resolution: fragment setters now accept assignable reference supertypes based
   on build-time class-file metadata. The generated call uses the selected setter
   parameter type. Deferred attribute setters remain exact-type validated.
-- Verification: the unchanged official class now passes 9/11 methods, including
-  `jspFragmentGetJspContextTest` (1/1). See `IBARRA-138` in the root `BUG.md`.
+- Simple handlers now synchronize statically declared `TagExtraInfo` variables
+  with `AT_BEGIN` and `AT_END` scope after `doTag` returns. TLD `<variable>`
+  declarations and standard `.tag` files remain unsupported, so the variable
+  synchronization method still cannot complete.
+- Verification: before this change, the official class passed 9/11 methods,
+  including `jspFragmentGetJspContextTest` (1/1). After the change, the variable
+  synchronization page translates its TEI-backed `sync` tag and reaches
+  `sync1`, then fails on its TLD `<variable>` metadata at line 50. The separate
+  SkipPageException pages fail earlier because their standard `.tag` wrappers
+  are not supported. Focused `TagGenerationTest` coverage passes. See
+  `IBARRA-138` in the root `BUG.md`.
 
 Still failing:
 
