@@ -145,7 +145,10 @@ class PagesContainerTest {
                         + "<jsp:getProperty name='bean' property='value'/>|${values.size()}|"
                         + "<%=bean.getClass().getModule().getDescriptor().requires().stream().anyMatch(read -> read.name().equals(\"java.desktop\"))%>"
                         + "<% var descriptor = bean.getClass().getModule().getDescriptor();"
-                        + " if (!descriptor.exports().isEmpty() || !descriptor.opens().isEmpty()) throw new AssertionError(\"Application packages must stay private\"); %>"), "index.jsp");
+                        + " var exports = descriptor.exports(); var beanExport = exports.stream().findFirst().orElse(null);"
+                        + " if (!descriptor.opens().isEmpty() || exports.size() != 1 || beanExport == null || !beanExport.source().equals(bean.getClass().getPackageName())"
+                        + " || !beanExport.targets().equals(java.util.Set.of(\"jakarta.el\")))"
+                        + " throw new AssertionError(\"Bean packages must be qualified-exported only to Jakarta EL\"); %>"), "index.jsp");
         var container = new PagesContainer(); container.setup(new PagesConfiguration());
         try {
             var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
@@ -247,6 +250,16 @@ class PagesContainerTest {
                 .addAsWebResource(new StringAsset("<%@ page session='false' %><jsp:useBean id='bean' class='io.vidocq.ibarra.tck.fixtures.PropertyBean'/>"
                         + "${bean.name}|${bean.count = '7'}|${bean.count}|${bean.active}|${bean.readOnly}|${bean['empty'] == null}"), "index.jsp")
                 .addAsWebResource(new StringAsset("<%@ page session='false' %><jsp:useBean id='bean' class='io.vidocq.ibarra.tck.fixtures.PropertyBean'/>"
+                        + "<% var module=bean.getClass().getModule(); var packageName=bean.getClass().getPackageName();"
+                        + "var elModule=jakarta.el.BeanELResolver.class.getModule();"
+                        + "if (!module.isExported(packageName,elModule) || module.isExported(packageName) || module.isOpen(packageName))"
+                        + "throw new AssertionError(\"Bean package must be qualified-exported only to Jakarta EL\");"
+                        + "var resolver=new jakarta.el.BeanELResolver(); var el=pageContext.getELContext();"
+                        + "out.print(resolver.getValue(el,bean,\"name\")); out.print(\"|\");"
+                        + "out.print(resolver.getType(el,bean,\"count\").getName());"
+                        + "resolver.setValue(el,bean,\"count\",Integer.valueOf(9)); out.print(\"|\");"
+                        + "out.print(resolver.getValue(el,bean,\"count\")); %>"), "bean-resolver.jsp")
+                .addAsWebResource(new StringAsset("<%@ page session='false' %><jsp:useBean id='bean' class='io.vidocq.ibarra.tck.fixtures.PropertyBean'/>"
                         + "<% var el=pageContext.getELContext(); var base=pageContext.getAttribute(\"bean\");"
                         + "out.print(el.getELResolver().isReadOnly(el,base,\"readOnly\")); out.print(\"|\");"
                         + "out.print(el.getELResolver().getType(el,base,\"readOnly\")==null); %>"), "readonly.jsp");
@@ -256,6 +269,8 @@ class PagesContainerTest {
             try (var client = HttpClient.newHttpClient()) {
                 var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/beans/index.jsp")).build(), HttpResponse.BodyHandlers.ofString());
                 assertEquals(200, response.statusCode(), response.body()); assertEquals("private|7|7|true|parent|true", response.body());
+                response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/beans/bean-resolver.jsp")).build(), HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, response.statusCode(), response.body()); assertEquals("private|int|9", response.body());
                 response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/beans/readonly.jsp")).build(), HttpResponse.BodyHandlers.ofString());
                 assertEquals(200, response.statusCode(), response.body()); assertEquals("true|true", response.body());
             }

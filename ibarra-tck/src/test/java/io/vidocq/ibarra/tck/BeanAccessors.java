@@ -32,8 +32,12 @@ import static java.lang.constant.ConstantDescs.*;
 final class BeanAccessors {
     private record Method(String name, MethodTypeDesc type) { }
     private record Property(String name, Method getter, Method setter) { }
-    record Result(List<String> providers,Map<String,String> unsupported) {
-        Result { providers=List.copyOf(providers); unsupported=Map.copyOf(unsupported); }
+    record Result(List<String> providers,List<String> beanPackages,Map<String,String> unsupported) {
+        Result {
+            providers=List.copyOf(providers);
+            beanPackages=beanPackages.stream().distinct().sorted().toList();
+            unsupported=Map.copyOf(unsupported);
+        }
     }
     private static final class UnavailableType extends IOException {
         UnavailableType(String message) { super(message); }
@@ -64,6 +68,7 @@ final class BeanAccessors {
     static Result generate(Path classes, List<Path> modules) throws IOException {
         var generator = new BeanAccessors(classes, modules);
         var tables = new ArrayList<ClassDesc>();
+        var beanPackages = new TreeSet<String>();
         var unsupported = new TreeMap<String,String>();
         List<Path> files;
         try (var walk = Files.walk(classes)) {
@@ -93,13 +98,14 @@ final class BeanAccessors {
             if (Files.exists(target)) throw new IOException("Generated bean accessor collides with application class: " + owner.displayName());
             Files.write(target, table(owner, model.thisClass().asSymbol(), properties));
             tables.add(owner);
+            beanPackages.add(binary.substring(0,binary.lastIndexOf('.')));
         }
-        if (tables.isEmpty()) return new Result(List.of(),unsupported);
+        if (tables.isEmpty()) return new Result(List.of(),List.of(),unsupported);
         String provider = "tck.generated.BeanAccessorProvider";
         Path file = classes.resolve(provider.replace('.', '/') + ".class");
         if (Files.exists(file)) throw new IOException("Generated bean provider collides with application class: " + provider);
         Files.createDirectories(file.getParent()); Files.write(file, provider(ClassDesc.of(provider), tables));
-        return new Result(List.of(provider),unsupported);
+        return new Result(List.of(provider),List.copyOf(beanPackages),unsupported);
     }
 
     private List<Property> properties(String binary) throws IOException {

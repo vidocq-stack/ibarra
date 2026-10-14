@@ -144,10 +144,13 @@ properties preserve the resolution-flag contract. Inherited getters prefer primi
 boolean is methods and the most-specific covariant return; compatible setter
 overloads use their unique most-specific parameter type.
 
-Tables remain in their bean's package, with no exports or opens. Discovery and
-provider class literals do not initialize the beans. Native Map/List/ResourceBundle/
-Record types retain their standard resolvers. Binary-path mismatches and generated
-class collisions abort adaptation without rewriting the original WAR classes.
+Tables remain in their bean's package. To support the standard reflective Jakarta
+EL `BeanELResolver`, the runner qualified-exports packages containing generated
+bean tables only to `jakarta.el`; it adds no unqualified exports or opens. Discovery
+and provider class literals do not initialize the beans. Native
+Map/List/ResourceBundle/Record types retain their standard resolvers. Binary-path
+mismatches and generated class collisions abort adaptation without rewriting the
+original WAR classes.
 
 Hierarchy/signature lookup follows the application module's non-static reads,
 transitive visibility and qualified/unqualified exports. Unavailable/inaccessible

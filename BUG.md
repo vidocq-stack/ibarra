@@ -474,10 +474,14 @@ is resolved.
 - Symptom: official `api.jakarta_el.beanelresolver.URLClientIT#beanElResolverTest`
   reports Test FAILED over HTTP.
 - Minimal repro: select that fully qualified class with the official script.
-- Hypothesis: the upstream reflective BeanELResolver cannot access a fixture bean
-  in the unexported synthetic application module; accessor adaptation is incomplete.
-- Status: OPEN, investigation required; do not attribute this to Peano's separate
-  certified EL TCK without distinguishing the Pages deployment environment.
+- Cause: Jakarta EL's standard `BeanELResolver` uses reflective JavaBeans access
+  and does not consult Peano's generated `AccessorProvider` tables. The TCK WAR's
+  synthetic named module did not export its bean package to `jakarta.el`.
+- Status: FIXED in the official-TCK adapter. It requires `jakarta.el` and
+  qualified-exports only packages with generated bean tables to that module, with
+  no unqualified exports or opens. The descriptor rewrite preserves those exports
+  when collection providers are registered. The direct resolver regression and
+  official `beanElResolverTest` both pass.
 
 ## IBARRA-086 · 2026-10-12 · Official JspIdConsumer tests fail
 

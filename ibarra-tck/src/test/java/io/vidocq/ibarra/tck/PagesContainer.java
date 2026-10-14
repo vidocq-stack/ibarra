@@ -97,7 +97,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
             List<Path> modules = modulePaths(true);
             Path descriptor = work.resolve("module-info.java");
             String service = providers.isEmpty() ? "" : "provides io.vidocq.foy.spi.gen.WebComponent with " + String.join(",", providers) + ";";
-            Files.writeString(descriptor, "module tck.application { requires java.desktop; requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; requires io.vidocq.foy.api; " + service + " }");
+            Files.writeString(descriptor, "module tck.application { requires java.desktop; requires jakarta.el; requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; requires io.vidocq.foy.api; " + service + " }");
             compile("--module-path", join(modules), "--patch-module", "tck.application=" + classes,
                     "-d", classes.toString(), descriptor.toString());
             var beanAccessors = BeanAccessors.generate(classes, modules);
@@ -106,7 +106,8 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
             new TreeMap<>(beanAccessors.unsupported()).forEach((type, reason) -> beanDiagnostics.add(type+"\n"+reason+"\n"));
             Files.write(work.resolve("bean-accessor-errors.txt"),beanDiagnostics);
             if (!beanProviders.isEmpty()) {
-                Files.writeString(descriptor, "module tck.application { requires java.desktop; requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; requires io.vidocq.foy.api; " + service
+                String beanExports=beanAccessors.beanPackages().stream().map(beanPackage -> "exports "+beanPackage+" to jakarta.el;").collect(java.util.stream.Collectors.joining(" "));
+                Files.writeString(descriptor, "module tck.application { requires java.desktop; requires jakarta.el; requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; requires io.vidocq.foy.api; " + service + beanExports + " "
                         + "provides io.vidocq.peano.spi.AccessorProvider with " + String.join(",", beanProviders) + "; }");
                 compile("--module-path", join(modules), "--patch-module", "tck.application=" + classes,
                         "-d", classes.toString(), descriptor.toString());
@@ -132,6 +133,12 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
                             if (read.modifiers().contains(java.lang.module.ModuleDescriptor.Requires.Modifier.STATIC)) text.append("static ");
                             if (read.modifiers().contains(java.lang.module.ModuleDescriptor.Requires.Modifier.TRANSITIVE)) text.append("transitive ");
                             text.append(read.name()).append(";");
+                        });
+                compiled.exports().stream().sorted(java.util.Comparator.comparing(java.lang.module.ModuleDescriptor.Exports::source))
+                        .forEach(export -> {
+                            text.append("exports ").append(export.source());
+                            if (export.isQualified()) text.append(" to ").append(String.join(",",new TreeSet<>(export.targets())));
+                            text.append(";");
                         });
                 services.forEach((type,implementations)->text.append("provides ").append(type).append(" with ").append(String.join(",",implementations)).append(";"));
                 Files.writeString(descriptor,text.append(" }").toString());

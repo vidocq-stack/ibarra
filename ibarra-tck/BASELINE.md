@@ -65,6 +65,12 @@ unsupported. Page declarations continue to use the response encoding and precede
 static SYSTEM/PUBLIC DOCTYPE metadata and page output. All original official fixtures
 remain unchanged.
 
+On 2026-10-14 the isolated official
+`ee.jakarta.tck.pages.api.jakarta_el.beanelresolver.URLClientIT#beanElResolverTest`
+passes after the TCK adapter qualified-exports generated bean packages only to
+`jakarta.el`. The complete 92-class suite was not rerun for this change, so the
+full-suite totals above remain the last measured baseline rather than a new total.
+
 The preceding typed-forward delivery restored exactly `positiveIncludeForwardTest`
 against the merged 518-pass baseline, reaching 519 passes and 163 method errors.
 Its ordinary reactor passed 319 tests; adapter 34/34 and the independent example
@@ -156,7 +162,7 @@ ordinary Ibarra unit tests or Peano's independent EL TCK.
 | WAR adaptation | No setup failures remain. Legacy WAR libraries assemble into the private application module (IBARRA-102 fixed); explicit web.xml components use direct factories (IBARRA-100 fixed). Unadapted library metadata remains an explicit boundary. JSP property groups apply at build time; TLD keyword names no longer block deployment. Runtime JSP descriptor exposure remains pending upstream. |
 | Tag files and full tag metadata | `urn:jsptagdir`, variables, TEI/TLV and related metadata remain I6/I7 work. |
 | Ordinary TLD attributes | IBARRA-093/094 fixed: keyword names accepted and actual JavaBeans setter types selected/coerced from class files. Deferred/fragment protocols remain exact. |
-| BeanELResolver fixture access | One method fails in the private application module; IBARRA-085. |
+| BeanELResolver fixture access | IBARRA-085 fixed; the official method passes with qualified exports to `jakarta.el` only. |
 | JspIdConsumer | All three methods pass; IBARRA-086 fixed by stable per-occurrence generated identifiers. |
 | TagLibraryValidator | Two methods fail; IBARRA-087. |
 | TryCatchFinally | The official method passes; IBARRA-088 was an EL verifier-access issue, fixed through direct WAR property accessors. |

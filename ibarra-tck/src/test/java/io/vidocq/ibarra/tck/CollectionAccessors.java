@@ -75,12 +75,12 @@ final class CollectionAccessors {
             if(Files.exists(file)) throw new IOException("Generated collection accessor collides with application class: "+owner.displayName());
             Files.createDirectories(file.getParent());Files.write(file,table(owner,ClassDesc.of(target),selected));tables.add(owner);
         }
-        if(tables.isEmpty()) return new BeanAccessors.Result(List.of(),unsupported);
+        if(tables.isEmpty()) return new BeanAccessors.Result(List.of(),List.of(),unsupported);
         String provider="tck.generated.CollectionAccessorProvider";
         Path file=classes.resolve(provider.replace('.','/')+".class");
         if(Files.exists(file)) throw new IOException("Generated collection provider collides with application class: "+provider);
         Files.createDirectories(file.getParent());Files.write(file,provider(ClassDesc.of(provider),tables));
-        return new BeanAccessors.Result(List.of(provider),unsupported);
+        return new BeanAccessors.Result(List.of(provider),List.of(),unsupported);
     }
 
     private static void collect(BeanAccessors metadata,String binary,Map<String,Method> methods,

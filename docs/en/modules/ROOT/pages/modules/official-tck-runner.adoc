@@ -114,9 +114,12 @@ getter/setter calls, boxing and ELContext conversion. Inherited property lookup
 honours boolean getter precedence, covariant returns and compatible most-specific
 setter overloads. Null, read-only and write-only properties preserve resolution flags.
 
-Tables stay in the bean package without exports/opens; neither metadata discovery
-nor provider class literals initialize bean classes. Map, List, ResourceBundle and
-Record hierarchies retain native resolver semantics. Runtime reflection stays denied.
+Tables stay in the bean package. Packages containing generated tables are
+qualified-exported only to `jakarta.el` so the standard reflective Jakarta EL
+`BeanELResolver` can inspect public bean methods; no unqualified export or open is
+added. Neither metadata discovery nor provider class literals initialize bean
+classes. Map, List, ResourceBundle and Record hierarchies retain native resolver
+semantics. Runtime reflection stays denied.
 
 Lookup follows actual module reads/exports, including qualified exports; exact
 resource checks avoid unrelated package-owner masking. Unsupported hierarchy or

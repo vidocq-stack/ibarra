@@ -23,12 +23,20 @@ only after installing the current reactor and preparing official artifacts.
 ## TCK-001 — ee.jakarta.tck.pages.api.jakarta_el.beanelresolver.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
+- Status: RESOLVED (2026-10-14).
 - Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_el.beanelresolver.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_el.beanelresolver.URLClientIT#beanElResolverTest`.
+- Cause: the Jakarta EL `BeanELResolver` performs reflective JavaBeans access and
+  cannot inspect bean classes in the private synthetic application module unless
+  their packages are exported to `jakarta.el`. Peano's generated accessor tables
+  do not participate in this API resolver.
+- Resolution: the adapter now qualified-exports packages with generated bean
+  tables only to `jakarta.el`, without unqualified exports or opens, and retains
+  the exports when collection providers rewrite the module descriptor.
+- Verification: `beanElResolverTest` passes in the official Pages 4.0 runner and
+  the direct-resolver `PagesContainerTest` regression passes.
 
-Failing methods:
+Resolved method:
 
 - `beanElResolverTest`
 
