@@ -89,6 +89,20 @@ TLD `<variable>` declarations with a static `<name-given>` and optional
 `<variable-class>` use the same scope mappings. Names derived from tag attributes
 remain unsupported.
 
+== TagExtraInfo validation
+
+When a generated page uses a TLD tag with a `TagExtraInfo` class, its servlet
+initialization constructs a `TagInfo` from the available TLD tag, attribute,
+variable and dynamic-attribute metadata, then calls `TagExtraInfo.validate`
+with a `TagData` containing the tag's static attribute values. Request-time
+attribute expressions use `TagData.REQUEST_TIME_VALUE`. Each TEI-bearing tag
+occurrence is validated during servlet initialization, before the page's
+`jspInit`; requests do not rerun validation. A nonempty validation-message array
+fails initialization.
+
+`TagLibraryValidator`, the `TagLibraryInfo` link from `TagInfo`, and complete
+`TagInfo`/`TagLibraryInfo` metadata remain unsupported.
+
 == Standard tag files
 
 Referenced standard `.tag` files support tag/import/variable/taglib directives,
@@ -99,8 +113,8 @@ direct calls to simple or classic handlers. Nested actions with attributes or bo
 classic body and exception callbacks, EL, XML tag-file actions, fragments and complete
 tag-file metadata remain unsupported.
 
-This support does not implement `TagExtraInfo.validate`, `TagLibraryValidator`,
-TLD `<name-from-attribute>` variables or the complete `TagInfo` and `TagLibraryInfo` APIs.
+This support does not implement `TagLibraryValidator`, TLD
+`<name-from-attribute>` variables or the complete `TagInfo` and `TagLibraryInfo` APIs.
 
 == Compiler-provided tag identifiers
 

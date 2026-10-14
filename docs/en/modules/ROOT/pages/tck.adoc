@@ -1,11 +1,14 @@
 = TCK status
-:description: Latest Jakarta Pages 4.0 TCK result: 525 of 682 methods pass; certification remains pending.
+:description: Last comparable full Jakarta Pages 4.0 TCK baseline: 525 of 682 methods pass; certification remains pending.
 
 [.lead]
 The official Jakarta Pages 4.0.0 TCK runs through a build-side Arquillian adapter
-on Foy. The eighteen-test smoke subset passes. The latest full run executes all
-declared methods and passes 525/682; 157 method errors remain, so Ibarra is not
-certified.
+on Foy. The eighteen-test smoke subset passes. The last comparable full run
+executes all declared methods and passes 525/682; 157 method errors remain. A
+later full invocation reported 513/655, but its method-count discrepancy has not
+been reconciled. Subsequent targeted reruns pass 13 methods in the tag-attribute,
+tag-data and tag-extra-info classes; they do not replace a full-suite result.
+Ibarra is not certified.
 
 == Recorded baseline
 
@@ -38,6 +41,11 @@ execute across 92 official classes, with no skipped methods or deployment blocke
 The suite remains failing and uncertified because 157 methods report errors.
 The targeted `simpletagsupport.URLClientIT` rerun on 2026-10-14 passed 11/11 methods,
 including variable synchronization and both SkipPageException tag-file wrappers.
+A 2026-10-14 targeted rerun also passed `tagattributeinfo.URLClientIT` (7/7),
+`tagdata.URLClientIT` (5/5) and `tagextrainfo.URLClientIT` (1/1), with the
+adapter passing 35/35 in each run. Generated page initialization now invokes
+`TagExtraInfo.validate` with available tag metadata. The full suite was not rerun,
+so these targeted results do not change the aggregate totals.
 A 2026-10-14 `all` invocation covered the same 92 classes and reported 513/655
 entries (142 errors, zero assertion failures or skips; 78.3%). Its method count is
 27 below the earlier 682-entry inventory, so that aggregate remains the last

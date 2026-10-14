@@ -103,8 +103,8 @@ Resolved methods (2026-10-13, direct WAR bean property access; 2026-10-14, TEI v
 - Status: OPEN.
 - Symptom: the official HTTP/signature assertion reported an error.
 - Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.functioninfo.URLClientIT` and any method below.
-- Cause (2026-10-14): the pages now translate with the inherited empty `TagExtraInfo.getVariableInfo` contract, but they still need `BaseTCKExtraInfo.validate(TagData)` to run against a complete `TagInfo`/`TagLibraryInfo` function catalogue. That validator sets a shared static flag which the JSP request checks; the build-side precompiler and request server are separate processes, so replaying build-time state cannot satisfy that assertion.
-- Follow-up: implement the TEI validation and metadata lifecycle with a specification-compliant solution for the runner's process boundary; see [the TEI/AOT study](../studies/tag-extra-info-aot.md).
+- Cause (2026-10-14): generated page initialization now invokes `TagExtraInfo.validate(TagData)` in the server process, but the generated `TagInfo` still has no `TagLibraryInfo` function catalogue. The targeted rerun after adding validation still reports errors in all three methods.
+- Follow-up: provide the function metadata through the `TagInfo`/`TagLibraryInfo` view and verify the validator contract; see [the TEI/AOT study](../studies/tag-extra-info-aot.md).
 
 Failing methods:
 
@@ -176,13 +176,12 @@ Resolved methods:
 
 ## TCK-010 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagattributeinfo.URLClientIT
 
-- Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagattributeinfo.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Date: 2026-10-14.
+- Status: RESOLVED.
+- Cause: generated page initialization did not invoke the tag's `TagExtraInfo.validate(TagData)` method, so the TCK's validation state was never set.
+- Fix: generated page initialization now constructs the available `TagInfo` and `TagData` metadata and invokes the TEI validator. The targeted class passes 7/7 methods.
 
-Failing methods:
+Previously failing methods:
 
 - `tagAttributeInfoIsFragmentTest`
 - `tagAttributeInfoIsRequiredTest`
@@ -194,13 +193,12 @@ Failing methods:
 
 ## TCK-011 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagdata.URLClientIT
 
-- Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagdata.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Date: 2026-10-14.
+- Status: RESOLVED.
+- Cause: generated page initialization did not invoke the tag's `TagExtraInfo.validate(TagData)` method, leaving the TCK's `TagData` validation state unset.
+- Fix: generated page initialization now invokes the TEI validator with the tag's static attribute values. The targeted class passes 5/5 methods.
 
-Failing methods:
+Previously failing methods:
 
 - `tagDataSetAttributeTest`
 - `tagDataGetAttributesTest`
@@ -210,13 +208,12 @@ Failing methods:
 
 ## TCK-012 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagextrainfo.URLClientIT
 
-- Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagextrainfo.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Date: 2026-10-14.
+- Status: RESOLVED.
+- Cause: generated page initialization did not invoke `TagExtraInfo.validate(TagData)`, so the TCK's `TagExtraInfo` validation state was never set.
+- Fix: generated page initialization now calls the TEI validator with the available tag metadata. The targeted class passes 1/1 method.
 
-Failing methods:
+Previously failing methods:
 
 - `tagExtraInfoTest`
 

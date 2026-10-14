@@ -73,6 +73,7 @@ public final class PageGenerator {
         private final Map<String, SourceLocation> importLocations = new HashMap<>();
         private final JavaSource declarations = new JavaSource();
         private final JavaSource serviceDeclarations = new JavaSource();
+        private final JavaSource tagValidations = new JavaSource();
         private JavaSource body = new JavaSource();
         private final JavaSource fragments = new JavaSource();
         private final TldReferences.Resolved resolvedLibraries;
@@ -92,6 +93,7 @@ public final class PageGenerator {
         private boolean needsFactory;
         private int serial;
         private int jspIdSerial;
+        private int tagValidationSerial;
         private final boolean startupElAllowed;
 
         Generator(Page page, String className, Map<String, String> properties, Map<String, Page.Syntax> sourceSyntaxes, String responseEncoding, GenerationOptions options, TldReferences.Resolved resolved) {
@@ -197,8 +199,10 @@ public final class PageGenerator {
                 else result.add("throw new jakarta.el.ELException(" + JavaSource.quote("Ambiguous EL import: " + binding.getKey()) + ");\n");
             }
             result.add("default -> null; }; }\n");
-            result.add("protected abstract void _jspxInitialize();\npublic void jspInit() {}\npublic void jspDestroy() {}\n");
-            result.add("@Override public final void init() throws jakarta.servlet.ServletException { super.init(); _jspxInitialize(); jspInit(); }\n");
+            result.add("protected abstract void _jspxInitialize();\nprivate final void _jspxValidateTagExtraInfo() {\n");
+            result.add(tagValidations);
+            result.add("}\npublic void jspInit() {}\npublic void jspDestroy() {}\n");
+            result.add("@Override public final void init() throws jakarta.servlet.ServletException { super.init(); _jspxInitialize(); _jspxValidateTagExtraInfo(); jspInit(); }\n");
             result.add("@Override public final void init(jakarta.servlet.ServletConfig config) throws jakarta.servlet.ServletException { super.init(config); }\n");
             result.add("@Override public final void destroy() { try { jspDestroy(); } finally { super.destroy(); } }\n");
             result.add("@Override protected final void service(jakarta.servlet.http.HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) throws jakarta.servlet.ServletException, java.io.IOException {\n");
@@ -372,6 +376,7 @@ public final class PageGenerator {
             if (kind.simple() && tag.bodyContent().equals("JSP")) throw error(node.location(), "SimpleTag cannot have JSP body-content");
             if (tag.dynamicAttributes() && !kind.dynamic()) throw error(node.location(), "Handler does not implement DynamicAttributes");
             var invocation = tagInvocation(node);
+            validateTagExtraInfo(tag, node, invocation);
             var children = invocation.content();
             if (tag.bodyContent().equals("empty") && !children.isEmpty()) throw error(node.location(), "Tag requires an empty body");
             if (tag.bodyContent().equals("scriptless")) scriptless(children);
@@ -514,6 +519,83 @@ public final class PageGenerator {
         }
 
         private record TagInvocation(Map<String, PageNode.Element> attributes, List<PageNode> content) {}
+
+        private void validateTagExtraInfo(TagDescriptor tag, PageNode.Element node, TagInvocation invocation) {
+            if (tag.teiClass() == null) return;
+            String suffix = String.valueOf(tagValidationSerial++);
+            String extraInfo = "_jspxTagExtraInfo" + suffix;
+            String tagInfo = "_jspxTagInfo" + suffix;
+            String messages = "_jspxTagValidationMessages" + suffix;
+            tagValidations.add("var " + extraInfo + " = new " + tag.teiClass().replace('$', '.') + "();\n", node.location());
+
+            String attributes = tag.attributes().values().stream().map(this::tagAttributeInfoSource)
+                    .collect(java.util.stream.Collectors.joining(", "));
+            String variables = tag.variables().stream().map(variable ->
+                    "new jakarta.servlet.jsp.tagext.TagVariableInfo(" + JavaSource.quote(variable.name()) + ", null, "
+                            + JavaSource.quote(variable.className()) + ", " + variable.declare() + ", " + variable.scope() + ")")
+                    .collect(java.util.stream.Collectors.joining(", "));
+            tagValidations.add("var " + tagInfo + " = new jakarta.servlet.jsp.tagext.TagInfo("
+                    + JavaSource.quote(tag.name()) + ", " + JavaSource.quote(tag.handlerClass()) + ", "
+                    + JavaSource.quote(tag.bodyContent()) + ", null, null, " + extraInfo
+                    + ", new jakarta.servlet.jsp.tagext.TagAttributeInfo[] {" + attributes + "}, null, null, null, "
+                    + "new jakarta.servlet.jsp.tagext.TagVariableInfo[] {" + variables + "}, " + tag.dynamicAttributes() + ");\n"
+                    + extraInfo + ".setTagInfo(" + tagInfo + ");\n", node.location());
+
+            var values = new LinkedHashMap<String, String>();
+            for (var supplied : node.attributes().entrySet()) {
+                if (namespaceAttribute(supplied.getKey())) continue;
+                values.put(supplied.getKey(), tagDataValue(supplied.getValue(), tag.attributes().get(supplied.getKey()), node.location()));
+            }
+            for (var supplied : invocation.attributes().entrySet()) {
+                TagAttribute attribute = tag.attributes().get(supplied.getKey());
+                List<PageNode> content = namedContent(supplied.getValue());
+                String value = attribute != null && attribute.fragment() ? tagDataRequestTimeValue()
+                        : content.stream().allMatch(PageNode.Text.class::isInstance)
+                                ? tagDataValue(content.stream().map(PageNode.Text.class::cast).map(PageNode.Text::value)
+                                        .collect(java.util.stream.Collectors.joining()), attribute, supplied.getValue().location())
+                                : tagDataRequestTimeValue();
+                values.put(supplied.getKey(), value);
+            }
+            String pairs = values.entrySet().stream().map(value -> "new Object[] { " + JavaSource.quote(value.getKey()) + ", "
+                    + value.getValue() + " }").collect(java.util.stream.Collectors.joining(", "));
+            tagValidations.add("var " + messages + " = " + extraInfo + ".validate(new jakarta.servlet.jsp.tagext.TagData(new Object[][] {"
+                    + pairs + "}));\n"
+                    + "if (" + messages + " != null && " + messages + ".length != 0) throw new IllegalStateException("
+                    + JavaSource.quote("TagExtraInfo validation failed for " + tag.name() + ": ") + " + " + messages + "[0].getMessage());\n",
+                    node.location());
+        }
+
+        private String tagAttributeInfoSource(TagAttribute attribute) {
+            String arguments = JavaSource.quote(attribute.name()) + ", " + attribute.required() + ", "
+                    + JavaSource.quote(attribute.type()) + ", " + attribute.runtimeExpression() + ", " + attribute.fragment();
+            if (!attribute.deferred())
+                return "new jakarta.servlet.jsp.tagext.TagAttributeInfo(" + arguments + ")";
+            String methodSignature = attribute.deferredMethod() == null ? null
+                    : attribute.deferredMethod().returnType() + " method(" + String.join(", ", attribute.deferredMethod().parameters()) + ")";
+            return "new jakarta.servlet.jsp.tagext.TagAttributeInfo(" + arguments + ", null, "
+                    + (attribute.deferredValueType() != null) + ", " + (attribute.deferredMethod() != null) + ", "
+                    + nullableString(attribute.deferredValueType()) + ", " + nullableString(methodSignature) + ")";
+        }
+
+        private String tagDataValue(String raw, TagAttribute attribute, SourceLocation at) {
+            if (attribute != null && attribute.fragment() || raw.startsWith("<%=") && raw.endsWith("%>"))
+                return tagDataRequestTimeValue();
+            var normalized = new PageNormalizer(sourceSyntaxes.getOrDefault(at.source(), Page.Syntax.STANDARD),
+                    new ParserOptions(bool("isELIgnored", false), bool("deferredSyntaxAllowedAsLiteral", false)), Map.of())
+                    .normalizeStructured(List.of(new PageNode.Text(raw, at)));
+            if (normalized.stream().anyMatch(value -> !(value instanceof PageNode.Text))) return tagDataRequestTimeValue();
+            return JavaSource.quote(normalized.stream().map(PageNode.Text.class::cast).map(PageNode.Text::value)
+                    .collect(java.util.stream.Collectors.joining()));
+        }
+
+        private String tagDataRequestTimeValue() {
+            return "jakarta.servlet.jsp.tagext.TagData.REQUEST_TIME_VALUE";
+        }
+
+        private String nullableString(String value) {
+            return value == null ? "null" : JavaSource.quote(value);
+        }
+
         private boolean action(PageNode node, String name) {
             return node instanceof PageNode.Element element && element.namespace().equals(PageParser.JSP_NAMESPACE)
                     && element.name().substring(element.name().lastIndexOf(':') + 1).equals(name);

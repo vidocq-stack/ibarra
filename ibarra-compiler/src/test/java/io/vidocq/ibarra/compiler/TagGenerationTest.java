@@ -604,6 +604,9 @@ class TagGenerationTest {
     @Test void dynamicAttributesUseDirectInterfaceCalls() throws Exception {
         assertEquals("a=one;b=42;",render("<x:dynamic a='one' b='<%=42%>'/>"));
     }
+    @Test void validatesTagExtraInfoOnceWithTheTagInfoAndStaticTagData() throws Exception {
+        assertEquals("1:literal1:literal", render("<x:validate value='literal'/>", false, options(), 2));
+    }
     @Test void bufferedIterationsRetainContentUntilTheHandlerClearsIt() throws Exception {
         assertEquals("[ia][iaa]",render("<x:bufferedRepeat>a</x:bufferedRepeat>"));
     }
@@ -630,6 +633,8 @@ class TagGenerationTest {
                   <variable><name-given>end</name-given><variable-class>java.lang.Integer</variable-class><scope>AT_END</scope></variable></tag>
                 <tag><name>simpleTldUndeclared</name><tag-class>fixture.Tags$SimpleSyncVariables</tag-class><body-content>empty</body-content>
                   <variable><name-given>hidden</name-given><declare>false</declare><scope>AT_BEGIN</scope></variable></tag>
+                <tag><name>validate</name><tag-class>fixture.Tags$Validate</tag-class><tei-class>fixture.Tags$Validation</tei-class><body-content>empty</body-content>
+                  <attribute><name>value</name><required>true</required></attribute></tag>
                 <tag><name>buffer</name><tag-class>fixture.Tags$Buffer</tag-class><body-content>scriptless</body-content></tag>
                 <tag><name>guard</name><tag-class>fixture.Tags$Guard</tag-class><body-content>scriptless</body-content></tag>
                 <tag><name>setterFailure</name><tag-class>fixture.Tags$SetterFailure</tag-class><body-content>scriptless</body-content></tag>
@@ -740,6 +745,26 @@ class TagGenerationTest {
                 package fixture;
                 import jakarta.servlet.jsp.*; import jakarta.servlet.jsp.tagext.*;
                 public class Tags {
+                    public static class Validation extends TagExtraInfo {
+                        static int calls;
+                        public ValidationMessage[] validate(TagData data) {
+                            calls++;
+                            TagAttributeInfo[] attributes=getTagInfo().getAttributes();
+                            if (!getTagInfo().getTagName().equals("validate") || attributes.length!=1
+                                    || !attributes[0].getName().equals("value") || !attributes[0].isRequired()
+                                    || !attributes[0].getTypeName().equals("java.lang.String")
+                                    || !"literal".equals(data.getAttributeString("value")))
+                                return new ValidationMessage[]{new ValidationMessage(data.getId(), "Unexpected tag metadata")};
+                            return null;
+                        }
+                    }
+                    public static class Validate extends SimpleTagSupport {
+                        private String value;
+                        public void setValue(String value) { this.value=value; }
+                        public void doTag() throws java.io.IOException {
+                            getJspContext().getOut().write(Validation.calls+":"+value);
+                        }
+                    }
                     public static class Echo extends SimpleTagSupport {
                         private String label; private int count=1;
                         public void setLabel(String value) { label=value; } public void setCount(int value) { count=value; }

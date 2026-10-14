@@ -1,7 +1,8 @@
 # TagExtraInfo and ahead-of-time Pages translation
 
-Date: 2026-10-13. This records observed official Pages 4.0.0 fixture behaviour,
-not an implemented metadata-validation pipeline or a filed TCK challenge.
+Date: 2026-10-13. Updated 2026-10-14 with the first generated validation path
+and targeted TCK results. This records observed official Pages 4.0.0 fixture
+behaviour, not complete metadata support or a conformance claim.
 
 ## Observed contract
 
@@ -14,31 +15,44 @@ The classic BodyTagSupport synchronization fixture's `getVariableInfo` result is
 literal array of `VariableInfo` values; its diagnostic log call does not affect that
 result. Ibarra now evaluates that bounded bytecode shape with the Class-File API,
 without loading the TEI class, and synchronizes generated locals at the classic
-handler lifecycle boundaries.
-Other TEI behavior remains incomplete: TagData-dependent metadata, `validate`,
-complete TagInfo/TagLibraryInfo context, TagLibraryValidator behavior and TLD
-`<variable>` declarations are not supported.
+handler lifecycle boundaries. Generated page initialization also invokes
+`TagExtraInfo.validate` for TEI-bearing tags, passing the available `TagInfo` and
+static `TagData` values; request-time values use `TagData.REQUEST_TIME_VALUE`, and
+nonempty validation messages fail initialization.
+
+The generated `TagInfo` still omits its `TagLibraryInfo` and parts of the TLD
+metadata. `TagLibraryValidator`, function metadata and complete TagInfo/
+TagLibraryInfo context remain unsupported.
 
 The runner precompiles WARs in the build-side process and serves their unchanged
 class bytes in a separate compiler-free named-module process. A static field changed
-by build-side validation is not shared with the server; resetting it after requests
-makes a single startup replay insufficient as well. This is a concrete fixture
-assumption to resolve alongside metadata semantics, not permission to invent a
-passing marker or rewrite the official classes/pages.
+by build-side validation is not shared with the server. For the tested fixtures,
+generated servlet initialization invokes the actual TEI validator for each
+TEI-bearing tag occurrence in the server process, before `jspInit`, so its state is
+available to that page's requests without replaying validation on every request or
+fabricating a marker. This is an Ibarra lifecycle adaptation; the official
+specification's translation-time validation contract still needs review before
+claiming full conformance.
+
+The targeted `tagattributeinfo.URLClientIT` (7/7), `tagdata.URLClientIT` (5/5) and
+`tagextrainfo.URLClientIT` (1/1) runs pass with this path. `functioninfo.URLClientIT`
+still reports errors in all three methods because function metadata is not exposed
+through the current TagInfo/TagLibraryInfo model.
 
 ## Required follow-up
 
-1. Retain complete TLD metadata and provide the complete TagInfo/TagLibraryInfo/
-   TagData context expected by TEI and TLV APIs.
-2. Extend static variable metadata analysis only where its compile-time behavior can
-   be established safely; support validation with diagnostics affecting real
-   compilation and without reflective access to private application types.
-3. Determine a legitimate official-runner lifecycle/porting solution for translation
-   side effects. Keep production ahead-of-time semantics and compiler-free serving.
-4. Compare that solution with the specification and TCK portability rules before
-   claiming metadata API conformance. File a challenge only if actually pursued.
+1. Retain complete TLD metadata and provide the TagInfo/TagLibraryInfo/TagData
+   context expected by TEI and TLV APIs, including the TLD function catalogue.
+2. Verify the servlet-initialization validation adaptation against the specification
+   and TCK portability rules; preserve one-time lifecycle semantics and meaningful
+   diagnostics without reflective access to private application types.
+3. Extend static variable metadata analysis only where its compile-time behavior can
+   be established safely.
+4. File a challenge only if comparison with the specification shows an actual TCK
+   portability issue and that path is pursued.
 
-No request-time TEI replay, fixture-byte transformation, extra opens/exports or
+No per-request TEI replay, fixture-byte transformation, extra opens/exports or
 fabricated result has been introduced. The TCK-005 variable synchronization method
-now passes; TagInfo/TagAttributeInfo/TagLibraryInfo, validation, dynamic TEI/TLV and
-tag-file failures remain in the stable official inventory.
+and targeted TCK-010/-011/-012 classes now pass. Complete TagInfo/TagLibraryInfo,
+function metadata, TagLibraryValidator and tag-file failures remain in the official
+inventory; the full suite was not rerun for these targeted fixes.

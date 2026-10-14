@@ -52,6 +52,11 @@ After this full-suite snapshot, a targeted rerun passed all 11 methods in
 On 2026-10-14, another targeted rerun passed all 11 methods in
 `simpletagsupport.URLClientIT`, including `simpleTagSupportVariableSynchronizationTest`
 and `simpleTagSupportSkipPageExceptionTest`.
+Targeted reruns on 2026-10-14 also passed `tagattributeinfo.URLClientIT` (7/7),
+`tagdata.URLClientIT` (5/5) and `tagextrainfo.URLClientIT` (1/1). Each run's
+35 adapter tests passed. These classes pass after generated page initialization
+invokes `TagExtraInfo.validate` with the available `TagInfo` and `TagData`; the
+full suite was not rerun, so the aggregate totals below are unchanged.
 
 The 2026-10-14 `all --no-install` invocation ran 92 official classes and reported
 655 entries: 513 passed, 142 errored, zero assertion failures and zero skips
