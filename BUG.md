@@ -82,8 +82,12 @@ pageEncoding. XML `.tagx` files now support static markup and empty `jsp:output`
 omission metadata; when requested, the generated tag emits its UTF-8 declaration at
 each invocation without changing the calling page's response charset. This matches
 the unchanged Pages TCK/Jasper output for these XML tag-file cases, including when
-the caller responds as ISO-8859-1. Directives, expressions, scripting, nested actions
-and tag attributes remain unsupported.
+the caller responds as ISO-8859-1. This differs from the response-encoding wording
+in [Pages 4.0 sections 4.2 and 5.13](https://jakarta.ee/specifications/pages/4.0/jakarta-server-pages-spec-4.0.pdf);
+the TCK and Jasper use UTF-8 for these tag-file declarations. The implementation
+follows the unchanged TCK/Jasper behavior and preserves the caller's HTTP charset.
+Directives, expressions, scripting, nested actions and tag attributes remain
+unsupported.
 Seven compiled-rendering regressions were red before the fix; default namespaces,
 mixed includes and all aliases are also covered. The integrated delivery passes 341
 ordinary reactor tests and adapter tests 35/35. The full official run passes 525/682
