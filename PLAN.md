@@ -501,16 +501,24 @@ lexical validity remains the page author's responsibility.
 
 On feature worktree changes based on code head `2331263`, the reactor install passes
 341 tests; adapter tests pass 35/35 and the independent example clean-package also
-passes. The complete official run passes 525/682 (77.0%), with 157 method errors,
-zero assertion failures/setup/skips, 92 classes and 49 completely passing classes.
+passes. The prior comparable official run passes 525/682 (77.0%), with 157 method
+errors, zero assertion failures/setup/skips, 92 classes and 49 completely passing
+classes. A 2026-10-14 `all` invocation reports 513/655 (78.3%), with 142 errors and
+zero failures/skips across 92 classes; its 655 entries differ from the earlier 682,
+so the aggregate comparison is pending reconciliation.
 The two XML tag-file output methods are now restored alongside the four previously
 restored XML output methods; all 523 previous passes remain and all 682 method keys
 match. The `.tagx` implementation currently supports static markup and empty
 `jsp:output` omission metadata, emitting UTF-8 declarations at each invocation while
-preserving the caller's response charset. Standard `.tag` files and directives,
-expressions, scripting, nested actions and fragments remain pending. No official
-fixtures were changed. Typed forwarding's Foy #47 producer has since merged and
-completed snapshot publication; that earlier milestone's results remain recorded above.
+preserving the caller's response charset. Standard `.tag` files now support tag,
+import, variable and taglib directives, scripting, and empty nested simple/classic
+custom tags. Nested tags with attributes or bodies, classic body/exception callbacks,
+EL, tag-file attributes, fragments and XML tag-file actions remain pending. The
+official SimpleTagSupport class passes 11/11 methods in a targeted rerun, including
+variable synchronization and both SkipPageException wrappers. No official fixtures
+were changed. Typed forwarding's
+Foy #47 producer has since merged and completed snapshot publication; that earlier
+milestone's results remain recorded above.
 
 ## Initial I4 implementation
 

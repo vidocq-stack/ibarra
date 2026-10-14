@@ -109,7 +109,7 @@ public final class PagePrecompiler {
         }
         TagFileCompiler.Result tagFiles;
         while (true) {
-            try { tagFiles = TagFileCompiler.compile(units.values(), initial, packageName); break; }
+            try { tagFiles = TagFileCompiler.compile(units.values(), initial, packageName, paths); break; }
             catch (PageParseException failure) {
                 if (!retainFailures) throw failure;
                 String source = failure.location().source();

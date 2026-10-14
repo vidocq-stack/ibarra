@@ -145,7 +145,7 @@ Failing methods:
 ## TCK-009 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.simpletagsupport.URLClientIT
 
 - Date: 2026-10-14 (updated; original baseline 2026-10-12).
-- Status: PARTIALLY RESOLVED; two methods remain open.
+- Status: RESOLVED in the targeted 11-method class run; the 682-method aggregate has not been rerun.
 - Symptom: the unchanged official class had three method errors. The
   `jspFragmentGetJspContextTest` page failed translation because the fragment
   handler's setter accepts `Object`.
@@ -155,19 +155,21 @@ Failing methods:
 - Resolution: fragment setters now accept assignable reference supertypes based
   on build-time class-file metadata. The generated call uses the selected setter
   parameter type. Deferred attribute setters remain exact-type validated.
-- Simple handlers now synchronize statically declared `TagExtraInfo` variables
-  and TLD `<variable>` declarations with `AT_BEGIN` and `AT_END` scope after
-  `doTag` returns. Standard `.tag` files remain unsupported, so the variable
-  synchronization method still cannot complete.
-- Verification: before this change, the official class passed 9/11 methods,
-  including `jspFragmentGetJspContextTest` (1/1). After the change, the variable
-  synchronization page translates its TEI-backed `sync` tag and its TLD-backed
-  `sync1`, then fails on the standard `Sync.tag` wrapper at line 72. The separate
-  SkipPageException pages fail earlier because their standard `.tag` wrappers
-  are not supported. Focused parser and `TagGenerationTest` coverage passes. See
-  `IBARRA-138` in the root `BUG.md`.
+- Simple `.tag` files now support declared variables and empty nested simple or
+  classic custom tags. Variable attributes are isolated around invocation, with
+  `NESTED` page-scope values restored after the tag returns. Nested actions with
+  attributes or bodies, classic body/exception callbacks, EL, fragments and full
+  tag-file metadata remain unsupported.
+- Verification: the official class passed 11/11 methods, including
+  `simpleTagSupportVariableSynchronizationTest` and
+  `simpleTagSupportSkipPageExceptionTest`. Its two wrapper pages now compile and
+  propagate both simple `SkipPageException` and classic `SKIP_PAGE` behavior.
+  The 2026-10-14 `all` run reports this class at 11/11, within 655 entries across
+  92 classes. The prior aggregate had 682 entries; the 27-entry discrepancy and
+  comparison are recorded in `ibarra-tck/BASELINE.md`. The fragment setter fix
+  remains tracked by `IBARRA-138` in the root `BUG.md`.
 
-Still failing:
+Resolved methods:
 
 - `simpleTagSupportVariableSynchronizationTest`
 - `simpleTagSupportSkipPageExceptionTest`

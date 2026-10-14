@@ -22,11 +22,12 @@ package io.vidocq.ibarra.compiler.internal;
 import io.vidocq.ibarra.compiler.*;
 import io.vidocq.ibarra.spi.PageDescriptor;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 
-/** Build-time catalog and compiler for the initial static XML tag-file subset. */
+/** Build-time catalog and compiler for static XML and restricted standard tag files. */
 public final class TagFileCompiler {
     private static final String TAGDIR_PREFIX = "urn:jsptagdir:";
     private static final String JSP_NAMESPACE = PageParser.JSP_NAMESPACE;
@@ -35,6 +36,8 @@ public final class TagFileCompiler {
         public Result { libraries = Map.copyOf(libraries); sources = List.copyOf(sources); }
     }
     private record Directory(String path, SourceLocation location) { }
+    private record StandardTagFile(String bodyContent, List<TagVariableDescriptor> variables,
+            List<String> imports, String declarations, String body) { }
 
     private TagFileCompiler() { }
 
@@ -46,7 +49,8 @@ public final class TagFileCompiler {
         return false;
     }
 
-    public static Result compile(Collection<TranslationUnit.Result> units, GenerationOptions options, String packageName) {
+    public static Result compile(Collection<TranslationUnit.Result> units, GenerationOptions options, String packageName,
+            List<Path> classPath) {
         var directories = new LinkedHashMap<String, Directory>();
         var aliases = new LinkedHashMap<String, String>();
         var referencedFiles = new HashSet<String>();
@@ -60,6 +64,7 @@ public final class TagFileCompiler {
 
         var generated = new ArrayList<GeneratedPage>();
         var byDirectory = new HashMap<String, Map<String, TagDescriptor>>();
+        var classes = new BeanClasses(classPath);
         for (var directory : directories.values()) {
             var tags = new TreeMap<String, TagDescriptor>();
             var kinds = new HashMap<String, String>();
@@ -76,11 +81,22 @@ public final class TagFileCompiler {
                 if (previousKind != null)
                     throw new PageParseException(directory.location(), "Conflicting .tag and .tagx files for tag " + name);
                 PageDescriptor.validatePath(path);
+                String handler = packageName + ".TagFile_" + hash(path);
                 if (suffix.equals(".tag")) {
-                    tags.put(name, new TagDescriptor(name, null, "empty", Map.of(), false, true));
+                    if (referencedFiles.contains(path)) {
+                        try {
+                            var unit = new TranslationUnit(options).read(path, resource.getValue());
+                            var tag = standardTagFile(unit, options, classes);
+                            generated.add(new GeneratedPage(handler, source(handler, tag), Map.of()));
+                            tags.put(name, new TagDescriptor(name, handler, tag.bodyContent(), Map.of(), false,
+                                    false, true, null, false, null, tag.variables()));
+                        } catch (PageParseException failure) {
+                            tags.put(name, new TagDescriptor(name, null, "empty", Map.of(), false, true,
+                                    false, failure.getMessage()));
+                        }
+                    } else tags.put(name, new TagDescriptor(name, handler, "scriptless", Map.of(), false, false, true));
                     continue;
                 }
-                String handler = packageName + ".TagFile_" + hash(path);
                 if (referencedFiles.contains(path)) {
                     try {
                         var unit = new TranslationUnit(options).read(path, resource.getValue());
@@ -105,6 +121,143 @@ public final class TagFileCompiler {
             libraries.put(alias.getKey(), new TagLibraryDescriptor(path, alias.getKey(), List.of(), byDirectory.get(path), false));
         }
         return new Result(libraries, generated);
+    }
+
+    private static StandardTagFile standardTagFile(TranslationUnit.Result unit, GenerationOptions options, BeanClasses classes) {
+        var nodes = unit.page().nodes();
+        var referencedLibraries = TldReferences.discover(List.of(unit), options);
+        var imports = new TreeSet<String>();
+        var variables = new ArrayList<TagVariableDescriptor>();
+        var variableNames = new HashSet<String>();
+        var declarations = new StringBuilder();
+        var body = new StringBuilder();
+        var bodyContent = "scriptless";
+        int nestedActionIndex = 0;
+        for (var node : nodes) {
+            if (node instanceof PageNode.Directive directive) {
+                switch (directive.name()) {
+                    case "tag" -> {
+                        for (var attribute : directive.attributes().entrySet()) {
+                            switch (attribute.getKey()) {
+                                case "import" -> imports.addAll(imports(attribute.getValue(), directive.location()));
+                                case "body-content" -> {
+                                    String value = attribute.getValue();
+                                    if (!Set.of("empty", "scriptless", "tagdependent").contains(value))
+                                        throw new PageParseException(directive.location(), "Invalid tag-file body-content: " + value);
+                                    bodyContent = value;
+                                }
+                                case "isELIgnored", "deferredSyntaxAllowedAsLiteral", "errorOnELNotFound" -> { }
+                                case "dynamic-attributes" -> throw new PageParseException(directive.location(),
+                                        "Dynamic attributes in standard tag files are not supported yet");
+                                case "description", "display-name", "small-icon", "large-icon" -> { }
+                                default -> throw new PageParseException(directive.location(),
+                                        "Tag directive attribute is not supported: " + attribute.getKey());
+                            }
+                        }
+                    }
+                    case "variable" -> {
+                        var variable = variable(directive);
+                        if (!variableNames.add(variable.name()))
+                            throw new PageParseException(directive.location(), "Duplicate tag-file variable: " + variable.name());
+                        variables.add(variable);
+                    }
+                    case "taglib" -> { }
+                    default -> throw new PageParseException(directive.location(),
+                            "Directive in standard tag files is not supported: " + directive.name());
+                }
+            } else if (node instanceof PageNode.Text text) {
+                if (!text.value().isEmpty()) body.append("out.write(").append(JavaSource.quote(text.value())).append(");\n");
+            } else if (node instanceof PageNode.RawText text) {
+                if (!text.value().isEmpty()) body.append("out.write(").append(JavaSource.quote(text.value())).append(");\n");
+            } else if (node instanceof PageNode.Script script) {
+                if (script.kind() == PageNode.ScriptKind.DECLARATION) declarations.append(script.code()).append('\n');
+                else if (script.kind() == PageNode.ScriptKind.SCRIPTLET) body.append(script.code()).append('\n');
+                else body.append("out.write(String.valueOf(").append(script.code()).append("));\n");
+            } else if (node instanceof PageNode.Expression expression) {
+                throw new PageParseException(expression.location(), "EL in standard tag files is not supported yet");
+            } else if (node instanceof PageNode.Element element) {
+                body.append(nestedAction(element, referencedLibraries, classes, nestedActionIndex++));
+            }
+        }
+        return new StandardTagFile(bodyContent, List.copyOf(variables), List.copyOf(imports), declarations.toString(), body.toString());
+    }
+
+    private static String nestedAction(PageNode.Element action, TldReferences.Resolved libraries, BeanClasses classes,
+            int index) {
+        var library = libraries.resolve(action.namespace(), action.location(), true);
+        if (library == null) throw new PageParseException(action.location(), "No build-time tag library for " + action.namespace());
+        if (library.validationRequired())
+            throw new PageParseException(action.location(), "Tag validators in standard tag files are not supported yet");
+        String local = action.name().substring(action.name().lastIndexOf(':') + 1);
+        var tag = library.tags().get(local);
+        if (tag == null) throw new PageParseException(action.location(), "Unknown tag " + local + " in " + library.resourcePath());
+        if (tag.unsupportedMetadata())
+            throw new PageParseException(action.location(), tag.unsupportedReason() == null
+                    ? "Tag metadata in standard tag files are not supported yet" : tag.unsupportedReason());
+        boolean attributes = action.attributes().keySet().stream()
+                .anyMatch(name -> !name.equals("xmlns") && !name.startsWith("xmlns:"));
+        if (attributes || !tag.attributes().isEmpty() || tag.dynamicAttributes() || !action.children().isEmpty())
+            throw new PageParseException(action.location(), "Attributes and bodies on nested tags in standard tag files are not supported yet");
+        if (tag.tagFile() || tag.teiClass() != null || !tag.variables().isEmpty())
+            throw new PageParseException(action.location(), "Nested tag files and tag variables in standard tag files are not supported yet");
+        var kind = classes.handler(tag.handlerClass(), action.location());
+        if (kind.dynamic() || kind.jspIdConsumer())
+            throw new PageParseException(action.location(), "Dynamic or JSP-id nested tags in standard tag files are not supported yet");
+
+        String handler = "_jspxNestedTag" + index;
+        if (kind.simple()) return "{\nvar " + handler + " = new " + kind.sourceName() + "();\n"
+                + handler + ".setJspContext(jspContext);\n"
+                + handler + ".setParent(this);\n"
+                + handler + ".doTag();\n}\n";
+        if (kind.buffered() || kind.catchFinally())
+            throw new PageParseException(action.location(), "Body and exception callbacks on classic nested tags are not supported yet");
+        return "{\nvar " + handler + " = new " + kind.sourceName() + "();\n"
+                + handler + ".setPageContext((jakarta.servlet.jsp.PageContext) jspContext);\n"
+                + handler + ".setParent(new jakarta.servlet.jsp.tagext.TagAdapter(this));\n"
+                + "try {\nint " + handler + "Start = " + handler + ".doStartTag();\n"
+                + "if (" + handler + "Start != jakarta.servlet.jsp.tagext.Tag.SKIP_BODY"
+                + " && " + handler + "Start != jakarta.servlet.jsp.tagext.Tag.EVAL_BODY_INCLUDE)"
+                + " throw new jakarta.servlet.jsp.JspException(\"Invalid doStartTag result\");\n"
+                + "int " + handler + "End = " + handler + ".doEndTag();\n"
+                + "if (" + handler + "End == jakarta.servlet.jsp.tagext.Tag.SKIP_PAGE) throw new jakarta.servlet.jsp.SkipPageException();\n"
+                + "if (" + handler + "End != jakarta.servlet.jsp.tagext.Tag.EVAL_PAGE)"
+                + " throw new jakarta.servlet.jsp.JspException(\"Invalid doEndTag result\");\n"
+                + "} finally { " + handler + ".release(); }\n}\n";
+    }
+
+    private static List<String> imports(String value, SourceLocation at) {
+        var result = new ArrayList<String>();
+        for (String item : value.split(",", -1)) {
+            String name = item.trim();
+            String type = name.endsWith(".*") ? name.substring(0, name.length() - 2) : name;
+            if (name.isEmpty() || !javax.lang.model.SourceVersion.isName(type))
+                throw new PageParseException(at, "Invalid tag-file import: " + name);
+            result.add(name);
+        }
+        return result;
+    }
+
+    private static TagVariableDescriptor variable(PageNode.Directive directive) {
+        var attributes = directive.attributes();
+        if (attributes.containsKey("name-from-attribute"))
+            throw new PageParseException(directive.location(), "name-from-attribute tag-file variables are not supported yet");
+        String name = attributes.get("name-given");
+        if (name == null || !javax.lang.model.SourceVersion.isIdentifier(name)
+                || javax.lang.model.SourceVersion.isKeyword(name))
+            throw new PageParseException(directive.location(), "Tag-file variable name-given must be a Java identifier");
+        String className = attributes.getOrDefault("variable-class", "java.lang.String");
+        if (!javax.lang.model.SourceVersion.isName(className))
+            throw new PageParseException(directive.location(), "Invalid tag-file variable class: " + className);
+        String declareValue = attributes.getOrDefault("declare", "true");
+        if (!declareValue.equals("true") && !declareValue.equals("false"))
+            throw new PageParseException(directive.location(), "Tag-file variable declare must be true or false");
+        int scope = switch (attributes.getOrDefault("scope", "NESTED")) {
+            case "NESTED" -> TagVariableDescriptor.NESTED;
+            case "AT_BEGIN" -> TagVariableDescriptor.AT_BEGIN;
+            case "AT_END" -> TagVariableDescriptor.AT_END;
+            default -> throw new PageParseException(directive.location(), "Invalid tag-file variable scope");
+        };
+        return new TagVariableDescriptor(name, className, declareValue.equals("true"), scope);
     }
 
     private static void referencedFiles(List<PageNode> nodes, Set<String> result) {
@@ -139,6 +292,24 @@ public final class TagFileCompiler {
         if (declaration) source += "getJspContext().getOut().write(\"<?xml version=\\\"1.0\\\" encoding=\\\"UTF-8\\\"?>\");\n";
         source += "getJspContext().getOut().write(" + JavaSource.quote(markup) + ");\n} }\n";
         return source;
+    }
+
+    private static String source(String className, StandardTagFile tag) {
+        int split = className.lastIndexOf('.');
+        var source = new StringBuilder("package ").append(className, 0, split).append(";\n")
+                .append("import jakarta.servlet.jsp.*;\n")
+                .append("import jakarta.servlet.jsp.tagext.SimpleTagSupport;\n");
+        for (String name : tag.imports()) source.append("import ").append(name).append(";\n");
+        source.append("public final class ").append(className.substring(split + 1))
+                .append(" extends SimpleTagSupport {\n")
+                .append(tag.declarations())
+                .append("@Override public void doTag() throws java.io.IOException, jakarta.servlet.jsp.JspException {\n")
+                .append("var jspContext = getJspContext();\n")
+                .append("var pageContext = jspContext;\n")
+                .append("var out = jspContext.getOut();\n")
+                .append(tag.body())
+                .append("}\n}\n");
+        return source.toString();
     }
 
     private static String staticMarkup(List<PageNode> nodes) {

@@ -89,6 +89,16 @@ TLD `<variable>` declarations with a static `<name-given>` and optional
 `<variable-class>` use the same scope mappings. Names derived from tag attributes
 remain unsupported.
 
+== Standard tag files
+
+Referenced standard `.tag` files support tag/import/variable/taglib directives,
+static text, Java declarations, scriptlets and scripting expressions. Tag-file
+variables follow their declared scopes; `NESTED` page-scope attributes are hidden
+during invocation and restored afterward. Empty nested custom actions generate
+direct calls to simple or classic handlers. Nested actions with attributes or bodies,
+classic body and exception callbacks, EL, XML tag-file actions, fragments and complete
+tag-file metadata remain unsupported.
+
 This support does not implement `TagExtraInfo.validate`, `TagLibraryValidator`,
 TLD `<name-from-attribute>` variables or the complete `TagInfo` and `TagLibraryInfo` APIs.
 

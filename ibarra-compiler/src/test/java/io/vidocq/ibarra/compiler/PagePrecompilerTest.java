@@ -798,16 +798,42 @@ class PagePrecompilerTest {
     }
 
     @Test
-    void standardSyntaxTagFilesAreDiagnosedAtTheirInvocation() throws Exception {
+    void standardSyntaxTagFilesGenerateScriptingAndDeclaredVariables() throws Exception {
         prepare(false);
         Path tags = web.resolve("WEB-INF/tags"); Files.createDirectories(tags);
-        Files.writeString(tags.resolve("standard.tag"), "<%@ tag %><jsp:output omit-xml-declaration='false'/>");
-        Files.writeString(web.resolve("index.jsp"), "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:standard/>");
+        Files.writeString(tags.resolve("sync.tag"), "<%@ tag %>"
+                + "<%@ tag import='java.util.Objects' %>"
+                + "<%@ variable name-given='result' variable-class='java.lang.String' scope='AT_BEGIN' %>"
+                + "<%@ variable name-given='nested' variable-class='java.lang.Integer' scope='NESTED' %>"
+                + "<% if (jspContext.getAttribute(\"nested\") != null) throw new IllegalStateException(\"NESTED variable leaked into tag context\");"
+                + " jspContext.setAttribute(\"result\", Objects.toString(\"ready\"));"
+                + " jspContext.setAttribute(\"nested\", Integer.valueOf(9)); %>");
+        Files.writeString(web.resolve("index.jsp"), "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %>"
+                + "<% Integer nested = Integer.valueOf(5); pageContext.setAttribute(\"nested\", nested); %>"
+                + "<t:sync/><%= result %>|<%= nested %>|<%= pageContext.getAttribute(\"nested\") %>");
 
-        var deployment = new PagePrecompiler().precompileDeployment(web, classes, modulePaths(), "demo.generated", GenerationOptions.DEFAULT);
+        precompile();
+        Path jar = directory.resolve("standard-tag-file.jar"); jar(classes, jar);
+        assertEquals("ready|5|5", render(jar));
+    }
 
-        assertEquals(Set.of("/index.jsp"), deployment.failures().keySet());
-        assertTrue(deployment.failures().get("/index.jsp").contains("Tag validators"));
+    @Test
+    void standardSyntaxTagFilesGenerateEmptyNestedSimpleAndClassicTags() throws Exception {
+        prepare(false);
+        Path tags = web.resolve("WEB-INF/tags"); Files.createDirectories(tags);
+        Files.writeString(web.resolve("WEB-INF/tags/nested.tld"), """
+                <taglib>
+                  <tag><name>simple</name><tag-class>jakarta.servlet.jsp.tagext.SimpleTagSupport</tag-class><body-content>scriptless</body-content></tag>
+                  <tag><name>classic</name><tag-class>jakarta.servlet.jsp.tagext.TagSupport</tag-class><body-content>JSP</body-content></tag>
+                </taglib>
+                """);
+        Files.writeString(tags.resolve("simple.tag"), "<%@ taglib prefix='n' uri='nested.tld' %><n:simple/>");
+        Files.writeString(tags.resolve("classic.tag"), "<%@ taglib prefix='n' uri='nested.tld' %><n:classic/>");
+        Files.writeString(web.resolve("index.jsp"), "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:simple/>|<t:classic/>");
+
+        precompile();
+        Path jar = directory.resolve("nested-tag-file-actions.jar"); jar(classes, jar);
+        assertEquals("|", render(jar));
     }
 
     @Test

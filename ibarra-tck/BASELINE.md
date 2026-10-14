@@ -49,8 +49,17 @@ nonzero. The TCK's HTTP assertion helper reports failures as exceptions, hence
 
 After this full-suite snapshot, a targeted rerun passed all 11 methods in
 `bodytagsupport.URLClientIT`, including `bodyTagSupportVariableSynchronizationTest`.
-The complete 682-method suite has not been rerun, so the table above remains the
-last measured aggregate baseline.
+On 2026-10-14, another targeted rerun passed all 11 methods in
+`simpletagsupport.URLClientIT`, including `simpleTagSupportVariableSynchronizationTest`
+and `simpleTagSupportSkipPageExceptionTest`.
+
+The 2026-10-14 `all --no-install` invocation ran 92 official classes and reported
+655 entries: 513 passed, 142 errored, zero assertion failures and zero skips
+(78.3% of reported entries), with 53 classes fully passing. This differs from the earlier
+682-entry report by 27 methods. The source/class inventory and Surefire method
+selection need reconciliation. Until then, the table above remains the last
+comparable aggregate baseline and 513/655 is recorded as an observed run, not a
+like-for-like trend.
 
 **525/682 = 77.0% measured full-suite pass rate**. All 682 declared method entries
 now execute across the 92 official classes; there are no class-level setup errors

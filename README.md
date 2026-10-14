@@ -41,8 +41,11 @@ Classic handlers synchronize statically declared `TagExtraInfo` and TLD
 `<name-given>` variables across their lifecycle. Simple handlers synchronize
 `AT_BEGIN` and `AT_END` variables after `doTag`. Dynamic TEI metadata, TLD
 `<name-from-attribute>` variables, validators and full tag metadata APIs remain pending.
-Standard `.tag` files and full tag-file metadata, attributes, directives,
-expressions, scripting, nested actions and fragments remain pending.
+Standard `.tag` files now support tag/import/variable/taglib directives, scriptlets,
+scripting expressions, declared variables, and empty nested simple/classic custom tags.
+Nested tags cannot have attributes or bodies, and classic handlers with body or
+exception callbacks remain unsupported. EL, tag-file attributes, fragments, XML
+tag-file actions and complete tag-file metadata remain pending.
 Page type/package imports now resolve through build-generated class references.
 TLD functions use generated direct static calls. Typed deferred tag values/methods
 are compiled and constructed per invocation. Dynamic import changes and official TCK
@@ -84,10 +87,12 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 | `ibarra-compiler` | JSP/JSPX parser, page model, Java generator, initial tag handlers and build-time compiler | I2 implemented; I3/I6 in progress |
 | `ibarra-maven-plugin` | `precompile` goal at process-classes; module service registration | Initial I4 implemented |
 | `ibarra-foy` | Optional Foy engine provider; application layer, routing and TLD listener lifecycle | Initial I5 implemented |
-| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; 18-test smoke passes, 77.0% measured full-suite pass rate |
+| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; smoke 18/18; latest `all` run reports 513/655 across 92 classes |
 
-The latest local full run passes 525/682 official methods with no regression against
-the previous 523 passes; 157 method errors remain, so certification is pending.
+The latest `all` invocation reports 513 passes and 142 errors across 92 classes
+(78.3%). The previous comparable report was 525/682; this run reported 655 entries,
+so the 27-entry difference is being reconciled before comparing the aggregates.
+The SimpleTagSupport TCK class now passes 11/11 methods. Certification remains pending.
 The ordinary reactor passes 341 tests, the adapter 35/35 and the independent example
 packages successfully. Typed forwarding uses the producer delivered in
 [Foy #47](https://codefloe.com/Vidocq/foy/pulls/47), now merged and published.

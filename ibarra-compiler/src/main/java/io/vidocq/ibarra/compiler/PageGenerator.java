@@ -381,7 +381,9 @@ public final class PageGenerator {
             String handler = "_jspxTag" + serial++;
             body.add("{\n", node.location());
             for (var variable : scriptingVariables)
-                if (variable.scope() == 0 && variable.declare()) body.add(variable.type() + " " + variable.name() + " = null;\n", node.location());
+                if (variable.scope() == TagVariableDescriptor.NESTED && variable.declare()
+                        && (!tag.tagFile() || !children.isEmpty()))
+                    body.add(variable.type() + " " + variable.name() + " = null;\n", node.location());
             body.add("var " + handler + " = new " + kind.sourceName() + "();\n", node.location());
             if (!kind.simple()) body.add("try {\n");
             body.add(handler + (kind.simple() ? ".setJspContext(pageContext);\n" : ".setPageContext(pageContext);\n"), node.location());
@@ -438,7 +440,35 @@ public final class PageGenerator {
             String previousParent = parentTag; parentTag = handler;
             if (kind.simple()) {
                 if (!children.isEmpty()) body.add(handler + ".setJspBody(" + fragment(children, node.location(), handler) + ");\n", node.location());
-                body.add(handler + ".doTag();\n", node.location());
+                var nestedTagFileVariableIndexes = new ArrayList<Integer>();
+                if (tag.tagFile()) {
+                    int variableIndex = 0;
+                    for (var variable : scriptingVariables) {
+                        String state = handler + "_jspxVariable" + variableIndex;
+                        String name = JavaSource.quote(variable.name());
+                        body.add("boolean " + state + "Present = pageContext.getAttributesScope(" + name
+                                + ") == jakarta.servlet.jsp.PageContext.PAGE_SCOPE;\n"
+                                + "Object " + state + "Value = pageContext.getAttribute(" + name
+                                + ", jakarta.servlet.jsp.PageContext.PAGE_SCOPE);\n"
+                                + "pageContext.removeAttribute(" + name + ", jakarta.servlet.jsp.PageContext.PAGE_SCOPE);\n",
+                                node.location());
+                        if (variable.scope() == TagVariableDescriptor.NESTED) nestedTagFileVariableIndexes.add(variableIndex);
+                        variableIndex++;
+                    }
+                }
+                if (nestedTagFileVariableIndexes.isEmpty()) body.add(handler + ".doTag();\n", node.location());
+                else {
+                    body.add("try { " + handler + ".doTag(); } finally {\n", node.location());
+                    for (int variableIndex : nestedTagFileVariableIndexes) {
+                        var variable = scriptingVariables.get(variableIndex);
+                        String state = handler + "_jspxVariable" + variableIndex;
+                        String name = JavaSource.quote(variable.name());
+                        body.add("pageContext.removeAttribute(" + name + ", jakarta.servlet.jsp.PageContext.PAGE_SCOPE);\n"
+                                + "if (" + state + "Present) pageContext.setAttribute(" + name + ", " + state
+                                + "Value, jakarta.servlet.jsp.PageContext.PAGE_SCOPE);\n", node.location());
+                    }
+                    body.add("}\n");
+                }
                 synchronizeVariables(scriptingVariables, 1, 2);
             } else {
                 if (kind.catchFinally()) body.add("boolean _jspxSetterFailed" + handler + " = false;\n");

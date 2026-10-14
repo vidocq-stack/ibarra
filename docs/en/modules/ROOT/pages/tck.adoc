@@ -36,6 +36,12 @@ The upstream HTTP assertion helper reports failures as exceptions.
 *525/682 = 77.0% measured full-suite pass rate*. All 682 declared test methods
 execute across 92 official classes, with no skipped methods or deployment blockers.
 The suite remains failing and uncertified because 157 methods report errors.
+The targeted `simpletagsupport.URLClientIT` rerun on 2026-10-14 passed 11/11 methods,
+including variable synchronization and both SkipPageException tag-file wrappers.
+A 2026-10-14 `all` invocation covered the same 92 classes and reported 513/655
+entries (142 errors, zero assertion failures or skips; 78.3%). Its method count is
+27 below the earlier 682-entry inventory, so that aggregate remains the last
+comparable baseline while the selection discrepancy is reconciled.
 
 Static XML output and the initial `.tagx` subset restore all six previously failing
 methods in the output-action class: `doctypeSystemPublicTest`, `simpleDefaultTest`,
@@ -45,8 +51,9 @@ passes remain, and all 682 class/method keys match with no missing or extra entr
 The run has 49 completely passing classes. XML tag files support static markup and
 empty `jsp:output` omission metadata; requested declarations use UTF-8 and are emitted
 at each invocation without changing the caller's response charset. Standard `.tag`
-files, directives, expressions, scripting, nested actions and tag attributes remain
-unsupported.
+files support directives, scripting, variables and empty nested simple/classic actions.
+Nested tag attributes and bodies, classic body or exception callbacks, EL, fragments
+and XML tag-file actions remain unsupported.
 
 The detailed command, binary inventory, counts and remaining categories are in
 link:{repo-ibarra}/src/branch/main/ibarra-tck/BASELINE.md[the recorded baseline].
