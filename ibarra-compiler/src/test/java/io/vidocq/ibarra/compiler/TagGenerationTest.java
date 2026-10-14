@@ -63,6 +63,16 @@ class TagGenerationTest {
     }
 
     @Test
+    void synchronizesTldDeclaredVariablesAfterSimpleTagExecution() throws Exception {
+        assertEquals("1:2", render("<x:simpleTldSync/><% out.print(begin + \":\" + end); %>"));
+    }
+
+    @Test
+    void doesNotGenerateAssignmentsForUndeclaredTldVariables() throws Exception {
+        assertEquals("done", render("<x:simpleTldUndeclared/>done"));
+    }
+
+    @Test
     void tagDependentBindingCanComeFromTranslationTimeInclude() throws Exception {
         var options = rawOptions();
         var included = new GenerationOptions(options.propertyGroups(), Map.of("/binding.jspf", "<%@ taglib prefix='r' uri='urn:test' %>"),
@@ -615,6 +625,11 @@ class TagGenerationTest {
                   <attribute><name>count</name><type>int</type><required>true</required></attribute></tag>
                 <tag><name>sync</name><tag-class>fixture.Tags$SyncVariables</tag-class><tei-class>fixture.Tags$Variables</tei-class><body-content>JSP</body-content></tag>
                 <tag><name>simpleSync</name><tag-class>fixture.Tags$SimpleSyncVariables</tag-class><tei-class>fixture.Tags$Variables</tei-class><body-content>empty</body-content></tag>
+                <tag><name>simpleTldSync</name><tag-class>fixture.Tags$SimpleSyncVariables</tag-class><body-content>empty</body-content>
+                  <variable><name-given>begin</name-given><variable-class>java.lang.Integer</variable-class><scope>AT_BEGIN</scope></variable>
+                  <variable><name-given>end</name-given><variable-class>java.lang.Integer</variable-class><scope>AT_END</scope></variable></tag>
+                <tag><name>simpleTldUndeclared</name><tag-class>fixture.Tags$SimpleSyncVariables</tag-class><body-content>empty</body-content>
+                  <variable><name-given>hidden</name-given><declare>false</declare><scope>AT_BEGIN</scope></variable></tag>
                 <tag><name>buffer</name><tag-class>fixture.Tags$Buffer</tag-class><body-content>scriptless</body-content></tag>
                 <tag><name>guard</name><tag-class>fixture.Tags$Guard</tag-class><body-content>scriptless</body-content></tag>
                 <tag><name>setterFailure</name><tag-class>fixture.Tags$SetterFailure</tag-class><body-content>scriptless</body-content></tag>

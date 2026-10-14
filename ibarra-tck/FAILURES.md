@@ -156,15 +156,15 @@ Failing methods:
   on build-time class-file metadata. The generated call uses the selected setter
   parameter type. Deferred attribute setters remain exact-type validated.
 - Simple handlers now synchronize statically declared `TagExtraInfo` variables
-  with `AT_BEGIN` and `AT_END` scope after `doTag` returns. TLD `<variable>`
-  declarations and standard `.tag` files remain unsupported, so the variable
+  and TLD `<variable>` declarations with `AT_BEGIN` and `AT_END` scope after
+  `doTag` returns. Standard `.tag` files remain unsupported, so the variable
   synchronization method still cannot complete.
 - Verification: before this change, the official class passed 9/11 methods,
   including `jspFragmentGetJspContextTest` (1/1). After the change, the variable
-  synchronization page translates its TEI-backed `sync` tag and reaches
-  `sync1`, then fails on its TLD `<variable>` metadata at line 50. The separate
+  synchronization page translates its TEI-backed `sync` tag and its TLD-backed
+  `sync1`, then fails on the standard `Sync.tag` wrapper at line 72. The separate
   SkipPageException pages fail earlier because their standard `.tag` wrappers
-  are not supported. Focused `TagGenerationTest` coverage passes. See
+  are not supported. Focused parser and `TagGenerationTest` coverage passes. See
   `IBARRA-138` in the root `BUG.md`.
 
 Still failing:

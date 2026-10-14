@@ -85,8 +85,12 @@ non-diagnostic helper calls or other dynamic computation is rejected during tran
 For simple handlers, declared `AT_BEGIN` and `AT_END` variables synchronize once
 after `doTag` returns. Scriptlets remain forbidden in scriptless simple-tag bodies.
 
+TLD `<variable>` declarations with a static `<name-given>` and optional
+`<variable-class>` use the same scope mappings. Names derived from tag attributes
+remain unsupported.
+
 This support does not implement `TagExtraInfo.validate`, `TagLibraryValidator`,
-TLD `<variable>` declarations or the complete `TagInfo` and `TagLibraryInfo` APIs.
+TLD `<name-from-attribute>` variables or the complete `TagInfo` and `TagLibraryInfo` APIs.
 
 == Compiler-provided tag identifiers
 

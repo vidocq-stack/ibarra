@@ -64,7 +64,9 @@ or a JAR's `META-INF/taglib.tld`. Relative locations resolve from
 `TagLibraryDescriptor`. It accepts modern/legacy namespaces and legacy DOCTYPE
 declarations without external entity/DTD resolution. Initial tag/attribute contracts
 and build-time URI/resource mapping support xref:modules/tag-handlers.adoc[handler generation].
-Validators, scripting variables and tag files remain I6/I7 work.
+Tag validators, full tag metadata and tag files remain I6/I7 work. Initial static
+TEI and TLD variable synchronization is documented in the
+xref:modules/tag-handlers.adoc[tag-handler reference].
 
 Class-File inspection verifies public concrete listener classes, public
 no-argument constructors and supported Servlet listener interfaces. Generated

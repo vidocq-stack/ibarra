@@ -78,7 +78,7 @@ class TagMetadataTest {
         assertThrows(UnsupportedOperationException.class, () -> tag.attributes().clear());
     }
     @Test
-    void fragmentAttributesAndUnsupportedSemanticsRemainVisibleToTranslation() {
+    void fragmentAttributesAndLibraryValidationRemainVisibleToTranslation() {
         var library = parse("""
                 <validator><validator-class>example.Validator</validator-class></validator>
                 <tag><name>fragment</name><tag-class>example.Fragment</tag-class><body-content>empty</body-content>
@@ -87,7 +87,9 @@ class TagMetadataTest {
                 </tag>
                 """);
         assertTrue(library.validationRequired());
-        assertTrue(library.tags().get("fragment").unsupportedMetadata());
+        assertFalse(library.tags().get("fragment").unsupportedMetadata());
+        assertEquals(List.of(new TagVariableDescriptor("value", "java.lang.String", true, TagVariableDescriptor.NESTED)),
+                library.tags().get("fragment").variables());
         var attribute = library.tags().get("fragment").attributes().get("header");
         assertTrue(attribute.fragment());
         assertEquals("jakarta.servlet.jsp.tagext.JspFragment", attribute.type());

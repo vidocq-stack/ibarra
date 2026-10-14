@@ -37,9 +37,10 @@ Initial classic/simple tag handlers now render through direct constructors,
 setters and generated scriptless body/named fragments. Named scalar attributes,
 explicit bodies and compiler-provided JspIdConsumer identifiers are supported.
 Identifiers stay stable across requests while handler instances remain fresh.
-Classic handlers support statically declared `TagExtraInfo` variables across their
-lifecycle; simple handlers synchronize `AT_BEGIN` and `AT_END` variables after
-`doTag`. Dynamic TEI metadata, validators and full tag metadata APIs remain pending.
+Classic handlers synchronize statically declared `TagExtraInfo` and TLD
+`<name-given>` variables across their lifecycle. Simple handlers synchronize
+`AT_BEGIN` and `AT_END` variables after `doTag`. Dynamic TEI metadata, TLD
+`<name-from-attribute>` variables, validators and full tag metadata APIs remain pending.
 Standard `.tag` files and full tag-file metadata, attributes, directives,
 expressions, scripting, nested actions and fragments remain pending.
 Page type/package imports now resolve through build-generated class references.

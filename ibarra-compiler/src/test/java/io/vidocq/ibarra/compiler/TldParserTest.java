@@ -68,6 +68,26 @@ class TldParserTest {
     }
 
     @Test
+    void staticVariableDeclarationsDoNotMarkATagUnsupported() {
+        var library = parse("<taglib><tag><name>x</name><tag-class>example.Handler</tag-class>"
+                + "<variable><name-given>begin</name-given><variable-class>java.lang.Integer</variable-class>"
+                + "<scope>AT_BEGIN</scope></variable></tag></taglib>");
+        var tag = library.tags().get("x");
+        assertFalse(tag.unsupportedMetadata());
+        assertEquals(List.of(new TagVariableDescriptor("begin", "java.lang.Integer", true, TagVariableDescriptor.AT_BEGIN)),
+                tag.variables());
+        assertThrows(UnsupportedOperationException.class, () -> tag.variables().clear());
+    }
+
+    @Test
+    void nameFromAttributeVariablesRemainExplicitlyUnsupported() {
+        var tag = parse("<taglib><tag><name>x</name><tag-class>example.Handler</tag-class>"
+                + "<variable><name-from-attribute>name</name-from-attribute></variable></tag></taglib>").tags().get("x");
+        assertTrue(tag.unsupportedMetadata());
+        assertEquals("TLD variables named from tag attributes are not supported yet", tag.unsupportedReason());
+    }
+
+    @Test
     void legacyDoctypeIsAcceptedWithoutFetchingItsExternalDefinition() {
         var library = parse("""
                 <!DOCTYPE taglib SYSTEM "file:///unavailable/tld.dtd">
@@ -83,7 +103,9 @@ class TldParserTest {
                 "<listener><listener-class>example.Bad()</listener-class></listener>",
                 "<listener/>",
                 "<listener><listener-class>example.A</listener-class><listener-class>example.B</listener-class></listener>",
-                "<uri>urn:a</uri><uri>urn:b</uri>")) {
+                "<uri>urn:a</uri><uri>urn:b</uri>",
+                "<tag><name>x</name><tag-class>example.Handler</tag-class><variable><name-given>v</name-given><scope>BAD</scope></variable></tag>",
+                "<tag><name>x</name><tag-class>example.Handler</tag-class><variable><name-given>v</name-given></variable><variable><name-given>v</name-given></variable></tag>")) {
             var failure = assertThrows(PageParseException.class, () -> parse("<taglib>" + body + "</taglib>"));
             assertTrue(failure.getMessage().contains("/WEB-INF/test.tld"));
         }

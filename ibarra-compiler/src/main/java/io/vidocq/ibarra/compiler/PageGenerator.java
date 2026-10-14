@@ -329,9 +329,26 @@ public final class PageGenerator {
 
 
         private void synchronizeVariables(List<ScriptingVariable> variables, int... scopes) {
-            for (var variable : variables) for (int scope : scopes) if (variable.scope() == scope)
+            for (var variable : variables) for (int scope : scopes) if (variable.declare() && variable.scope() == scope)
                 body.add(variable.name() + " = (" + variable.type() + ") pageContext.getAttribute("
                         + JavaSource.quote(variable.name()) + ");\n");
+        }
+
+        private void addScriptingVariable(List<ScriptingVariable> variables, String name, String className,
+                boolean declare, int scope, SourceLocation at) {
+            if (!SourceVersion.isIdentifier(name) || SourceVersion.isKeyword(name)
+                    || Set.of("true", "false", "null", "_", "request", "response", "pageContext", "out",
+                            "application", "config", "page", "session", "exception").contains(name)
+                    || name.startsWith("_jspx"))
+                throw error(at, "Invalid or reserved tag scripting variable: " + name);
+            String type = classes.expressionType(className, at);
+            var resolved = new ScriptingVariable(name, type, declare, scope);
+            variables.add(resolved);
+            if (scope != 0 && declare) {
+                var previous = pageVariables.putIfAbsent(name, resolved);
+                if (previous == null) serviceDeclarations.add(type + " " + name + " = null;\n", at);
+                else if (!previous.type().equals(type)) throw error(at, "Conflicting tag scripting variable type: " + name);
+            }
         }
 
         private void customTag(PageNode.Element node, TagLibraryDescriptor library) {
@@ -346,22 +363,10 @@ public final class PageGenerator {
             if (tag.tagFile() && (!tag.attributes().isEmpty() || tag.dynamicAttributes()))
                 throw error(node.location(), "Attributes on XML tag files are not supported yet");
             var scriptingVariables = new ArrayList<ScriptingVariable>();
-            if (tag.teiClass() != null) for (var variable : classes.tagVariables(tag.teiClass(), node.location())) {
-                if (!SourceVersion.isIdentifier(variable.name()) || SourceVersion.isKeyword(variable.name())
-                        || Set.of("true", "false", "null", "_", "request", "response", "pageContext", "out",
-                                "application", "config", "page", "session", "exception").contains(variable.name())
-                        || variable.name().startsWith("_jspx"))
-                    throw error(node.location(), "Invalid or reserved tag scripting variable: " + variable.name());
-                String type = classes.expressionType(variable.className(), node.location());
-                var resolved = new ScriptingVariable(variable.name(), type, variable.declare(), variable.scope());
-                scriptingVariables.add(resolved);
-                if (variable.scope() != 0 && variable.declare()) {
-                    var previous = pageVariables.putIfAbsent(variable.name(), resolved);
-                    if (previous == null) serviceDeclarations.add(type + " " + variable.name() + " = null;\n", node.location());
-                    else if (!previous.type().equals(type))
-                        throw error(node.location(), "Conflicting tag scripting variable type: " + variable.name());
-                }
-            }
+            if (tag.teiClass() != null) for (var variable : classes.tagVariables(tag.teiClass(), node.location()))
+                addScriptingVariable(scriptingVariables, variable.name(), variable.className(), variable.declare(), variable.scope(), node.location());
+            for (var variable : tag.variables())
+                addScriptingVariable(scriptingVariables, variable.name(), variable.className(), variable.declare(), variable.scope(), node.location());
             var kind = tag.tagFile() ? new BeanClasses.Handler(tag.handlerClass(), true, false, false, false, false, false)
                     : classes.handler(tag.handlerClass(), node.location());
             if (kind.simple() && tag.bodyContent().equals("JSP")) throw error(node.location(), "SimpleTag cannot have JSP body-content");
