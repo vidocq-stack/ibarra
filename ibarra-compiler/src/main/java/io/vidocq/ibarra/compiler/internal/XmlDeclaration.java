@@ -50,7 +50,7 @@ public final class XmlDeclaration {
             if (jsp(element, "output")) {
                 for (var name : element.attributes().keySet()) {
                     if (!name.equals("xmlns") && !name.startsWith("xmlns:") && !ATTRIBUTES.contains(name))
-                        throw new PageParseException(element.location(), "Unknown jsp:output attribute: " + name);
+                        throw new PageParseException(element.location(), "Unsupported action attribute: " + name);
                 }
                 String value = element.attributes().get("omit-xml-declaration");
                 if (value != null) {

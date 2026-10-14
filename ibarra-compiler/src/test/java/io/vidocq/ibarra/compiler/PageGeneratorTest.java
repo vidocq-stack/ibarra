@@ -110,6 +110,20 @@ class PageGeneratorTest {
     }
 
     @Test
+    void responseEncodingDeclarationPrecedesStaticPublicDoctypeAndDocumentBody() throws Exception {
+        String source = "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='4.0'>"
+                + "<jsp:directive.page session='false' pageEncoding='UTF-8' contentType='text/xml;charset=ISO-8859-1'/>"
+                + "<hello/><jsp:scriptlet>if (false) {</jsp:scriptlet>"
+                + "<jsp:output omit-xml-declaration='no' doctype-root-element='hello'"
+                + " doctype-system='https://example.invalid/never-fetched.dtd' doctype-public='-//Example//DTD Page//EN'/>"
+                + "<jsp:scriptlet>}</jsp:scriptlet></jsp:root>";
+        assertEquals("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>"
+                        + "<!DOCTYPE hello PUBLIC \"-//Example//DTD Page//EN\" \"https://example.invalid/never-fetched.dtd\"><hello/>",
+                run(generator().generate("/document.jspx", source, PAGE_CLASS, GenerationOptions.DEFAULT),
+                        "response.setCharacterEncoding(\"ISO-8859-1\");", ""));
+    }
+
+    @Test
     void conflictingXmlOmissionAcrossIncludesReportsSecondSource() {
         String source = "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='4.0'>"
                 + "<jsp:output omit-xml-declaration='yes'/><jsp:directive.include file='/included.jspx'/></jsp:root>";

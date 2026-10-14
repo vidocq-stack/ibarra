@@ -57,6 +57,12 @@
   Prologue/default handling and the action's final no-op are coordinated separately;
   declaration emission must precede the DOCTYPE in the integrated generator. XML tag-file
   semantics remain pending, and the official output fixture has not been rewritten.
+- Integration investigation (2026-10-14): the first combined compiler run rejected a
+  foreign-qualified output attribute correctly but changed its established diagnostic;
+  `xmlDoctypeValuesStayStaticLiteralsAndRecognizeJspNamespaceAliases` reproduced the
+  mismatch. The static collector now preserves `Unsupported action attribute` and
+  the offending source location. A compiled rendering regression also verifies that
+  the response-encoding declaration precedes PUBLIC DOCTYPE metadata and the body.
 
 Prolog/omission slice (2026-10-14): declaration policy is collected statically
 over the expanded translation unit; jsp:output does not emit at its body position.
