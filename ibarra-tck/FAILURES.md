@@ -1,11 +1,12 @@
 # Official Pages failure inventory
 
-Date: 2026-10-14, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-The latest comparable full suite recorded 119 method-level errors, no class-level
-setup errors and exercised all 682 official methods. IBARRA-140 fixes TCK-054 and
-the TCK-056 deployment blocker. Focused reruns pass TCK-056 8/8 after IBARRA-141
-and TCK-057 12/12 after IBARRA-142; the complete suite has not been rerun after
-these changes.
+Date: 2026-10-15, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
+The latest full suite exercised all 682 official methods across 92 classes: 576
+pass and 106 report method-level errors, with no class-level setup errors,
+assertion failures or skipped methods. TCK-018 passes 5/5 after IBARRA-143;
+TCK-054 passes 7/7 after IBARRA-140, TCK-056 passes 8/8 after IBARRA-141, and
+TCK-057 passes 12/12 after IBARRA-142. Twenty-eight classes still have method-level
+errors, so certification remains pending.
 See [BASELINE.md](BASELINE.md) for current counts and historical snapshots. Each
 class keeps its previous stable id.
 The parallel compiler batch restores literal editor conversion, opaque tagdependent
@@ -317,12 +318,21 @@ Methods failing in the original baseline:
 ## TCK-018 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagvariableinfo.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
+- Status: RESOLVED on 2026-10-15; the unchanged class passes 5/5 methods.
+- Symptom: all five official HTTP tests errored during translation because the TLD
+  declares a variable with `<name-from-attribute>`.
 - Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagvariableinfo.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Cause: the TLD parser discarded name-from-attribute variables as unsupported.
+  After restoring the descriptor, generated `TagInfo` code also assumed that every
+  variable had a non-null `<name-given>` field.
+- Fix: retain both TLD name fields, validate the referenced required static string
+  attribute, derive the page variable name from its literal invocation value, and
+  pass the absent name field as `null` when generating `TagVariableInfo`.
+- Verification: `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagvariableinfo.URLClientIT`
+  passes all five methods.
 
-Failing methods:
+Previously failing methods:
 
 - `tagVariableInfoGetClassNameTest`
 - `tagVariableInfoGetNameFromAttributeTest`

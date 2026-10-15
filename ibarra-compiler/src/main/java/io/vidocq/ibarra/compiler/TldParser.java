@@ -140,14 +140,11 @@ public final class TldParser {
             if (Set.of("description", "display-name", "icon", "example", "tag-extension").contains(key)) continue;
             if (key.equals("variable")) {
                 var variable = variable(child, namespace, at);
-                if (variable == null) {
-                    unsupported = true;
-                    unsupportedReason = "TLD variables named from tag attributes are not supported yet";
-                } else {
-                    if (variables.stream().anyMatch(previous -> previous.name().equals(variable.name())))
-                        throw new PageParseException(at, "Duplicate tag variable: " + variable.name());
-                    variables.add(variable);
-                }
+                boolean duplicate = variables.stream().anyMatch(previous ->
+                        variable.name() != null && variable.name().equals(previous.name())
+                        || variable.nameFromAttribute() != null && variable.nameFromAttribute().equals(previous.nameFromAttribute()));
+                if (duplicate) throw new PageParseException(at, "Duplicate tag variable name declaration");
+                variables.add(variable);
                 continue;
             }
             if (key.equals("attribute")) {
@@ -204,6 +201,13 @@ public final class TldParser {
         if (tei != null && !SourceVersion.isName(tei)) throw new PageParseException(at, "Invalid tag extra info class");
         String content = fields.getOrDefault("body-content", tagFile ? "scriptless" : "JSP");
         if (!Set.of("JSP", "empty", "scriptless", "tagdependent").contains(content)) throw new PageParseException(at, "Invalid tag body-content: " + content);
+        for (var variable : variables) if (variable.nameFromAttribute() != null) {
+            var attribute = attributes.get(variable.nameFromAttribute());
+            if (attribute == null || !attribute.type().equals("java.lang.String") || !attribute.required()
+                    || attribute.runtimeExpression() || attribute.fragment())
+                throw new PageParseException(at, "Tag variable name-from-attribute must reference a required, non-runtime java.lang.String attribute: "
+                        + variable.nameFromAttribute());
+        }
         return new TagDescriptor(name, handler, content, attributes, bool(fields, "dynamic-attributes", false, at),
                 unsupported, false, unsupportedReason, false, tei, variables);
     }
@@ -220,11 +224,9 @@ public final class TldParser {
         }
         String given = fields.get("name-given"), fromAttribute = fields.get("name-from-attribute");
         if ((given == null) == (fromAttribute == null)) throw new PageParseException(at, "A tag variable needs exactly one name-given or name-from-attribute");
-        if (fromAttribute != null) {
-            if (!SourceVersion.isIdentifier(fromAttribute)) throw new PageParseException(at, "Invalid tag variable attribute name: " + fromAttribute);
-            return null;
-        }
-        if (!SourceVersion.isIdentifier(given)) throw new PageParseException(at, "Invalid tag variable name: " + given);
+        if (given != null && !SourceVersion.isIdentifier(given)) throw new PageParseException(at, "Invalid tag variable name: " + given);
+        if (fromAttribute != null && !SourceVersion.isIdentifier(fromAttribute))
+            throw new PageParseException(at, "Invalid tag variable attribute name: " + fromAttribute);
         String className = fields.getOrDefault("variable-class", "java.lang.String");
         if (!SourceVersion.isName(className)) throw new PageParseException(at, "Invalid tag variable class: " + className);
         boolean declare = tagVariableDeclare(fields, at);
@@ -234,7 +236,7 @@ public final class TldParser {
             case "AT_END" -> TagVariableDescriptor.AT_END;
             default -> throw new PageParseException(at, "Invalid tag variable scope");
         };
-        return new TagVariableDescriptor(given, className, declare, scope);
+        return new TagVariableDescriptor(given, fromAttribute, className, declare, scope);
     }
     private static String required(Map<String, String> fields, String key, SourceLocation at) {
         String value = fields.get(key);

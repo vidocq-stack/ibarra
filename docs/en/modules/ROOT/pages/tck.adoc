@@ -1,60 +1,46 @@
 = TCK status
-:description: Last comparable full Jakarta Pages 4.0 TCK baseline: 525 of 682 methods pass; certification remains pending.
+:description: Latest Jakarta Pages 4.0 TCK run: 576 of 682 methods pass; certification remains pending.
 
 [.lead]
 The official Jakarta Pages 4.0.0 TCK runs through a build-side Arquillian adapter
-on Foy. The eighteen-test smoke subset passes. The last comparable full run
-executes all declared methods and passes 525/682; 157 method errors remain. A
-later full invocation reported 513/655, but its method-count discrepancy has not
-been reconciled. Subsequent targeted reruns pass 16 methods across tag-attribute,
-tag-data, tag-extra-info and function-info classes. Focused TCK-056 tag-file
-semantics passes all 8 methods after IBARRA-141, and TCK-057 TLD resource
-resolution passes all 12 after IBARRA-142. Targeted results do not replace a
-full-suite result. Ibarra is not certified.
+on Foy. The latest full run on 2026-10-15 executes all 682 methods in 92 classes:
+576 pass and 106 report method-level errors, with no setup errors, assertion
+failures or skipped methods (84.5%). TCK-018 passes 5/5 after IBARRA-143; TCK-054
+passes 7/7 after IBARRA-140, TCK-056 passes 8/8 after IBARRA-141, and TCK-057
+passes 12/12 after IBARRA-142. Ibarra remains uncertified while method errors
+remain.
 
 == Recorded baseline
 
-Run date: 2026-10-14, Temurin Java 25 and Maven 3.9.16.
+Run date: 2026-10-15, Temurin Java 25 and Maven 3.9.16. The run uses the post-IBARRA-142
+base commit `b08fae0` with the IBARRA-143 changes applied.
 
 [source,bash]
 ----
-./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 install
-./mvnw -o -ntp -Dmaven.repo.local=/private/tmp/ibarra-forward-m2 -f examples/precompiled-pages/pom.xml clean package
-MAVEN_ARGS='-o -Dmaven.repo.local=/private/tmp/ibarra-forward-m2' ./run-official-tck-pages-4.0.sh --no-install all
+sdk env
+./run-official-tck-pages-4.0.sh all
 ----
 
-Official artifacts had already been prepared. The isolated cache includes the
-typed-forward producer from
-link:https://codefloe.com/Vidocq/foy/pulls/47[Foy #47], signed commit `073288d`.
-The measured run used its isolated artifacts; Foy #47 has now merged and completed
-snapshot publication. Independent Ibarra CI remains a separate validation result.
-No temporary workflow bootstrap or global cache install
-was used. The ordinary reactor install passes 341 tests, adapter 35/35 and the independent
-Maven example packages; build provenance generation was enabled.
-The verified official binary contains 92 test classes and 682 declared JUnit
-`@Test` methods. The feature-worktree run on code base `2331263` records *525 passing
-methods* and *157 failing methods*,
-with *zero class-level setup/deployment errors*. Surefire therefore reports 682
-entries, 157 errors, zero assertion failures and zero skips, and exits nonzero.
-The upstream HTTP assertion helper reports failures as exceptions.
+The script prepared official artifacts, built the Ibarra reactor and ran the
+selected official classes. The ordinary reactor passes 364 tests; the adapter
+regression suite has a separate recorded result of 35/35. The verified official
+binary contains 92 test classes and 682 declared JUnit `@Test` methods. Surefire
+records *576 passing methods* and *106 method-level errors*, with *zero class-level
+setup/deployment errors*, assertion failures or skips, and exits nonzero. The
+upstream HTTP assertion helper reports failures as exceptions.
 
-*525/682 = 77.0% measured full-suite pass rate*. All 682 declared test methods
-execute across 92 official classes, with no skipped methods or deployment blockers.
-The suite remains failing and uncertified because 157 methods report errors.
-The targeted `simpletagsupport.URLClientIT` rerun on 2026-10-14 passed 11/11 methods,
-including variable synchronization and both SkipPageException tag-file wrappers.
-A 2026-10-14 targeted rerun also passed `tagattributeinfo.URLClientIT` (7/7),
-`tagdata.URLClientIT` (5/5) and `tagextrainfo.URLClientIT` (1/1), with the
-adapter passing 35/35 in each run. Generated page initialization now invokes
-`TagExtraInfo.validate` with available tag metadata. The full suite was not rerun,
-so these targeted results do not change the aggregate totals. A combined rerun
-also passed `functioninfo.URLClientIT` (3/3), bringing the four-class total to
-16/16 with the adapter at 35/35. Its TEI now receives the TLD function catalogue
-through `TagInfo.getTagLibrary()`.
-A 2026-10-14 `all` invocation covered the same 92 classes and reported 513/655
-entries (142 errors, zero assertion failures or skips; 78.3%). Its method count is
-27 below the earlier 682-entry inventory, so that aggregate remains the last
-comparable baseline while the selection discrepancy is reconciled.
+*576/682 = 84.5% measured full-suite pass rate*. All declared methods execute across
+the 92 official classes, with no skipped methods or deployment blockers. The suite
+remains failing and uncertified because 106 methods report errors. The TCK-018
+`tagvariableinfo.URLClientIT` class now passes 5/5 after IBARRA-143. The focused
+`simpletagsupport.URLClientIT` rerun passes 11/11, TCK-054 passes 7/7, TCK-056
+passes 8/8 after IBARRA-141, and TCK-057 passes 12/12 after IBARRA-142.
+
+The previous full run after IBARRA-142 passed 571/682 with 111 method errors. The
+current run restores the five TCK-018 methods and records 576/682 with 106 errors.
+An earlier 2026-10-14 invocation reported 513/655; its 27-entry shortfall remains
+an incomplete historical snapshot, while the later full runs execute all 682
+declared methods.
 
 Static XML output and the initial `.tagx` subset restore all six previously failing
 methods in the output-action class: `doctypeSystemPublicTest`, `simpleDefaultTest`,

@@ -358,6 +358,20 @@ public final class PageGenerator {
             }
         }
 
+        private String tagVariableName(String attributeName, PageNode.Element tag, TagInvocation invocation) {
+            String value = tag.attributes().get(attributeName);
+            var parser = new PageNormalizer(sourceSyntaxes.getOrDefault(tag.location().source(), Page.Syntax.STANDARD),
+                    new ParserOptions(bool("isELIgnored", false), bool("deferredSyntaxAllowedAsLiteral", false)), Map.of());
+            if (value != null) {
+                if (value.contains("<%"))
+                    throw error(tag.location(), "Tag variable name attribute must be a translation-time constant: " + attributeName);
+                return templateLiteral(parser.normalizeStructured(List.of(new PageNode.Text(value, tag.location()))));
+            }
+            var named = invocation.attributes().get(attributeName);
+            if (named == null) throw error(tag.location(), "Missing tag variable name attribute: " + attributeName);
+            return templateLiteral(parser.normalizeStructured(namedContent(named)));
+        }
+
         private void customTag(PageNode.Element node, TagLibraryDescriptor library) {
             String local = node.name().substring(node.name().lastIndexOf(':') + 1);
             var tag = library.tags().get(local);
@@ -365,16 +379,14 @@ public final class PageGenerator {
             if (tag.unsupportedMetadata())
                 throw error(node.location(), tag.unsupportedReason() == null
                         ? "Tag validators, scripting variables or tag metadata are not supported yet" : tag.unsupportedReason());
+            var invocation = tagInvocation(node);
             var scriptingVariables = new ArrayList<ScriptingVariable>();
             if (tag.teiClass() != null) for (var variable : classes.tagVariables(tag.teiClass(), node.location()))
-                addScriptingVariable(scriptingVariables, variable.name(), variable.className(), variable.declare(), variable.scope(), node.location());
-            for (var variable : tag.variables())
                 addScriptingVariable(scriptingVariables, variable.name(), variable.className(), variable.declare(), variable.scope(), node.location());
             var kind = tag.tagFile() ? new BeanClasses.Handler(tag.handlerClass(), true, false, false, false, tag.dynamicAttributes(), false)
                     : classes.handler(tag.handlerClass(), node.location());
             if (kind.simple() && tag.bodyContent().equals("JSP")) throw error(node.location(), "SimpleTag cannot have JSP body-content");
             if (tag.dynamicAttributes() && !kind.dynamic()) throw error(node.location(), "Handler does not implement DynamicAttributes");
-            var invocation = tagInvocation(node);
             validateTagExtraInfo(tag, library, node, invocation);
             var children = invocation.content();
             if (tag.bodyContent().equals("empty") && !children.isEmpty()) throw error(node.location(), "Tag requires an empty body");
@@ -382,6 +394,11 @@ public final class PageGenerator {
             for (var attribute : tag.attributes().values())
                 if (attribute.required() && !node.attributes().containsKey(attribute.name()) && !invocation.attributes().containsKey(attribute.name()))
                     throw error(node.location(), "Required tag attribute: " + attribute.name());
+            for (var variable : tag.variables()) {
+                String name = variable.name() != null ? variable.name()
+                        : tagVariableName(variable.nameFromAttribute(), node, invocation);
+                addScriptingVariable(scriptingVariables, name, variable.className(), variable.declare(), variable.scope(), node.location());
+            }
             String handler = "_jspxTag" + serial++;
             body.add("{\n", node.location());
             for (var variable : scriptingVariables)
@@ -555,7 +572,8 @@ public final class PageGenerator {
             String attributes = tag.attributes().values().stream().map(this::tagAttributeInfoSource)
                     .collect(java.util.stream.Collectors.joining(", "));
             String variables = tag.variables().stream().map(variable ->
-                    "new jakarta.servlet.jsp.tagext.TagVariableInfo(" + JavaSource.quote(variable.name()) + ", null, "
+                    "new jakarta.servlet.jsp.tagext.TagVariableInfo(" + (variable.name() == null ? "null" : JavaSource.quote(variable.name())) + ", "
+                            + (variable.nameFromAttribute() == null ? "null" : JavaSource.quote(variable.nameFromAttribute())) + ", "
                             + JavaSource.quote(variable.className()) + ", " + variable.declare() + ", " + variable.scope() + ")")
                     .collect(java.util.stream.Collectors.joining(", "));
             tagValidations.add("var " + tagInfo + " = new jakarta.servlet.jsp.tagext.TagInfo("

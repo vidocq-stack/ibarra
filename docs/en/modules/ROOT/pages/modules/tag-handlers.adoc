@@ -87,9 +87,11 @@ non-diagnostic helper calls or other dynamic computation is rejected during tran
 For simple handlers, declared `AT_BEGIN` and `AT_END` variables synchronize once
 after `doTag` returns. Scriptlets remain forbidden in scriptless simple-tag bodies.
 
-TLD `<variable>` declarations with a static `<name-given>` and optional
-`<variable-class>` use the same scope mappings. Names derived from tag attributes
-remain unsupported.
+TLD `<variable>` declarations may use `<name-given>` or
+`<name-from-attribute>`, with an optional `<variable-class>`, and use the same
+scope mappings. A derived name comes from a required, non-runtime
+`java.lang.String` attribute whose value at the tag invocation is a translation-time
+literal. The generated `TagInfo` retains both TLD name fields.
 
 == TagExtraInfo validation
 
@@ -132,8 +134,7 @@ Nested action bodies, `jsp:param` in tag-file forwards, classic body and excepti
 callbacks, EL, XML tag-file actions, fragments and complete tag-file metadata
 remain unsupported.
 
-TLD `<name-from-attribute>` variables and the complete `TagInfo` and
-`TagLibraryInfo` APIs remain unsupported.
+The complete `TagInfo` and `TagLibraryInfo` catalogues remain unsupported.
 
 == Compiler-provided tag identifiers
 

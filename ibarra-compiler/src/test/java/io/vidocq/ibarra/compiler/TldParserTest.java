@@ -110,11 +110,14 @@ class TldParserTest {
     }
 
     @Test
-    void nameFromAttributeVariablesRemainExplicitlyUnsupported() {
+    void nameFromAttributeVariablesRetainTheirMetadata() {
         var tag = parse("<taglib><tag><name>x</name><tag-class>example.Handler</tag-class>"
-                + "<variable><name-from-attribute>name</name-from-attribute></variable></tag></taglib>").tags().get("x");
-        assertTrue(tag.unsupportedMetadata());
-        assertEquals("TLD variables named from tag attributes are not supported yet", tag.unsupportedReason());
+                + "<variable><name-from-attribute>variableName</name-from-attribute><scope>AT_BEGIN</scope></variable>"
+                + "<attribute><name>variableName</name><required>true</required><type>java.lang.String</type></attribute>"
+                + "</tag></taglib>").tags().get("x");
+        assertFalse(tag.unsupportedMetadata());
+        assertEquals(List.of(new TagVariableDescriptor(null, "variableName", "java.lang.String", true, TagVariableDescriptor.AT_BEGIN)),
+                tag.variables());
     }
 
     @Test

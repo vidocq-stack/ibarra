@@ -44,6 +44,18 @@ class TagMetadataTest {
     }
 
     @Test
+    void nameFromAttributeVariablesRequireARequiredStaticStringAttribute() {
+        for (String attribute : List.of(
+                "",
+                "<attribute><name>variableName</name><required>false</required></attribute>",
+                "<attribute><name>variableName</name><type>java.lang.Integer</type><required>true</required></attribute>",
+                "<attribute><name>variableName</name><required>true</required><rtexprvalue>true</rtexprvalue></attribute>")) {
+            assertThrows(PageParseException.class, () -> parse("<tag><name>x</name><tag-class>example.X</tag-class>"
+                    + "<variable><name-from-attribute>variableName</name-from-attribute></variable>" + attribute + "</tag>"));
+        }
+    }
+
+    @Test
     void malformedOrConflictingDeferredMetadataFailsAtTheDescriptor() {
         for (String fields : List.of("<deferred-value/><deferred-method/>", "<fragment>true</fragment><deferred-value/>",
                 "<deferred-value><type>void</type></deferred-value>",

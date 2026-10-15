@@ -1,5 +1,22 @@
 # BUG.md — Ibarra
 
+## IBARRA-143 · 2026-10-15 · TLD name-from-attribute variables fail translation
+
+- Symptom: the official TagVariableInfo TCK class failed all five methods during
+  translation of valid TLD variable metadata.
+- Minimal repro: run
+  `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagvariableinfo.URLClientIT`.
+- Cause: `TldParser` discarded `<name-from-attribute>` variables as unsupported;
+  the generated `TagInfo` path also assumed that the mutually exclusive
+  `<name-given>` field was non-null.
+- Fix: preserve both name sources, validate that the referenced attribute is a
+  required, non-runtime `java.lang.String`, derive the calling-page variable name
+  from its translation-time literal and generate `TagVariableInfo` with `null` for
+  the absent name source.
+- Status: FIXED (2026-10-15). The focused official TCK-018 class passes 5/5; the
+  full suite now passes 576/682 methods with no deployment errors.
+
 ## IBARRA-142 · 2026-10-14 · Unmapped absolute tag-library URI escapes translation validation
 
 - Symptom: the TCK-057 fixture declares an absolute URI absent from the tag-library map,

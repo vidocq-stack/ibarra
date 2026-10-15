@@ -21,14 +21,19 @@ package io.vidocq.ibarra.compiler;
 
 import java.util.Objects;
 
-/** A statically named page variable declared by a tag library descriptor. */
-public record TagVariableDescriptor(String name, String className, boolean declare, int scope) {
+/** Page variable metadata declared by a tag library descriptor. */
+public record TagVariableDescriptor(String name, String nameFromAttribute, String className, boolean declare, int scope) {
     public static final int NESTED = 0;
     public static final int AT_BEGIN = 1;
     public static final int AT_END = 2;
 
+    public TagVariableDescriptor(String name, String className, boolean declare, int scope) {
+        this(name, null, className, declare, scope);
+    }
+
     public TagVariableDescriptor {
-        Objects.requireNonNull(name);
+        if ((name == null) == (nameFromAttribute == null))
+            throw new IllegalArgumentException("Exactly one tag variable name source is required");
         Objects.requireNonNull(className);
         if (scope < NESTED || scope > AT_END) throw new IllegalArgumentException("Invalid tag variable scope: " + scope);
     }
