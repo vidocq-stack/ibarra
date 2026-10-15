@@ -25,35 +25,42 @@ import java.util.*;
 /** Immutable handler metadata; unsupported semantics must be rejected before generation. */
 public record TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
         boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile, String unsupportedReason,
-        boolean emitsXmlDeclaration, String teiClass, List<TagVariableDescriptor> variables) {
+        boolean emitsXmlDeclaration, String teiClass, List<TagVariableDescriptor> variables, String tagFilePath) {
     public TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
             boolean dynamicAttributes, boolean unsupportedMetadata) {
-        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, false, null, false, null, List.of());
+        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, false, null, false, null, List.of(), null);
     }
     public TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
             boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile) {
-        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, tagFile, null, false, null, List.of());
+        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, tagFile, null, false, null, List.of(), null);
     }
     public TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
             boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile, String unsupportedReason) {
-        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, tagFile, unsupportedReason, false, null, List.of());
+        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, tagFile, unsupportedReason, false, null, List.of(), null);
     }
     public TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
             boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile, String unsupportedReason,
             boolean emitsXmlDeclaration) {
         this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, tagFile,
-                unsupportedReason, emitsXmlDeclaration, null, List.of());
+                unsupportedReason, emitsXmlDeclaration, null, List.of(), null);
     }
     public TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
             boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile, String unsupportedReason,
             boolean emitsXmlDeclaration, String teiClass) {
         this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, tagFile,
-                unsupportedReason, emitsXmlDeclaration, teiClass, List.of());
+                unsupportedReason, emitsXmlDeclaration, teiClass, List.of(), null);
+    }
+    public TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
+            boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile, String unsupportedReason,
+            boolean emitsXmlDeclaration, String teiClass, List<TagVariableDescriptor> variables) {
+        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, tagFile,
+                unsupportedReason, emitsXmlDeclaration, teiClass, variables, null);
     }
     public TagDescriptor {
         Objects.requireNonNull(name); Objects.requireNonNull(bodyContent);
         if (handlerClass == null && !unsupportedMetadata) throw new IllegalArgumentException("A handler class is required");
         if (unsupportedReason != null && !unsupportedMetadata) throw new IllegalArgumentException("An unsupported reason requires unsupported metadata");
+        if (tagFilePath != null && !tagFile) throw new IllegalArgumentException("A tag-file path requires tag-file metadata");
         attributes = Collections.unmodifiableMap(new LinkedHashMap<>(attributes));
         variables = List.copyOf(variables);
     }

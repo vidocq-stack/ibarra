@@ -1,5 +1,21 @@
 # BUG.md — Ibarra
 
+## IBARRA-144 · 2026-10-15 · TLD TagFileInfo metadata is missing during TEI validation
+
+- Symptom: the official TagFileInfo TCK class failed all three methods because
+  `TagLibraryInfo.getTagFiles()` returned no entries.
+- Minimal repro: run
+  `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagfileinfo.URLClientIT`.
+- Cause: TLD parsing discarded the `<tag-file>` path, and generated
+  `TagLibraryInfo` initialized functions but left its tag-file catalogue unset.
+  The referenced `.tag` directives were not converted to the `TagInfo` exposed by
+  `TagFileInfo.getTagInfo()`.
+- Fix: retain tag-file paths and generate `TagFileInfo` entries with build-time
+  `TagInfo` metadata from the referenced `.tag` directives.
+- Status: FIXED (2026-10-15). TCK-013 passes 3/3; the full suite reports 581/682
+  methods passing, with 101 method-level errors and no setup errors.
+
 ## IBARRA-143 · 2026-10-15 · TLD name-from-attribute variables fail translation
 
 - Symptom: the official TagVariableInfo TCK class failed all five methods during
@@ -15,7 +31,7 @@
   from its translation-time literal and generate `TagVariableInfo` with `null` for
   the absent name source.
 - Status: FIXED (2026-10-15). The focused official TCK-018 class passes 5/5; the
-  full suite now passes 576/682 methods with no deployment errors.
+  full suite at that snapshot passed 576/682 methods with no deployment errors.
 
 ## IBARRA-142 · 2026-10-14 · Unmapped absolute tag-library URI escapes translation validation
 

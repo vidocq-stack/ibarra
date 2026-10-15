@@ -40,8 +40,10 @@ TLD variables support `<name-given>` and `<name-from-attribute>`; a derived name
 must come from a required, non-runtime string attribute with a translation-time
 literal value. Classic handlers synchronize static `TagExtraInfo` and TLD
 variables across their lifecycle. Simple handlers synchronize `AT_BEGIN` and
-`AT_END` variables after `doTag`. Dynamic TEI metadata and full
-`TagInfo`/`TagLibraryInfo` metadata remain pending. TLD `TagLibraryValidator`
+`AT_END` variables after `doTag`. TEI validation receives generated `TagInfo`
+and `TagLibraryInfo` metadata, including TLD functions and tag-file entries;
+dynamic TEI metadata and complete tag and nested-library catalogues remain pending.
+TLD `TagLibraryValidator`
 declarations receive generated PageData XML during
 standard-page servlet initialization; validators referenced by a standard tag file
 receive its XML view when the generated handler is first invoked.
@@ -53,8 +55,9 @@ request, session and application scopes delegate to the invoking page. A literal
 `jsp:forward` dispatches and stops processing the tag file and its caller.
 Nested simple/classic custom tags accept declared scalar attributes, including
 request-time Java expressions. Nested tag bodies, classic handlers with body or
-exception callbacks, EL, fragments, `jsp:param` in tag-file forwards, XML tag-file
-actions and complete tag-file metadata remain pending.
+exception callbacks, EL, fragments, `jsp:param` in tag-file forwards and XML tag-file
+actions remain pending; complete tag-file body and catalogue semantics are not yet
+implemented.
 Page type/package imports now resolve through build-generated class references.
 TLD functions use generated direct static calls. Typed deferred tag values/methods
 are compiled and constructed per invocation. Dynamic import changes and official TCK
@@ -96,15 +99,15 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 | `ibarra-compiler` | JSP/JSPX parser, page model, Java generator, initial tag handlers and build-time compiler | I2 implemented; I3/I6/I7 in progress |
 | `ibarra-maven-plugin` | `precompile` goal at process-classes; module service registration | Initial I4 implemented |
 | `ibarra-foy` | Optional Foy engine provider; application layer, routing and TLD listener lifecycle | Initial I5 implemented |
-| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; smoke 18/18; latest `all` run reports 576/682 across 92 classes |
+| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; smoke 18/18; latest `all` run reports 581/682 across 92 classes |
 
 The latest full `all` run (2026-10-15) executes all 682 methods in 92 classes:
-576 pass, 106 report method-level errors, and there are no setup errors, assertion
-failures or skipped methods (84.5%). This restores five methods in TCK-018 after
-IBARRA-143; the post-IBARRA-142 full run passed 571/682. The SimpleTagSupport TCK
-class passes 11/11, TCK-054 passes 7/7, TCK-056 passes 8/8 after IBARRA-141, and
-TCK-057 passes 12/12 after IBARRA-142. Ibarra remains uncertified while method
-errors remain. The ordinary reactor passes 364 tests,
+581 pass, 101 report method-level errors, and there are no setup errors, assertion
+failures or skipped methods (85.2%). TCK-013 passes 3/3 after IBARRA-144 and
+TCK-018 passes 5/5 after IBARRA-143. The SimpleTagSupport TCK class passes 11/11,
+TCK-054 passes 7/7, TCK-056 passes 8/8 after IBARRA-141, and TCK-057 passes 12/12
+after IBARRA-142. Ibarra remains uncertified while method errors remain. The
+ordinary reactor passes 365 tests,
 the adapter 35/35 and the independent example
 packages successfully. Typed forwarding uses the producer delivered in
 [Foy #47](https://codefloe.com/Vidocq/foy/pulls/47), now merged and published.

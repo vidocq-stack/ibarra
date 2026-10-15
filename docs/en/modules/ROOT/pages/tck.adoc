@@ -1,19 +1,20 @@
 = TCK status
-:description: Latest Jakarta Pages 4.0 TCK run: 576 of 682 methods pass; certification remains pending.
+:description: Latest Jakarta Pages 4.0 TCK run: 581 of 682 methods pass; certification remains pending.
 
 [.lead]
 The official Jakarta Pages 4.0.0 TCK runs through a build-side Arquillian adapter
 on Foy. The latest full run on 2026-10-15 executes all 682 methods in 92 classes:
-576 pass and 106 report method-level errors, with no setup errors, assertion
-failures or skipped methods (84.5%). TCK-018 passes 5/5 after IBARRA-143; TCK-054
+581 pass and 101 report method-level errors, with no setup errors, assertion
+failures or skipped methods (85.2%). TCK-013 passes 3/3 after IBARRA-144 and
+TCK-018 passes 5/5 after IBARRA-143; TCK-054
 passes 7/7 after IBARRA-140, TCK-056 passes 8/8 after IBARRA-141, and TCK-057
 passes 12/12 after IBARRA-142. Ibarra remains uncertified while method errors
 remain.
 
 == Recorded baseline
 
-Run date: 2026-10-15, Temurin Java 25 and Maven 3.9.16. The run uses the post-IBARRA-142
-base commit `b08fae0` with the IBARRA-143 changes applied.
+Run date: 2026-10-15, Temurin Java 25 and Maven 3.9.16. The run uses merged base
+commit `e3ac8f2` with the IBARRA-144 changes applied.
 
 [source,bash]
 ----
@@ -22,22 +23,24 @@ sdk env
 ----
 
 The script prepared official artifacts, built the Ibarra reactor and ran the
-selected official classes. The ordinary reactor passes 364 tests; the adapter
+selected official classes. The ordinary reactor passes 365 tests; the adapter
 regression suite has a separate recorded result of 35/35. The verified official
 binary contains 92 test classes and 682 declared JUnit `@Test` methods. Surefire
-records *576 passing methods* and *106 method-level errors*, with *zero class-level
+records *581 passing methods* and *101 method-level errors*, with *zero class-level
 setup/deployment errors*, assertion failures or skips, and exits nonzero. The
 upstream HTTP assertion helper reports failures as exceptions.
 
-*576/682 = 84.5% measured full-suite pass rate*. All declared methods execute across
+*581/682 = 85.2% measured full-suite pass rate*. All declared methods execute across
 the 92 official classes, with no skipped methods or deployment blockers. The suite
-remains failing and uncertified because 106 methods report errors. The TCK-018
-`tagvariableinfo.URLClientIT` class now passes 5/5 after IBARRA-143. The focused
+remains failing and uncertified because 101 methods report errors. The TCK-013
+`tagfileinfo.URLClientIT` class passes 3/3 after IBARRA-144; TCK-018
+`tagvariableinfo.URLClientIT` passes 5/5 after IBARRA-143. The focused
 `simpletagsupport.URLClientIT` rerun passes 11/11, TCK-054 passes 7/7, TCK-056
 passes 8/8 after IBARRA-141, and TCK-057 passes 12/12 after IBARRA-142.
 
 The previous full run after IBARRA-142 passed 571/682 with 111 method errors. The
-current run restores the five TCK-018 methods and records 576/682 with 106 errors.
+full run after IBARRA-143 recorded 576/682 with 106 errors; this full run records
+581/682 with 101 errors and includes the focused 3/3 TCK-013 pass.
 An earlier 2026-10-14 invocation reported 513/655; its 27-entry shortfall remains
 an incomplete historical snapshot, while the later full runs execute all 682
 declared methods.

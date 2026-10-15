@@ -1,9 +1,10 @@
 # Official Pages failure inventory
 
 Date: 2026-10-15, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-The latest full suite exercised all 682 official methods across 92 classes: 576
-pass and 106 report method-level errors, with no class-level setup errors,
-assertion failures or skipped methods. TCK-018 passes 5/5 after IBARRA-143;
+The latest full suite exercised all 682 official methods across 92 classes: 581
+pass and 101 report method-level errors, with no class-level setup errors,
+assertion failures or skipped methods. TCK-013 passes 3/3 after IBARRA-144 and
+TCK-018 passes 5/5 after IBARRA-143;
 TCK-054 passes 7/7 after IBARRA-140, TCK-056 passes 8/8 after IBARRA-141, and
 TCK-057 passes 12/12 after IBARRA-142. Twenty-eight classes still have method-level
 errors, so certification remains pending.
@@ -226,10 +227,17 @@ Previously failing methods:
 ## TCK-013 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagfileinfo.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagfileinfo.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Status: RESOLVED (2026-10-15, IBARRA-144).
+- Symptom: the official HTTP/signature assertion reported an error for each method.
+- Minimal repro: run
+  `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.tagfileinfo.URLClientIT`.
+- Cause: the TLD parser discarded each `<tag-file>` path, and the generated
+  `TagLibraryInfo` left `tagFiles` unset. No `TagInfo` was created from the
+  referenced tag-file directives.
+- Fix: retain tag-file paths, then emit `TagFileInfo` and its directive-derived
+  `TagInfo` metadata while generating `TagLibraryInfo` at build time.
+- Evidence: all three methods pass in the focused class and the full official suite.
 
 Failing methods:
 

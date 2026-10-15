@@ -632,6 +632,24 @@ class TagGenerationTest {
                 + "1:upperCase:fixture.Functions:java.lang.String upperCase(java.lang.String):literal",
                 render("<x:validate value='literal'/>", false, options(), 2));
     }
+    @Test void exposesTldTagFileMetadataToTagExtraInfoValidation() throws Exception {
+        String tld = """
+                <taglib><uri>urn:test</uri>
+                  <tag><name>inspect</name><tag-class>fixture.Tags$TagFileMetadata</tag-class>
+                    <tei-class>fixture.Tags$TagFileValidation</tei-class><body-content>empty</body-content></tag>
+                  <tag-file><name>TagFile1</name><path>/WEB-INF/tags/TagFile1.tag</path></tag-file>
+                </taglib>
+                """;
+        String tagFile = """
+                <%@ tag display-name="TagFile1" dynamic-attributes="true" small-icon="/16/icon.jpg"
+                    large-icon="/32/icon.jpg" description="Simple Tag File" %>
+                """;
+        var library = new TldParser().parse("/WEB-INF/tags.tld", tld.getBytes(StandardCharsets.UTF_8));
+        var resources = Map.of("/WEB-INF/tags/TagFile1.tag", tagFile.getBytes(StandardCharsets.UTF_8));
+        var configured = new GenerationOptions(List.of(), Map.of(), false, resources, Map.of("urn:test", library));
+
+        assertEquals("ok", render("<x:inspect/>", false, configured));
+    }
     @Test void bufferedIterationsRetainContentUntilTheHandlerClearsIt() throws Exception {
         assertEquals("[ia][iaa]",render("<x:bufferedRepeat>a</x:bufferedRepeat>"));
     }
@@ -794,6 +812,25 @@ class TagGenerationTest {
                             return null;
                         }
                     }
+                    public static class TagFileValidation extends TagExtraInfo {
+                        public ValidationMessage[] validate(TagData data) {
+                            TagLibraryInfo library = getTagInfo().getTagLibrary();
+                            TagFileInfo[] files = library == null ? null : library.getTagFiles();
+                            if (files == null || files.length != 1)
+                                return new ValidationMessage[]{new ValidationMessage(data.getId(), "Expected one tag file")};
+                            TagFileInfo file = files[0];
+                            TagInfo info = file.getTagInfo();
+                            if (!"TagFile1".equals(file.getName())
+                                    || !"/WEB-INF/tags/TagFile1.tag".equals(file.getPath())
+                                    || info == null || !"TagFile1".equals(info.getDisplayName())
+                                    || !"scriptless".equals(info.getBodyContent()) || !info.hasDynamicAttributes()
+                                    || !"/16/icon.jpg".equals(info.getSmallIcon())
+                                    || !"/32/icon.jpg".equals(info.getLargeIcon())
+                                    || !"Simple Tag File".equals(info.getInfoString()))
+                                return new ValidationMessage[]{new ValidationMessage(data.getId(), "Unexpected tag file metadata")};
+                            return null;
+                        }
+                    }
                     public static class PageDataValidator extends TagLibraryValidator {
                         static int calls;
                         public ValidationMessage[] validate(String prefix, String uri, PageData page) {
@@ -832,6 +869,9 @@ class TagGenerationTest {
                         public void doTag() throws java.io.IOException {
                             getJspContext().getOut().write(Validation.calls+":"+Validation.functionMetadata+":"+value);
                         }
+                    }
+                    public static class TagFileMetadata extends SimpleTagSupport {
+                        public void doTag() throws java.io.IOException { getJspContext().getOut().write("ok"); }
                     }
                     public static class Echo extends SimpleTagSupport {
                         private String label; private int count=1;

@@ -78,6 +78,7 @@ public final class PageGenerator {
         private JavaSource body = new JavaSource();
         private final JavaSource fragments = new JavaSource();
         private final TldReferences.Resolved resolvedLibraries;
+        private final GenerationOptions generationOptions;
         private final Map<String, PageNode.Directive> taglibBindings = new HashMap<>();
         private record NamespaceBinding(String uri, SourceLocation location) {}
         private final Map<String, NamespaceBinding> namespaces = new HashMap<>();
@@ -102,6 +103,7 @@ public final class PageGenerator {
             this.sourceSyntaxes = sourceSyntaxes;
             this.responseEncoding = responseEncoding;
             this.startupElAllowed = options.allowStartupEl();
+            this.generationOptions = options;
             this.resolvedLibraries = resolved;
             copy(properties, "default-content-type", "contentType");
             copy(properties, "buffer", "buffer");
@@ -688,11 +690,39 @@ public final class PageGenerator {
                     .map(function -> "new jakarta.servlet.jsp.tagext.FunctionInfo(" + JavaSource.quote(function.name()) + ", "
                             + JavaSource.quote(function.functionClass()) + ", " + JavaSource.quote(function.signature()) + ")")
                     .collect(java.util.stream.Collectors.joining(", "));
+            String tagFiles = library.tags().values().stream()
+                    .filter(tag -> tag.tagFile() && tag.tagFilePath() != null)
+                    .sorted(java.util.Comparator.comparing(TagDescriptor::name))
+                    .map(tag -> tagFileInfoSource(tag, node.location()))
+                    .collect(java.util.stream.Collectors.joining(", "));
             return "new jakarta.servlet.jsp.tagext.TagLibraryInfo(" + JavaSource.quote(prefix) + ", "
                     + JavaSource.quote(node.namespace()) + ") {\n"
-                    + "{ functions = new jakarta.servlet.jsp.tagext.FunctionInfo[] {" + functions + "}; }\n"
+                    + "{ functions = new jakarta.servlet.jsp.tagext.FunctionInfo[] {" + functions + "}; "
+                    + "tagFiles = new jakarta.servlet.jsp.tagext.TagFileInfo[] {" + tagFiles + "}; }\n"
                     + "@Override public jakarta.servlet.jsp.tagext.TagLibraryInfo[] getTagLibraryInfos() { "
                     + "return new jakarta.servlet.jsp.tagext.TagLibraryInfo[0]; }\n}";
+        }
+
+        private String tagFileInfoSource(TagDescriptor tagFile, SourceLocation at) {
+            String path = tagFile.tagFilePath();
+            byte[] source = generationOptions.byteSource(path);
+            if (source == null) throw new PageParseException(at, "Tag-file resource is absent: " + path);
+            var unit = new TranslationUnit(generationOptions).read(path, source);
+            var metadata = TagFileCompiler.tagInfoMetadata(unit);
+            String attributes = metadata.attributes().values().stream().map(this::tagAttributeInfoSource)
+                    .collect(java.util.stream.Collectors.joining(", "));
+            String variables = metadata.variables().stream().map(variable ->
+                    "new jakarta.servlet.jsp.tagext.TagVariableInfo(" + nullableString(variable.name()) + ", "
+                            + nullableString(variable.nameFromAttribute()) + ", " + JavaSource.quote(variable.className())
+                            + ", " + variable.declare() + ", " + variable.scope() + ")")
+                    .collect(java.util.stream.Collectors.joining(", "));
+            return "new jakarta.servlet.jsp.tagext.TagFileInfo(" + JavaSource.quote(tagFile.name()) + ", "
+                    + JavaSource.quote(path) + ", new jakarta.servlet.jsp.tagext.TagInfo(" + JavaSource.quote(tagFile.name())
+                    + ", null, " + JavaSource.quote(metadata.bodyContent()) + ", " + nullableString(metadata.infoString())
+                    + ", this, null, new jakarta.servlet.jsp.tagext.TagAttributeInfo[] {" + attributes + "}, "
+                    + nullableString(metadata.displayName()) + ", " + nullableString(metadata.smallIcon()) + ", "
+                    + nullableString(metadata.largeIcon()) + ", new jakarta.servlet.jsp.tagext.TagVariableInfo[] {"
+                    + variables + "}, " + metadata.dynamicAttributes() + "))";
         }
 
         private String tagAttributeInfoSource(TagAttribute attribute) {

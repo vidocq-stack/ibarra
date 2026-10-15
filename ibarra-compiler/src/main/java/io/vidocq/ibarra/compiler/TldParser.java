@@ -21,6 +21,7 @@
 package io.vidocq.ibarra.compiler;
 
 import io.vidocq.ibarra.compiler.internal.DeploymentXml;
+import io.vidocq.ibarra.spi.PageDescriptor;
 import java.util.*;
 import javax.lang.model.SourceVersion;
 import org.w3c.dom.*;
@@ -195,6 +196,11 @@ public final class TldParser {
         }
         String name = required(fields, "name", at);
         if (!name.matches("[\\p{L}_][\\p{L}\\p{N}\\p{M}_.-]*")) throw new PageParseException(at, "Invalid tag name: " + name);
+        String tagFilePath = tagFile ? required(fields, "path", at) : null;
+        if (tagFilePath != null) {
+            try { PageDescriptor.validatePath(tagFilePath); }
+            catch (IllegalArgumentException invalid) { throw new PageParseException(at, "Invalid tag-file path: " + tagFilePath, invalid); }
+        } else if (fields.containsKey("path")) throw new PageParseException(at, "A tag path is only valid for a tag-file declaration");
         String handler = tagFile ? null : required(fields, "tag-class", at);
         if (handler != null && !SourceVersion.isName(handler)) throw new PageParseException(at, "Invalid tag handler class");
         String tei = fields.get("tei-class");
@@ -209,7 +215,7 @@ public final class TldParser {
                         + variable.nameFromAttribute());
         }
         return new TagDescriptor(name, handler, content, attributes, bool(fields, "dynamic-attributes", false, at),
-                unsupported, false, unsupportedReason, false, tei, variables);
+                unsupported, tagFile, unsupportedReason, false, tei, variables, tagFilePath);
     }
 
     private TagVariableDescriptor variable(Element element, String namespace, SourceLocation at) {

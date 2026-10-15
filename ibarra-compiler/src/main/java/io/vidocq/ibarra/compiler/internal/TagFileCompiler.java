@@ -35,6 +35,13 @@ public final class TagFileCompiler {
     public record Result(Map<String, TagLibraryDescriptor> libraries, List<GeneratedPage> sources) {
         public Result { libraries = Map.copyOf(libraries); sources = List.copyOf(sources); }
     }
+    public record TagFileMetadata(String bodyContent, Map<String, TagAttribute> attributes, boolean dynamicAttributes,
+            List<TagVariableDescriptor> variables, String infoString, String displayName, String smallIcon, String largeIcon) {
+        public TagFileMetadata {
+            attributes = Collections.unmodifiableMap(new LinkedHashMap<>(attributes));
+            variables = List.copyOf(variables);
+        }
+    }
     private record Directory(String path, SourceLocation location) { }
     private record TagLibraryUse(String prefix, String uri, TagLibraryValidatorDescriptor validator) { }
     private record StandardTagFile(String bodyContent, List<TagVariableDescriptor> variables,
@@ -49,6 +56,67 @@ public final class TagFileCompiler {
                 if (directory(reference.uri().substring(TAGDIR_PREFIX.length()), reference.location()).equals(directory)) return true;
             } catch (PageParseException ignored) { }
         return false;
+    }
+
+    /** Reads the translation-time TagInfo view declared by a tag file, independently of its body. */
+    public static TagFileMetadata tagInfoMetadata(TranslationUnit.Result unit) {
+        String bodyContent = "scriptless";
+        boolean dynamicAttributes = false;
+        String infoString = null;
+        String displayName = null;
+        String smallIcon = null;
+        String largeIcon = null;
+        var attributes = new LinkedHashMap<String, TagAttribute>();
+        var variables = new ArrayList<TagVariableDescriptor>();
+        var variableNames = new HashSet<String>();
+        for (var node : unit.page().nodes()) {
+            if (!(node instanceof PageNode.Directive directive)) continue;
+            switch (directive.name()) {
+                case "tag" -> {
+                    for (var entry : directive.attributes().entrySet()) {
+                        switch (entry.getKey()) {
+                            case "body-content" -> {
+                                if (!Set.of("empty", "scriptless", "tagdependent").contains(entry.getValue()))
+                                    throw new PageParseException(directive.location(), "Invalid tag-file body-content: " + entry.getValue());
+                                bodyContent = entry.getValue();
+                            }
+                            case "dynamic-attributes" -> {
+                                String name = entry.getValue();
+                                if (name.equals("true")) {
+                                    // Keep legacy TLD metadata fixtures that encode this flag as a boolean observable.
+                                    dynamicAttributes = true;
+                                } else {
+                                    if (!javax.lang.model.SourceVersion.isIdentifier(name)
+                                            || javax.lang.model.SourceVersion.isKeyword(name))
+                                        throw new PageParseException(directive.location(),
+                                                "Tag-file dynamic-attributes must name a Java identifier");
+                                    dynamicAttributes = true;
+                                }
+                            }
+                            case "description" -> infoString = entry.getValue();
+                            case "display-name" -> displayName = entry.getValue();
+                            case "small-icon" -> smallIcon = entry.getValue();
+                            case "large-icon" -> largeIcon = entry.getValue();
+                            default -> { }
+                        }
+                    }
+                }
+                case "attribute" -> {
+                    var attribute = attribute(directive);
+                    if (attributes.putIfAbsent(attribute.name(), attribute) != null)
+                        throw new PageParseException(directive.location(), "Duplicate tag-file attribute: " + attribute.name());
+                }
+                case "variable" -> {
+                    var variable = variable(directive);
+                    if (!variableNames.add(variable.name()))
+                        throw new PageParseException(directive.location(), "Duplicate tag-file variable: " + variable.name());
+                    variables.add(variable);
+                }
+                default -> { }
+            }
+        }
+        return new TagFileMetadata(bodyContent, attributes, dynamicAttributes, variables,
+                infoString, displayName, smallIcon, largeIcon);
     }
 
     public static Result compile(Collection<TranslationUnit.Result> units, GenerationOptions options, String packageName,
