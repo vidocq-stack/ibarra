@@ -248,26 +248,33 @@ Failing methods:
 ## TCK-014 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.taginfo.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.taginfo.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Status: RESOLVED on 2026-10-15 by IBARRA-145.
+- Symptom: the tag's `TagExtraInfo` could not inspect the ordinary TLD tag catalogue,
+  and the invocation `TagInfo` omitted descriptive metadata.
+- Minimal repro: run `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.taginfo.URLClientIT`.
+- Cause: generated `TagLibraryInfo` left its ordinary `tags` array unset; TLD tag
+  descriptions, display names and icons were discarded, and invocation metadata
+  passed null for those fields.
+- Fix: retain TLD tag metadata and generate the declaration-ordered `TagInfo[]`
+  with attributes, variables, dynamic-attribute flags and linked TEIs. Pass the
+  same descriptive fields to the invocation's `TagInfo`.
+- Verification: the focused class passes all 14 methods; the full official run
+  includes the fix and passes 14/14.
 
-Failing methods:
+Previously failing methods:
 
 - `tagInfoGetTagNameTest`
 - `tagInfoGetTagLibraryTest`
 - `tagInfoGetTagClassNameTest`
 - `tagInfoHasDynamicAttributesTest`
 - `tagInfoGetTagVariableInfosTest`
-- `tagInfoSetTagExtraInfoTest`
 - `tagInfoGetDisplayNameTest`
 - `tagInfoGetAttributesTest`
 - `tagInfoGetTagExtraInfoTest`
 - `tagInfoGetSmallIconTest`
 - `tagInfoGetBodyContentTest`
 - `tagInfoGetLargeIconTest`
-- `tagInfoSetTagLibraryTest`
 - `tagInfoGetInfoStringTest`
 
 ## TCK-015 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.taglibraryinfo.URLClientIT

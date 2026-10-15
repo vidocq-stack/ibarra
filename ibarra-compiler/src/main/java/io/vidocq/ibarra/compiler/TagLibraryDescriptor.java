@@ -20,9 +20,7 @@
 
 package io.vidocq.ibarra.compiler;
 
-import java.util.List;
-import java.util.Objects;
-import java.util.Map;
+import java.util.*;
 
 /** Immutable build-time TLD metadata; a missing URI still permits listener registration. */
 public record TagLibraryDescriptor(String resourcePath, String uri, List<String> listenerClasses,
@@ -31,8 +29,9 @@ public record TagLibraryDescriptor(String resourcePath, String uri, List<String>
         this(resourcePath, uri, listenerClasses, Map.of(), null, Map.of());
     }
     public TagLibraryDescriptor {
-        Objects.requireNonNull(resourcePath); listenerClasses = List.copyOf(listenerClasses); tags = Map.copyOf(tags);
-        functions = Map.copyOf(functions);
+        Objects.requireNonNull(resourcePath); listenerClasses = List.copyOf(listenerClasses);
+        tags = Collections.unmodifiableMap(new LinkedHashMap<>(tags));
+        functions = Collections.unmodifiableMap(new LinkedHashMap<>(functions));
     }
     public boolean validationRequired() { return validator != null; }
 }

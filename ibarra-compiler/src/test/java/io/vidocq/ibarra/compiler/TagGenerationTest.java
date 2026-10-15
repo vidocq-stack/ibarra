@@ -632,6 +632,29 @@ class TagGenerationTest {
                 + "1:upperCase:fixture.Functions:java.lang.String upperCase(java.lang.String):literal",
                 render("<x:validate value='literal'/>", false, options(), 2));
     }
+    @Test void exposesOrdinaryTldTagMetadataToTagExtraInfoValidation() throws Exception {
+        String tld = """
+                <taglib><uri>urn:test</uri>
+                  <tag><description>Catalog tag information</description><display-name>Catalog tag</display-name>
+                    <icon><small-icon>/16/catalog.jpg</small-icon><large-icon>/32/catalog.jpg</large-icon></icon>
+                    <name>inspect</name><tag-class>fixture.Tags$TagFileMetadata</tag-class>
+                    <tei-class>fixture.Tags$TagCatalogValidation</tei-class><body-content>empty</body-content></tag>
+                  <tag><description>First tag information</description><display-name>First tag</display-name>
+                    <icon><small-icon>/16/first.jpg</small-icon><large-icon>/32/first.jpg</large-icon></icon>
+                    <name>first</name><tag-class>fixture.Tags$Echo</tag-class><tei-class>fixture.Tags$TagCatalogValidation</tei-class>
+                    <body-content>scriptless</body-content>
+                    <attribute><name>label</name><required>true</required></attribute>
+                    <variable><name-given>result</name-given><variable-class>java.lang.Integer</variable-class>
+                      <declare>false</declare><scope>AT_BEGIN</scope></variable><dynamic-attributes>true</dynamic-attributes></tag>
+                  <tag><description>Second tag information</description><name>second</name>
+                    <tag-class>fixture.Tags$Echo</tag-class><body-content>tagdependent</body-content></tag>
+                </taglib>
+                """;
+        var library = new TldParser().parse("/WEB-INF/catalog.tld", tld.getBytes(StandardCharsets.UTF_8));
+        var configured = new GenerationOptions(List.of(), Map.of(), false, Map.of(), Map.of("urn:test", library));
+
+        assertEquals("ok", render("<x:inspect/>", false, configured));
+    }
     @Test void exposesTldTagFileMetadataToTagExtraInfoValidation() throws Exception {
         String tld = """
                 <taglib><uri>urn:test</uri>
@@ -829,6 +852,55 @@ class TagGenerationTest {
                                     || !"Simple Tag File".equals(info.getInfoString()))
                                 return new ValidationMessage[]{new ValidationMessage(data.getId(), "Unexpected tag file metadata")};
                             return null;
+                        }
+                    }
+                    public static class TagCatalogValidation extends TagExtraInfo {
+                        public ValidationMessage[] validate(TagData data) {
+                            TagInfo invocation = getTagInfo();
+                            if (!"Catalog tag information".equals(invocation.getInfoString())
+                                    || !"Catalog tag".equals(invocation.getDisplayName())
+                                    || !"/16/catalog.jpg".equals(invocation.getSmallIcon())
+                                    || !"/32/catalog.jpg".equals(invocation.getLargeIcon()))
+                                return failure(data, "Unexpected invoking tag metadata");
+                            TagLibraryInfo library = getTagInfo().getTagLibrary();
+                            TagInfo[] tags = library == null ? null : library.getTags();
+                            if (tags == null || tags.length != 3)
+                                return failure(data, "Expected the three ordinary TLD tags");
+                            TagInfo first = null, second = null;
+                            for (TagInfo tag : tags) {
+                                if ("first".equals(tag.getTagName())) first = tag;
+                                if ("second".equals(tag.getTagName())) second = tag;
+                            }
+                            if (first == null || second == null || first.getTagLibrary() != library
+                                    || !"fixture.Tags$Echo".equals(first.getTagClassName())
+                                    || !"scriptless".equals(first.getBodyContent())
+                                    || !"First tag information".equals(first.getInfoString())
+                                    || !"First tag".equals(first.getDisplayName())
+                                    || !"/16/first.jpg".equals(first.getSmallIcon())
+                                    || !"/32/first.jpg".equals(first.getLargeIcon()) || !first.hasDynamicAttributes())
+                                return failure(data, "Unexpected first tag metadata");
+                            TagAttributeInfo[] attributes = first.getAttributes();
+                            TagVariableInfo[] variables = first.getTagVariableInfos();
+                            TagExtraInfo extraInfo = first.getTagExtraInfo();
+                            if (attributes == null || attributes.length != 1 || !"label".equals(attributes[0].getName())
+                                    || !attributes[0].isRequired())
+                                return failure(data, "Unexpected first tag attributes");
+                            if (variables == null || variables.length != 1 || !"result".equals(variables[0].getNameGiven())
+                                    || !"java.lang.Integer".equals(variables[0].getClassName())
+                                    || variables[0].getDeclare() || variables[0].getScope() != VariableInfo.AT_BEGIN)
+                                return failure(data, "Unexpected first tag variables");
+                            if (extraInfo == null) return failure(data, "First tag extra info was null");
+                            if (extraInfo.getTagInfo() != first) return failure(data, "First tag extra info was not linked");
+                            if (!"tagdependent".equals(second.getBodyContent())
+                                    || !"Second tag information".equals(second.getInfoString())
+                                    || second.getAttributes() == null || second.getAttributes().length != 0
+                                    || second.getTagVariableInfos() == null || second.getTagVariableInfos().length != 0
+                                    || second.getTagExtraInfo() != null || second.hasDynamicAttributes())
+                                return failure(data, "Unexpected second tag metadata");
+                            return null;
+                        }
+                        private ValidationMessage[] failure(TagData data, String message) {
+                            return new ValidationMessage[]{new ValidationMessage(data.getId(), message)};
                         }
                     }
                     public static class PageDataValidator extends TagLibraryValidator {

@@ -580,8 +580,9 @@ public final class PageGenerator {
                     .collect(java.util.stream.Collectors.joining(", "));
             tagValidations.add("var " + tagInfo + " = new jakarta.servlet.jsp.tagext.TagInfo("
                     + JavaSource.quote(tag.name()) + ", " + JavaSource.quote(tag.handlerClass()) + ", "
-                    + JavaSource.quote(tag.bodyContent()) + ", null, " + tagLibrary + ", " + extraInfo
-                    + ", new jakarta.servlet.jsp.tagext.TagAttributeInfo[] {" + attributes + "}, null, null, null, "
+                    + JavaSource.quote(tag.bodyContent()) + ", " + nullableString(tag.infoString()) + ", " + tagLibrary + ", " + extraInfo
+                    + ", new jakarta.servlet.jsp.tagext.TagAttributeInfo[] {" + attributes + "}, " + nullableString(tag.displayName())
+                    + ", " + nullableString(tag.smallIcon()) + ", " + nullableString(tag.largeIcon()) + ", "
                     + "new jakarta.servlet.jsp.tagext.TagVariableInfo[] {" + variables + "}, " + tag.dynamicAttributes() + ");\n"
                     + extraInfo + ".setTagInfo(" + tagInfo + ");\n", node.location());
 
@@ -695,9 +696,39 @@ public final class PageGenerator {
                     .sorted(java.util.Comparator.comparing(TagDescriptor::name))
                     .map(tag -> tagFileInfoSource(tag, node.location()))
                     .collect(java.util.stream.Collectors.joining(", "));
+            var tagDeclarations = new StringBuilder();
+            var tagNames = new ArrayList<String>();
+            int tagIndex = 0;
+            for (var tag : library.tags().values()) {
+                if (tag.tagFile()) continue;
+                String tagInfo = "_jspxTldTagInfo" + tagIndex;
+                String tagExtraInfo = "_jspxTldTagExtraInfo" + tagIndex;
+                if (tag.teiClass() != null)
+                    tagDeclarations.append("var ").append(tagExtraInfo).append(" = new ")
+                            .append(tag.teiClass().replace('$', '.')).append("(); ");
+                String attributes = tag.attributes().values().stream().map(this::tagAttributeInfoSource)
+                        .collect(java.util.stream.Collectors.joining(", "));
+                String variables = tag.variables().stream().map(variable ->
+                        "new jakarta.servlet.jsp.tagext.TagVariableInfo(" + nullableString(variable.name()) + ", "
+                                + nullableString(variable.nameFromAttribute()) + ", " + JavaSource.quote(variable.className())
+                                + ", " + variable.declare() + ", " + variable.scope() + ")")
+                        .collect(java.util.stream.Collectors.joining(", "));
+                tagDeclarations.append("var ").append(tagInfo).append(" = new jakarta.servlet.jsp.tagext.TagInfo(")
+                        .append(JavaSource.quote(tag.name())).append(", ").append(nullableString(tag.handlerClass())).append(", ")
+                        .append(JavaSource.quote(tag.bodyContent())).append(", ").append(nullableString(tag.infoString())).append(", this, ")
+                        .append(tag.teiClass() == null ? "null" : tagExtraInfo).append(", ")
+                        .append("new jakarta.servlet.jsp.tagext.TagAttributeInfo[] {").append(attributes).append("}, ")
+                        .append(nullableString(tag.displayName())).append(", ").append(nullableString(tag.smallIcon())).append(", ")
+                        .append(nullableString(tag.largeIcon())).append(", new jakarta.servlet.jsp.tagext.TagVariableInfo[] {")
+                        .append(variables).append("}, ").append(tag.dynamicAttributes()).append("); ");
+                if (tag.teiClass() != null) tagDeclarations.append(tagExtraInfo).append(".setTagInfo(").append(tagInfo).append("); ");
+                tagNames.add(tagInfo);
+                tagIndex++;
+            }
             return "new jakarta.servlet.jsp.tagext.TagLibraryInfo(" + JavaSource.quote(prefix) + ", "
                     + JavaSource.quote(node.namespace()) + ") {\n"
-                    + "{ functions = new jakarta.servlet.jsp.tagext.FunctionInfo[] {" + functions + "}; "
+                    + "{ " + tagDeclarations + "tags = new jakarta.servlet.jsp.tagext.TagInfo[] {"
+                    + String.join(", ", tagNames) + "}; functions = new jakarta.servlet.jsp.tagext.FunctionInfo[] {" + functions + "}; "
                     + "tagFiles = new jakarta.servlet.jsp.tagext.TagFileInfo[] {" + tagFiles + "}; }\n"
                     + "@Override public jakarta.servlet.jsp.tagext.TagLibraryInfo[] getTagLibraryInfos() { "
                     + "return new jakarta.servlet.jsp.tagext.TagLibraryInfo[0]; }\n}";

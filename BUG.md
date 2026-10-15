@@ -1517,3 +1517,16 @@ Entry format: `short id · date · symptom · minimal repro · cause hypothesis 
   caching the ordinary conversion fallback. Inherited metadata remains explicitly
   unsupported and yields a page-location diagnostic; no metadata class is loaded
   or initialized and no runtime introspection fallback is added.
+
+## IBARRA-145 · 2026-10-15 · TLD TagInfo catalogues are empty
+
+- Symptom: a TLD tag's `TagExtraInfo` sees no declared tags through
+  `TagLibraryInfo.getTags()`, and its invocation `TagInfo` omits TLD description,
+  display name and icon metadata.
+- Minimal repro: run
+  `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.taginfo.URLClientIT`.
+- Cause: TLD tag parsing discarded descriptive fields, generated libraries did
+  not initialize `tags`, and invocation metadata passed null for descriptive fields.
+- Status: FIXED by retaining ordinary TLD tag metadata and generating the ordered
+  `TagInfo` catalogue with linked `TagExtraInfo` instances.

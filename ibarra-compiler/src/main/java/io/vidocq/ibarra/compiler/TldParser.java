@@ -133,12 +133,27 @@ public final class TldParser {
         var fields = new LinkedHashMap<String, String>();
         var attributes = new LinkedHashMap<String, TagAttribute>();
         var variables = new ArrayList<TagVariableDescriptor>();
+        String infoString = null, displayName = null, smallIcon = null, largeIcon = null;
         boolean unsupported = tagFile;
         String unsupportedReason = null;
         for (var child : DeploymentXml.children(element)) {
             requireNamespace(child, namespace, at);
             String key = child.getLocalName();
-            if (Set.of("description", "display-name", "icon", "example", "tag-extension").contains(key)) continue;
+            if (key.equals("description")) {
+                if (infoString == null) infoString = child.getTextContent().trim();
+                continue;
+            }
+            if (key.equals("display-name")) {
+                if (displayName == null) displayName = child.getTextContent().trim();
+                continue;
+            }
+            if (key.equals("icon")) {
+                var icons = icons(child, namespace, at);
+                if (smallIcon == null) smallIcon = icons.smallIcon();
+                if (largeIcon == null) largeIcon = icons.largeIcon();
+                continue;
+            }
+            if (Set.of("example", "tag-extension").contains(key)) continue;
             if (key.equals("variable")) {
                 var variable = variable(child, namespace, at);
                 boolean duplicate = variables.stream().anyMatch(previous ->
@@ -215,7 +230,30 @@ public final class TldParser {
                         + variable.nameFromAttribute());
         }
         return new TagDescriptor(name, handler, content, attributes, bool(fields, "dynamic-attributes", false, at),
-                unsupported, tagFile, unsupportedReason, false, tei, variables, tagFilePath);
+                unsupported, tagFile, unsupportedReason, false, tei, variables, tagFilePath,
+                infoString, displayName, smallIcon, largeIcon);
+    }
+
+    private record TagIcons(String smallIcon, String largeIcon) { }
+
+    private TagIcons icons(Element element, String namespace, SourceLocation at) {
+        String smallIcon = null, largeIcon = null;
+        for (var child : DeploymentXml.children(element)) {
+            requireNamespace(child, namespace, at);
+            switch (child.getLocalName()) {
+                case "small-icon" -> {
+                    if (smallIcon != null) throw new PageParseException(at, "Duplicate TLD small icon");
+                    smallIcon = child.getTextContent().trim();
+                }
+                case "large-icon" -> {
+                    if (largeIcon != null) throw new PageParseException(at, "Duplicate TLD large icon");
+                    largeIcon = child.getTextContent().trim();
+                }
+                case "description" -> { }
+                default -> throw new PageParseException(at, "Invalid TLD icon field: " + child.getLocalName());
+            }
+        }
+        return new TagIcons(smallIcon, largeIcon);
     }
 
     private TagVariableDescriptor variable(Element element, String namespace, SourceLocation at) {

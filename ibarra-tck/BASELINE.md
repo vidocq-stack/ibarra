@@ -1,7 +1,7 @@
 # Jakarta Pages 4.0.0 diagnostic baseline
 
 Date: 2026-10-15. Temurin Java 25, Maven 3.9.16, macOS; Ibarra development
-version `0.4.0-SNAPSHOT` at merged base commit `e3ac8f2` with the IBARRA-144
+version `0.4.0-SNAPSHOT` at merged base commit `d21998a` with IBARRA-145
 working-tree changes applied, plus modular Foy/Chappe and published Peano snapshots.
 This records compatibility checks, not a performance benchmark or certification.
 
@@ -24,21 +24,22 @@ post-merge Ibarra build and official smoke workflows also completed successfully
 | Official classes selected | 92 |
 | Declared runtime-visible JUnit `@Test` methods in the official binary | 682 |
 | Official Surefire entries reported | 682 |
-| Passing test entries | 581 |
-| Method-level errors | 101 |
+| Passing test entries | 595 |
+| Method-level errors | 87 |
 | Class-level setup/deployment errors | 0 |
-| Total reported errors | 101 |
+| Total reported errors | 87 |
 | Assertion failures reported as Surefire `failure` | 0 |
 | Skipped entries | 0 |
-| Classes with no reported errors | 65/92 |
+| Classes with no reported errors | 66/92 |
 | Adapter regression tests (separate invocation) | 35/35 |
 | Smoke subset methods passing within this full run | 18/18 |
 
-Surefire reports `Tests run: 682, Failures: 0, Errors: 101, Skipped: 0` and exits
+Surefire reports `Tests run: 682, Failures: 0, Errors: 87, Skipped: 0` and exits
 nonzero. All 92 selected classes deploy and all 682 declared methods execute; the
-101 errors are method-level TCK errors. The TCK's HTTP assertion helper reports
+87 errors are method-level TCK errors. The TCK's HTTP assertion helper reports
 method failures as exceptions, hence `errors` rather than `failures`; zero in the
 failure column does not mean success. TCK-013 passes all 3 methods after IBARRA-144;
+TCK-014 passes all 14 methods after IBARRA-145;
 TCK-018 passes all 5 methods after IBARRA-143,
 TCK-017 passes all 15, TCK-054 passes all 7, TCK-056 passes all 8 after IBARRA-141,
 and TCK-057 passes all 12 after IBARRA-142. Certification remains pending.
@@ -77,8 +78,9 @@ and TCK-056). The run after IBARRA-139 but before IBARRA-140 reported 669 entrie
 `0c9207f` recorded 682 entries, 563 passes and 119 method errors, with no
 class-level deployment errors. The post-IBARRA-142 full run reported 571 passes
 and 111 errors. The full run after IBARRA-143 reported 576 passes and 106 errors;
-this full run after IBARRA-144 reports 581 passes and 101 errors, and the focused
-TCK-013 class passes all three methods. The declared-method inventory remains 682;
+the full run after IBARRA-144 reported 581 passes and 101 errors; this full run
+after IBARRA-145 reports 595 passes and 87 errors, including all 14 TCK-014
+methods. The declared-method inventory remains 682;
 no certification claim is made while method errors remain.
 
 Static XML output and the initial XML `.tagx` subset restore all six previously
@@ -95,8 +97,7 @@ remain unchanged.
 On 2026-10-14 the isolated official
 `ee.jakarta.tck.pages.api.jakarta_el.beanelresolver.URLClientIT#beanElResolverTest`
 passes after the TCK adapter qualified-exports generated bean packages only to
-`jakarta.el`. The complete 92-class suite was not rerun for this change, so the
-full-suite totals above remain the last measured baseline rather than a new total.
+`jakarta.el`; the current full-suite run includes that coverage.
 
 The preceding typed-forward delivery restored exactly `positiveIncludeForwardTest`
 against the merged 518-pass baseline, reaching 519 passes and 163 method errors.

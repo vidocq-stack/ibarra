@@ -105,11 +105,13 @@ occurrence is validated during servlet initialization, before the page's
 fails initialization.
 
 The generated `TagLibraryInfo` is linked from `TagInfo` and exposes the TLD URI,
-prefix, function catalogue as `FunctionInfo` values, and TLD-declared tag files as
-`TagFileInfo` values. Each tag-file entry retains its name and path, and its
-`TagInfo` carries metadata parsed from the referenced tag file's tag, attribute
-and variable directives. Ordinary TLD tag catalogues and nested-library catalogues
-remain unpopulated.
+prefix, function catalogue as `FunctionInfo` values, ordinary TLD tags as
+`TagInfo` values, and TLD-declared tag files as `TagFileInfo` values. Ordinary tag
+entries retain their handler, body content, description, display name, icons,
+attributes, variables, dynamic-attribute flag and linked `TagExtraInfo`. Each
+tag-file entry retains its name and path, and its `TagInfo` carries metadata
+parsed from the referenced tag file's tag, attribute and variable directives.
+Nested-library catalogues remain unpopulated.
 
 TLD `TagLibraryValidator` classes receive the standard-syntax page XML view once
 during generated servlet initialization. The view includes tag-library namespaces,
@@ -136,8 +138,8 @@ Nested action bodies, `jsp:param` in tag-file forwards, classic body and excepti
 callbacks, EL, XML tag-file actions, fragments and complete tag-file runtime
 semantics remain unsupported.
 
-TLD-declared `TagFileInfo` entries are available to TEI validation. Ordinary TLD
-`TagInfo` catalogues and nested `TagLibraryInfo` catalogues remain unsupported.
+TLD-declared `TagFileInfo` and ordinary `TagInfo` entries are available to TEI
+validation. Nested `TagLibraryInfo` catalogues remain unsupported.
 
 == Compiler-provided tag identifiers
 

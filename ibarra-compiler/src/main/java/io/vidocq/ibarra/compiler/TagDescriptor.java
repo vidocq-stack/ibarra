@@ -25,7 +25,14 @@ import java.util.*;
 /** Immutable handler metadata; unsupported semantics must be rejected before generation. */
 public record TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
         boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile, String unsupportedReason,
-        boolean emitsXmlDeclaration, String teiClass, List<TagVariableDescriptor> variables, String tagFilePath) {
+        boolean emitsXmlDeclaration, String teiClass, List<TagVariableDescriptor> variables, String tagFilePath,
+        String infoString, String displayName, String smallIcon, String largeIcon) {
+    public TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
+            boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile, String unsupportedReason,
+            boolean emitsXmlDeclaration, String teiClass, List<TagVariableDescriptor> variables, String tagFilePath) {
+        this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, tagFile, unsupportedReason,
+                emitsXmlDeclaration, teiClass, variables, tagFilePath, null, null, null, null);
+    }
     public TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
             boolean dynamicAttributes, boolean unsupportedMetadata) {
         this(name, handlerClass, bodyContent, attributes, dynamicAttributes, unsupportedMetadata, false, null, false, null, List.of(), null);

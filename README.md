@@ -41,8 +41,10 @@ must come from a required, non-runtime string attribute with a translation-time
 literal value. Classic handlers synchronize static `TagExtraInfo` and TLD
 variables across their lifecycle. Simple handlers synchronize `AT_BEGIN` and
 `AT_END` variables after `doTag`. TEI validation receives generated `TagInfo`
-and `TagLibraryInfo` metadata, including TLD functions and tag-file entries;
-dynamic TEI metadata and complete tag and nested-library catalogues remain pending.
+and `TagLibraryInfo` metadata, including TLD functions, ordinary tag entries and
+tag-file entries. Ordinary tag entries retain TLD attributes, variables,
+dynamic-attribute flags and descriptive metadata; nested-library catalogues
+remain pending.
 TLD `TagLibraryValidator`
 declarations receive generated PageData XML during
 standard-page servlet initialization; validators referenced by a standard tag file
