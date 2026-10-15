@@ -43,8 +43,9 @@ variables across their lifecycle. Simple handlers synchronize `AT_BEGIN` and
 `AT_END` variables after `doTag`. TEI validation receives generated `TagInfo`
 and `TagLibraryInfo` metadata, including TLD functions, ordinary tag entries and
 tag-file entries. Ordinary tag entries retain TLD attributes, variables,
-dynamic-attribute flags and descriptive metadata; nested-library catalogues
-remain pending.
+dynamic-attribute flags and descriptive metadata. `getTagLibraryInfos()` returns
+the complete set of libraries imported by page directives with their descriptor
+metadata.
 TLD `TagLibraryValidator`
 declarations receive generated PageData XML during
 standard-page servlet initialization; validators referenced by a standard tag file
@@ -101,15 +102,16 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 | `ibarra-compiler` | JSP/JSPX parser, page model, Java generator, initial tag handlers and build-time compiler | I2 implemented; I3/I6/I7 in progress |
 | `ibarra-maven-plugin` | `precompile` goal at process-classes; module service registration | Initial I4 implemented |
 | `ibarra-foy` | Optional Foy engine provider; application layer, routing and TLD listener lifecycle | Initial I5 implemented |
-| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; smoke 18/18; latest `all` run reports 581/682 across 92 classes |
+| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; smoke 18/18; latest `all` run reports 600/682 across 92 classes |
 
 The latest full `all` run (2026-10-15) executes all 682 methods in 92 classes:
-581 pass, 101 report method-level errors, and there are no setup errors, assertion
-failures or skipped methods (85.2%). TCK-013 passes 3/3 after IBARRA-144 and
+600 pass, 82 report method-level errors, and there are no setup errors, assertion
+failures or skipped methods (88.0%). TCK-013 passes 3/3 after IBARRA-144,
+TCK-014 passes 14/14 after IBARRA-145, and TCK-015 passes 13/13 after IBARRA-146.
 TCK-018 passes 5/5 after IBARRA-143. The SimpleTagSupport TCK class passes 11/11,
 TCK-054 passes 7/7, TCK-056 passes 8/8 after IBARRA-141, and TCK-057 passes 12/12
 after IBARRA-142. Ibarra remains uncertified while method errors remain. The
-ordinary reactor passes 365 tests,
+ordinary reactor passes 367 tests,
 the adapter 35/35 and the independent example
 packages successfully. Typed forwarding uses the producer delivered in
 [Foy #47](https://codefloe.com/Vidocq/foy/pulls/47), now merged and published.

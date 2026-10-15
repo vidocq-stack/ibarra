@@ -1,12 +1,13 @@
 # Official Pages failure inventory
 
 Date: 2026-10-15, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-The latest full suite exercised all 682 official methods across 92 classes: 581
-pass and 101 report method-level errors, with no class-level setup errors,
-assertion failures or skipped methods. TCK-013 passes 3/3 after IBARRA-144 and
-TCK-018 passes 5/5 after IBARRA-143;
+The latest full suite exercised all 682 official methods across 92 classes: 600
+pass and 82 report method-level errors, with no class-level setup errors,
+assertion failures or skipped methods. TCK-013 passes 3/3 after IBARRA-144,
+TCK-014 passes 14/14 after IBARRA-145, TCK-015 passes 13/13 after IBARRA-146,
+and TCK-018 passes 5/5 after IBARRA-143;
 TCK-054 passes 7/7 after IBARRA-140, TCK-056 passes 8/8 after IBARRA-141, and
-TCK-057 passes 12/12 after IBARRA-142. Twenty-eight classes still have method-level
+TCK-057 passes 12/12 after IBARRA-142. Twenty-five classes still have method-level
 errors, so certification remains pending.
 See [BASELINE.md](BASELINE.md) for current counts and historical snapshots. Each
 class keeps its previous stable id.
@@ -279,27 +280,22 @@ Previously failing methods:
 
 ## TCK-015 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.taglibraryinfo.URLClientIT
 
-- Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.taglibraryinfo.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Date: 2026-10-12; fixed 2026-10-15 by IBARRA-146.
+- Status: RESOLVED; the focused official class passes 13/13.
+- Symptom: generated `TagLibraryInfo` objects omitted TLD header metadata and the
+  other libraries imported by the same page translation unit.
+- Cause: TLD parsing discarded header fields, and generated instances did not
+  initialize the corresponding properties or imported-library catalogue.
+- Fix: retain TLD metadata and generate the complete `TagLibraryInfo` set for
+  libraries imported by page directives.
 
-Failing methods:
+Methods still failing after IBARRA-145 and resolved by this fix:
 
-- `tagLibraryInfoGetFunctionTest`
-- `tagLibraryInfoGetTagTest`
-- `tagLibraryInfoGetPrefixStringTest`
-- `tagLibraryInfoGetURITest`
 - `tagLibraryInfoGetShortNameTest`
-- `tagLibraryInfoGetTagFilesTest`
 - `tagLibraryInfoGetInfoStringTest`
 - `tagLibraryInfoGetRequiredVersionTest`
 - `tagLibraryInfoGetReliableURNTest`
-- `tagLibraryInfoGetFunctionsTest`
 - `tagLibraryInfoGetTagLibraryInfosTest`
-- `tagLibraryInfoGetTagFileTest`
-- `tagLibraryInfoGetTagsTest`
 
 ## TCK-016 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.taglibraryvalidator.URLClientIT
 

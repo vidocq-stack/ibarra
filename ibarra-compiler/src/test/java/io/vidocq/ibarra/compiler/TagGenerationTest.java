@@ -655,6 +655,30 @@ class TagGenerationTest {
 
         assertEquals("ok", render("<x:inspect/>", false, configured));
     }
+    @Test void exposesTagLibraryHeaderAndImportedLibrariesToTagExtraInfoValidation() throws Exception {
+        String primaryTld = """
+                <taglib version="3.0"><description>Primary library</description><tlib-version>1.0</tlib-version>
+                  <short-name>primary</short-name><uri>urn:primary</uri>
+                  <tag><name>inspect</name><tag-class>fixture.Tags$TagFileMetadata</tag-class>
+                    <tei-class>fixture.Tags$TagLibraryMetadataValidation</tei-class><body-content>empty</body-content></tag>
+                </taglib>
+                """;
+        String secondaryTld = """
+                <taglib version="3.0"><description>Secondary library</description><tlib-version>1.0</tlib-version>
+                  <short-name>secondary</short-name><uri>urn:secondary</uri>
+                  <tag><name>other</name><tag-class>fixture.Tags$TagFileMetadata</tag-class><body-content>empty</body-content></tag>
+                </taglib>
+                """;
+        var parser = new TldParser();
+        var primary = parser.parse("/WEB-INF/primary.tld", primaryTld.getBytes(StandardCharsets.UTF_8));
+        var secondary = parser.parse("/WEB-INF/secondary.tld", secondaryTld.getBytes(StandardCharsets.UTF_8));
+        var configured = new GenerationOptions(List.of(), Map.of(), false, Map.of(),
+                Map.of("urn:primary", primary, "urn:secondary", secondary));
+        String page = "<%@ page session='false' %><%@ taglib prefix='a' uri='urn:primary' %>"
+                + "<%@ taglib prefix='b' uri='urn:secondary' %><a:inspect/>";
+
+        assertEquals("ok", render(page, false, configured));
+    }
     @Test void exposesTldTagFileMetadataToTagExtraInfoValidation() throws Exception {
         String tld = """
                 <taglib><uri>urn:test</uri>
@@ -897,6 +921,32 @@ class TagGenerationTest {
                                     || second.getTagVariableInfos() == null || second.getTagVariableInfos().length != 0
                                     || second.getTagExtraInfo() != null || second.hasDynamicAttributes())
                                 return failure(data, "Unexpected second tag metadata");
+                            return null;
+                        }
+                        private ValidationMessage[] failure(TagData data, String message) {
+                            return new ValidationMessage[]{new ValidationMessage(data.getId(), message)};
+                        }
+                    }
+                    public static class TagLibraryMetadataValidation extends TagExtraInfo {
+                        public ValidationMessage[] validate(TagData data) {
+                            TagLibraryInfo library = getTagInfo().getTagLibrary();
+                            if (library == null || !"urn:primary".equals(library.getURI())
+                                    || !"urn:primary".equals(library.getReliableURN())
+                                    || !"primary".equals(library.getShortName())
+                                    || !"Primary library".equals(library.getInfoString())
+                                    || !"3.0".equals(library.getRequiredVersion()))
+                                return failure(data, "Unexpected primary tag library metadata");
+                            TagLibraryInfo[] imported = library.getTagLibraryInfos();
+                            if (imported == null || imported.length != 2)
+                                return failure(data, "Expected both imported tag libraries");
+                            boolean primary = false, secondary = false;
+                            for (TagLibraryInfo item : imported) {
+                                if ("urn:primary".equals(item.getReliableURN()) && "primary".equals(item.getShortName())) primary = true;
+                                if ("urn:secondary".equals(item.getReliableURN()) && "secondary".equals(item.getShortName())
+                                        && "Secondary library".equals(item.getInfoString())
+                                        && "3.0".equals(item.getRequiredVersion())) secondary = true;
+                            }
+                            if (!primary || !secondary) return failure(data, "Unexpected imported tag library metadata");
                             return null;
                         }
                         private ValidationMessage[] failure(TagData data, String message) {

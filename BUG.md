@@ -1530,3 +1530,18 @@ Entry format: `short id · date · symptom · minimal repro · cause hypothesis 
   not initialize `tags`, and invocation metadata passed null for descriptive fields.
 - Status: FIXED by retaining ordinary TLD tag metadata and generating the ordered
   `TagInfo` catalogue with linked `TagExtraInfo` instances.
+
+## IBARRA-146 · 2026-10-15 · TLD TagLibraryInfo metadata is incomplete
+
+- Symptom: `TagLibraryInfo` returned empty header metadata and did not expose the
+  other tag libraries imported by the same page translation unit.
+- Minimal repro: run
+  `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.taglibraryinfo.URLClientIT`.
+- Cause: TLD parsing discarded the short name, description, TLD version and URI
+  metadata needed to initialize `TagLibraryInfo`; generated instances also omitted
+  the translation unit's imported-library catalogue.
+- Fix: retain TLD header metadata and initialize each generated `TagLibraryInfo`
+  with it and the complete set of libraries imported by page directives.
+- Status: FIXED (2026-10-15). TCK-015 passes 13/13; the full suite reports
+  600/682 methods passing, with 82 method-level errors and no setup errors.

@@ -24,7 +24,12 @@ import java.util.*;
 
 /** Immutable build-time TLD metadata; a missing URI still permits listener registration. */
 public record TagLibraryDescriptor(String resourcePath, String uri, List<String> listenerClasses,
-        Map<String, TagDescriptor> tags, TagLibraryValidatorDescriptor validator, Map<String, TldFunction> functions) {
+        Map<String, TagDescriptor> tags, TagLibraryValidatorDescriptor validator, Map<String, TldFunction> functions,
+        String infoString, String shortName, String tlibVersion, String requiredVersion) {
+    public TagLibraryDescriptor(String resourcePath, String uri, List<String> listenerClasses,
+            Map<String, TagDescriptor> tags, TagLibraryValidatorDescriptor validator, Map<String, TldFunction> functions) {
+        this(resourcePath, uri, listenerClasses, tags, validator, functions, null, null, null, null);
+    }
     public TagLibraryDescriptor(String resourcePath, String uri, List<String> listenerClasses) {
         this(resourcePath, uri, listenerClasses, Map.of(), null, Map.of());
     }

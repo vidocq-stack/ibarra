@@ -79,7 +79,7 @@ public final class PageGenerator {
         private final JavaSource fragments = new JavaSource();
         private final TldReferences.Resolved resolvedLibraries;
         private final GenerationOptions generationOptions;
-        private final Map<String, PageNode.Directive> taglibBindings = new HashMap<>();
+        private final Map<String, PageNode.Directive> taglibBindings = new LinkedHashMap<>();
         private record NamespaceBinding(String uri, SourceLocation location) {}
         private final Map<String, NamespaceBinding> namespaces = new HashMap<>();
         private String parentTag = "null";
@@ -686,6 +686,44 @@ public final class PageGenerator {
         private String tagLibraryInfoSource(TagLibraryDescriptor library, PageNode.Element node) {
             int separator = node.name().indexOf(':');
             String prefix = separator < 0 ? "" : node.name().substring(0, separator);
+            return "new jakarta.servlet.jsp.tagext.TagLibraryInfo(" + JavaSource.quote(prefix) + ", "
+                    + JavaSource.quote(node.namespace()) + ") {\n"
+                    + "private jakarta.servlet.jsp.tagext.TagLibraryInfo[] _jspxTagLibraryInfos;\n"
+                    + "{ " + tagLibraryMetadataSource(library, node.location())
+                    + "_jspxTagLibraryInfos = new jakarta.servlet.jsp.tagext.TagLibraryInfo[] {"
+                    + tagLibraryInfosSource(library, prefix, node.namespace(), node.location()) + "}; }\n"
+                    + "@Override public jakarta.servlet.jsp.tagext.TagLibraryInfo[] getTagLibraryInfos() { "
+                    + "return _jspxTagLibraryInfos; }\n}";
+        }
+
+        private String tagLibraryInfosSource(TagLibraryDescriptor current, String currentPrefix, String currentUri,
+                SourceLocation at) {
+            var entries = new ArrayList<String>();
+            boolean currentIncluded = false;
+            for (var binding : taglibBindings.entrySet()) {
+                PageNode.Directive directive = binding.getValue();
+                String uri = directive.attributes().get("uri");
+                if (uri == null) continue;
+                TagLibraryDescriptor imported = resolvedLibraries.resolve(uri, directive.location(), true);
+                if (imported == null) continue;
+                if (binding.getKey().equals(currentPrefix) && uri.equals(currentUri)) {
+                    entries.add("this");
+                    currentIncluded = true;
+                } else entries.add(tagLibraryInfoEntrySource(binding.getKey(), uri, imported, at));
+            }
+            if (!currentIncluded) entries.add("this");
+            return String.join(", ", entries);
+        }
+
+        private String tagLibraryInfoEntrySource(String prefix, String uri, TagLibraryDescriptor library, SourceLocation at) {
+            return "new jakarta.servlet.jsp.tagext.TagLibraryInfo(" + JavaSource.quote(prefix) + ", "
+                    + JavaSource.quote(uri) + ") {\n"
+                    + "{ " + tagLibraryMetadataSource(library, at) + "}\n"
+                    + "@Override public jakarta.servlet.jsp.tagext.TagLibraryInfo[] getTagLibraryInfos() { "
+                    + "return _jspxTagLibraryInfos; }\n}";
+        }
+
+        private String tagLibraryMetadataSource(TagLibraryDescriptor library, SourceLocation at) {
             String functions = library.functions().values().stream()
                     .sorted(java.util.Comparator.comparing(TldFunction::name))
                     .map(function -> "new jakarta.servlet.jsp.tagext.FunctionInfo(" + JavaSource.quote(function.name()) + ", "
@@ -694,7 +732,7 @@ public final class PageGenerator {
             String tagFiles = library.tags().values().stream()
                     .filter(tag -> tag.tagFile() && tag.tagFilePath() != null)
                     .sorted(java.util.Comparator.comparing(TagDescriptor::name))
-                    .map(tag -> tagFileInfoSource(tag, node.location()))
+                    .map(tag -> tagFileInfoSource(tag, at))
                     .collect(java.util.stream.Collectors.joining(", "));
             var tagDeclarations = new StringBuilder();
             var tagNames = new ArrayList<String>();
@@ -725,13 +763,12 @@ public final class PageGenerator {
                 tagNames.add(tagInfo);
                 tagIndex++;
             }
-            return "new jakarta.servlet.jsp.tagext.TagLibraryInfo(" + JavaSource.quote(prefix) + ", "
-                    + JavaSource.quote(node.namespace()) + ") {\n"
-                    + "{ " + tagDeclarations + "tags = new jakarta.servlet.jsp.tagext.TagInfo[] {"
-                    + String.join(", ", tagNames) + "}; functions = new jakarta.servlet.jsp.tagext.FunctionInfo[] {" + functions + "}; "
-                    + "tagFiles = new jakarta.servlet.jsp.tagext.TagFileInfo[] {" + tagFiles + "}; }\n"
-                    + "@Override public jakarta.servlet.jsp.tagext.TagLibraryInfo[] getTagLibraryInfos() { "
-                    + "return new jakarta.servlet.jsp.tagext.TagLibraryInfo[0]; }\n}";
+            return "shortname = " + nullableString(library.shortName()) + "; info = " + nullableString(library.infoString())
+                    + "; tlibversion = " + nullableString(library.tlibVersion()) + "; jspversion = "
+                    + nullableString(library.requiredVersion()) + "; urn = " + nullableString(library.uri()) + "; "
+                    + tagDeclarations + "tags = new jakarta.servlet.jsp.tagext.TagInfo[] {" + String.join(", ", tagNames)
+                    + "}; functions = new jakarta.servlet.jsp.tagext.FunctionInfo[] {" + functions + "}; "
+                    + "tagFiles = new jakarta.servlet.jsp.tagext.TagFileInfo[] {" + tagFiles + "}; ";
         }
 
         private String tagFileInfoSource(TagDescriptor tagFile, SourceLocation at) {

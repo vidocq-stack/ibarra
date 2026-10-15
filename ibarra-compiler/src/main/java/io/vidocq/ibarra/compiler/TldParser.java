@@ -37,15 +37,33 @@ public final class TldParser {
         String namespace = namespace(root);
         if (!"taglib".equals(root.getLocalName()) || !NAMESPACES.contains(namespace))
             throw new PageParseException(at, "Expected a standard taglib root");
-        String uri = null;
+        String uri = null, infoString = null, shortName = null, tlibVersion = null;
+        String requiredVersion = root.hasAttribute("version") ? root.getAttribute("version").trim() : null;
         var listeners = new ArrayList<String>();
         var tags = new LinkedHashMap<String, TagDescriptor>();
         var functions = new LinkedHashMap<String, TldFunction>();
         TagLibraryValidatorDescriptor validator = null;
         for (var child : DeploymentXml.children(root)) {
             String name = child.getLocalName();
-            if (!Set.of("uri", "listener", "tag", "tag-file", "validator", "function").contains(name)) continue;
+            if (!Set.of("description", "tlib-version", "jsp-version", "short-name", "uri",
+                    "listener", "tag", "tag-file", "validator", "function").contains(name)) continue;
             requireNamespace(child, namespace, at);
+            if (name.equals("description")) {
+                if (infoString == null) infoString = child.getTextContent().trim();
+                continue;
+            }
+            if (name.equals("short-name")) {
+                if (shortName == null) shortName = child.getTextContent().trim();
+                continue;
+            }
+            if (name.equals("tlib-version")) {
+                if (tlibVersion == null) tlibVersion = child.getTextContent().trim();
+                continue;
+            }
+            if (name.equals("jsp-version")) {
+                if (requiredVersion == null || requiredVersion.isEmpty()) requiredVersion = child.getTextContent().trim();
+                continue;
+            }
             if (name.equals("function")) {
                 var values = new LinkedHashMap<String, String>();
                 for (var field : DeploymentXml.children(child)) {
@@ -83,7 +101,8 @@ public final class TldParser {
                 listeners.add(type);
             }
         }
-        return new TagLibraryDescriptor(path, uri, listeners, tags, validator, functions);
+        return new TagLibraryDescriptor(path, uri, listeners, tags, validator, functions,
+                infoString, shortName, tlibVersion, requiredVersion);
     }
 
     private TagLibraryValidatorDescriptor validator(Element element, String namespace, SourceLocation at) {

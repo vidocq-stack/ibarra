@@ -111,7 +111,8 @@ entries retain their handler, body content, description, display name, icons,
 attributes, variables, dynamic-attribute flag and linked `TagExtraInfo`. Each
 tag-file entry retains its name and path, and its `TagInfo` carries metadata
 parsed from the referenced tag file's tag, attribute and variable directives.
-Nested-library catalogues remain unpopulated.
+`TagLibraryInfo.getTagLibraryInfos()` exposes the complete set of TLDs imported by
+page directives, with each entry initialized from its descriptor metadata.
 
 TLD `TagLibraryValidator` classes receive the standard-syntax page XML view once
 during generated servlet initialization. The view includes tag-library namespaces,
