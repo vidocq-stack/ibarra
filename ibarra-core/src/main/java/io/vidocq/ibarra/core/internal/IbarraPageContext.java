@@ -244,8 +244,16 @@ final class IbarraPageContext extends PageContext implements io.vidocq.ibarra.sp
         Objects.requireNonNull(path);
         if (!path.startsWith("/")) {
             Object included = request.getAttribute(RequestDispatcher.INCLUDE_SERVLET_PATH);
-            String current = included instanceof String value ? value
-                    : request instanceof HttpServletRequest http ? http.getServletPath() : "/";
+            Object includedPathInfo = request.getAttribute(RequestDispatcher.INCLUDE_PATH_INFO);
+            String current;
+            if (included instanceof String servletPath) {
+                current = servletPath + (includedPathInfo instanceof String pathInfo ? pathInfo : "");
+            } else if (request instanceof HttpServletRequest http) {
+                String pathInfo = http.getPathInfo();
+                current = http.getServletPath() + (pathInfo == null ? "" : pathInfo);
+            } else {
+                current = "/";
+            }
             path = current.substring(0, current.lastIndexOf('/') + 1) + path;
         }
         var dispatcher = context.getRequestDispatcher(path);

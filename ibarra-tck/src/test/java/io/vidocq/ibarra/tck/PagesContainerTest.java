@@ -424,6 +424,46 @@ class PagesContainerTest {
     }
 
     @Test
+    void prefixPropertyGroupMappingResolvesTheFullPagePath() throws Exception {
+        var war = ShrinkWrap.create(WebArchive.class, "prefix-group.war")
+                .setWebXML(new StringAsset("<web-app xmlns='https://jakarta.ee/xml/ns/jakartaee' version='6.1'><jsp-config><jsp-property-group><url-pattern>/pages/*</url-pattern></jsp-property-group></jsp-config></web-app>"))
+                .addAsWebResource(new StringAsset("<%@ page contentType='text/plain' %>prefix page"), "pages/index.jsp")
+                .addAsWebResource(new StringAsset("<%@ page contentType='text/plain' %><jsp:include page='/pages/included.jsp'/>"), "include.jsp")
+                .addAsWebResource(new StringAsset("<%@ page contentType='text/plain' %>included page"), "pages/included.jsp");
+        var container = new PagesContainer(); container.setup(new PagesConfiguration());
+        try {
+            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            try (var client = HttpClient.newHttpClient()) {
+                for (var request : java.util.List.of(java.util.Map.entry("pages/index.jsp", "prefix page"),
+                        java.util.Map.entry("include.jsp", "included page"))) {
+                    var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort()
+                            + "/prefix-group/" + request.getKey())).GET().build(), HttpResponse.BodyHandlers.ofString());
+                    assertEquals(200, response.statusCode(), response.body());
+                    assertEquals(request.getValue(), response.body());
+                }
+            }
+            container.undeploy(war);
+        } finally { container.stop(); }
+    }
+
+    @Test
+    void nestedRelativeIncludesResolvePrefixPropertyGroupPaths() throws Exception {
+        var war = ShrinkWrap.create(WebArchive.class, "nested-prefix-group.war")
+                .setWebXML(new StringAsset("<web-app xmlns='https://jakarta.ee/xml/ns/jakartaee' version='6.1'><jsp-config><jsp-property-group><url-pattern>/include/*</url-pattern></jsp-property-group></jsp-config></web-app>"))
+                .addAsWebResource(new StringAsset("<%@ page contentType='text/plain' %>A:<jsp:include page='include/dynamic.jsp'/>"), "dynamic.jsp")
+                .addAsWebResource(new StringAsset("<%@ page contentType='text/plain' %>B:<jsp:include page='C.jsp'/>"), "include/dynamic.jsp")
+                .addAsWebResource(new StringAsset("C"), "include/C.jsp");
+        var container = new PagesContainer(); container.setup(new PagesConfiguration());
+        try {
+            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var response = HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort()
+                    + "/nested-prefix-group/dynamic.jsp")).GET().build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals("A:B:C", response.body());
+        } finally { container.stop(); }
+    }
+
+    @Test
     void legacyDescriptorKeepsTemplateElLiteral() throws Exception {
         var war = ShrinkWrap.create(WebArchive.class, "legacy.war")
                 .setWebXML(new StringAsset("<!DOCTYPE web-app PUBLIC '-//Sun Microsystems, Inc.//DTD Web Application 2.3//EN' 'http://127.0.0.1:1/never.dtd'><web-app><display-name>legacy</display-name></web-app>"))

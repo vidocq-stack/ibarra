@@ -1,7 +1,7 @@
 # Jakarta Pages 4.0.0 diagnostic baseline
 
 Date: 2026-10-15. Temurin Java 25, Maven 3.9.16, macOS; Ibarra development
-version `0.4.0-SNAPSHOT` at merged base commit `5054d9e` with IBARRA-146
+version `0.4.0-SNAPSHOT` at merged base commit `5054d9e` with IBARRA-147
 working-tree changes applied, plus modular Foy/Chappe and published Peano snapshots.
 This records compatibility checks, not a performance benchmark or certification.
 
@@ -14,8 +14,9 @@ The script prepared the official TCK artifacts, built the Ibarra reactor and ran
 the selected official classes. Distribution checksums and artifact preparation
 commands are in [README.md](README.md). No provenance skip was used.
 
-Foy #47 has merged; its parent/API/core snapshots are available to this run. The
-post-merge Ibarra build and official smoke workflows also completed successfully.
+Foy #51 has merged; its parent/API/core snapshots include JSP property-group
+URL-pattern routing. The post-merge Ibarra build and official smoke workflows
+also completed successfully.
 
 ## Recorded results
 
@@ -24,26 +25,27 @@ post-merge Ibarra build and official smoke workflows also completed successfully
 | Official classes selected | 92 |
 | Declared runtime-visible JUnit `@Test` methods in the official binary | 682 |
 | Official Surefire entries reported | 682 |
-| Passing test entries | 600 |
-| Method-level errors | 82 |
+| Passing test entries | 603 |
+| Method-level errors | 79 |
 | Class-level setup/deployment errors | 0 |
-| Total reported errors | 82 |
+| Total reported errors | 79 |
 | Assertion failures reported as Surefire `failure` | 0 |
 | Skipped entries | 0 |
-| Classes with no reported errors | 67/92 |
-| Adapter regression tests (separate invocation) | 35/35 |
+| Classes with no reported errors | 68/92 |
+| Adapter regression tests (separate invocation) | 37/37 |
 | Smoke subset methods passing within this full run | 18/18 |
 
-Surefire reports `Tests run: 682, Failures: 0, Errors: 82, Skipped: 0` and exits
+Surefire reports `Tests run: 682, Failures: 0, Errors: 79, Skipped: 0` and exits
 nonzero. All 92 selected classes deploy and all 682 declared methods execute; the
-82 errors are method-level TCK errors. The TCK's HTTP assertion helper reports
+79 errors are method-level TCK errors. The TCK's HTTP assertion helper reports
 method failures as exceptions, hence `errors` rather than `failures`; zero in the
 failure column does not mean success. TCK-013 passes all 3 methods after IBARRA-144;
 TCK-014 passes all 14 methods after IBARRA-145; TCK-015 passes all 13 methods
 after IBARRA-146;
 TCK-018 passes all 5 methods after IBARRA-143,
 TCK-017 passes all 15, TCK-054 passes all 7, TCK-056 passes all 8 after IBARRA-141,
-and TCK-057 passes all 12 after IBARRA-142. Certification remains pending.
+and TCK-057 passes all 12 after IBARRA-142. TCK-021 passes 3/3 after Foy #51 and
+IBARRA-147; TCK-031 passes 12/12 after IBARRA-147. Certification remains pending.
 
 Before this full-suite snapshot, targeted reruns on 2026-10-14 passed all 11 methods in
 `bodytagsupport.URLClientIT`, including `bodyTagSupportVariableSynchronizationTest`.
@@ -82,8 +84,9 @@ and 111 errors. The full run after IBARRA-143 reported 576 passes and 106 errors
 the full run after IBARRA-144 reported 581 passes and 101 errors; the full run
 after IBARRA-145 reported 595 passes and 87 errors, including all 14 TCK-014
 methods. This full run after IBARRA-146 reports 600 passes and 82 errors,
-including all 13 TCK-015 methods. The declared-method inventory remains 682;
-no certification claim is made while method errors remain.
+including all 13 TCK-015 methods. The latest run after IBARRA-147 reports 603 passes
+and 79 errors, with TCK-021 and TCK-031 fully passing. The declared-method inventory
+remains 682; no certification claim is made while method errors remain.
 
 Static XML output and the initial XML `.tagx` subset restore all six previously
 failing output-action methods: `doctypeSystemPublicTest`, `simpleDefaultTest`, `doctypeSystemTest`,

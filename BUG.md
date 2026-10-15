@@ -1,5 +1,23 @@
 # BUG.md — Ibarra
 
+## IBARRA-147 · 2026-10-15 · JSP property-group prefix routes lose path information
+
+- Symptom: JSP pages routed by a prefix property group returned 404 because the
+  router used only `servletPath`; a nested relative include under that mapping
+  also resolved from the wrong directory and omitted its output.
+- Minimal repro: run
+  `./mvnw -ntp -Ptck -pl ibarra-tck -Dtest=PagesContainerTest#prefixPropertyGroupMappingResolvesTheFullPagePath,PagesContainerTest#nestedRelativeIncludesResolvePrefixPropertyGroupPaths test`, or the official
+  `ee.jakarta.tck.pages.spec.configuration.general.URLClientIT` and
+  `ee.jakarta.tck.pages.spec.core_syntax.actions.include.URLClientIT` classes.
+- Cause: the JSP router ignored `pathInfo` for request and include dispatches.
+  `PageContext` also derived relative include paths from `servletPath` alone,
+  dropping the prefix-mapped resource suffix.
+- Fix: combine servlet paths with their path info for both JSP route lookup and
+  relative include resolution, including `INCLUDE_SERVLET_PATH` and
+  `INCLUDE_PATH_INFO` during nested dispatch.
+- Status: FIXED (2026-10-15). The two official classes pass 3/3 and 12/12 methods;
+  the full suite passes 603/682 with 79 remaining method errors and no setup errors.
+
 ## IBARRA-144 · 2026-10-15 · TLD TagFileInfo metadata is missing during TEI validation
 
 - Symptom: the official TagFileInfo TCK class failed all three methods because

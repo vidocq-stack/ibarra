@@ -1,13 +1,14 @@
 # Official Pages failure inventory
 
 Date: 2026-10-15, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-The latest full suite exercised all 682 official methods across 92 classes: 600
-pass and 82 report method-level errors, with no class-level setup errors,
+The latest full suite exercised all 682 official methods across 92 classes: 603
+pass and 79 report method-level errors, with no class-level setup errors,
 assertion failures or skipped methods. TCK-013 passes 3/3 after IBARRA-144,
 TCK-014 passes 14/14 after IBARRA-145, TCK-015 passes 13/13 after IBARRA-146,
 and TCK-018 passes 5/5 after IBARRA-143;
 TCK-054 passes 7/7 after IBARRA-140, TCK-056 passes 8/8 after IBARRA-141, and
-TCK-057 passes 12/12 after IBARRA-142. Twenty-five classes still have method-level
+TCK-057 passes 12/12 after IBARRA-142. TCK-021 passes 3/3 after Foy #51 and
+IBARRA-147; TCK-031 passes 12/12 after IBARRA-147. Twenty-four classes still have method-level
 errors, so certification remains pending.
 See [BASELINE.md](BASELINE.md) for current counts and historical snapshots. Each
 class keeps its previous stable id.
@@ -380,15 +381,23 @@ Resolved methods (2026-10-13, official signature configuration):
 ## TCK-021 — ee.jakarta.tck.pages.spec.configuration.general.URLClientIT
 
 - Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the newly runnable official HTTP assertions report errors.
+- Status: RESOLVED (2026-10-15; Foy #51 and IBARRA-147).
+- Symptom: all three official HTTP assertions failed for JSP property-group URL patterns.
 - Minimal repro: select `ee.jakarta.tck.pages.spec.configuration.general.URLClientIT` and any method below.
-- Hypothesis: JSP property-group URL mapping/runtime routing remains incomplete; inspect actual HTTP responses before assigning the cause.
+- Cause: Foy did not route JSP property-group URL patterns to the JSP servlet, and
+  Ibarra's JSP router omitted `pathInfo` for prefix mappings. Foy #51 adds those
+  mappings; IBARRA-147 resolves the full JSP resource path in Ibarra.
 
 Resolved setup error (2026-10-12, IBARRA-100): direct Foy factories are generated
 for explicit root web.xml components without application exports/opens.
 
-Failing methods:
+Methods that failed before resolution:
+
+- `identicalMappingTest`
+- `mostSpecificMappingTest`
+- `moreSpecificMappingTest`
+
+Resolved methods (2026-10-15, merged Foy #51 and IBARRA-147):
 
 - `identicalMappingTest`
 - `mostSpecificMappingTest`
@@ -522,10 +531,17 @@ Resolved methods (2026-10-13, JSP forwarding output-state checks):
 - Cause: inclusion wrappers hid ancestor buffers and kept container INCLUDE policy.
   Typed forwarding clears validated JSP buffers, preserves application wrappers and
   propagates completion to generated including pages (IBARRA-119/130).
+- A second regression affected `dynamicDynamicTest`: nested relative includes under
+  a JSP prefix property group lost `pathInfo` while deriving the including page's
+  directory. IBARRA-147 now resolves the full include servlet path and path info.
 
 Resolved methods (2026-10-14, typed include forwarding):
 
 - `positiveIncludeForwardTest`
+
+Additional resolved method (2026-10-15, IBARRA-147):
+
+- `dynamicDynamicTest`
 
 ## TCK-032 — ee.jakarta.tck.pages.spec.core_syntax.actions.invoke.URLClientIT
 

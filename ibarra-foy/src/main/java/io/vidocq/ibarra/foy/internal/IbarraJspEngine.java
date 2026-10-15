@@ -65,15 +65,23 @@ public final class IbarraJspEngine implements JspEngine {
 
         @Override protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
             if (closed.get()) throw new ServletException("JSP servlet is closed");
-            String path = request.getDispatcherType() == DispatcherType.INCLUDE
-                    && request.getAttribute(RequestDispatcher.INCLUDE_SERVLET_PATH) instanceof String included
-                    ? included : request.getServletPath();
+            String path = requestPath(request);
             if (request.getDispatcherType() == DispatcherType.REQUEST && (path.startsWith("/WEB-INF/") || path.startsWith("/META-INF/"))) {
                 response.sendError(HttpServletResponse.SC_NOT_FOUND); return;
             }
             var page = page(path);
             if (page == null) response.sendError(HttpServletResponse.SC_NOT_FOUND);
             else page.service(request, response);
+        }
+
+        private static String requestPath(HttpServletRequest request) {
+            if (request.getDispatcherType() == DispatcherType.INCLUDE
+                    && request.getAttribute(RequestDispatcher.INCLUDE_SERVLET_PATH) instanceof String included) {
+                Object pathInfo = request.getAttribute(RequestDispatcher.INCLUDE_PATH_INFO);
+                return included + (pathInfo instanceof String info ? info : "");
+            }
+            String pathInfo = request.getPathInfo();
+            return request.getServletPath() + (pathInfo == null ? "" : pathInfo);
         }
 
         HttpJspPage page(String path) throws ServletException {
