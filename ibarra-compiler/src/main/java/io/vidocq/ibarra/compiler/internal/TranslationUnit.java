@@ -323,7 +323,7 @@ public final class TranslationUnit {
     private record Match(int category, int length) implements Comparable<Match> {
         public int compareTo(Match other) { int result = Integer.compare(category, other.category); return result == 0 ? Integer.compare(length, other.length) : result; }
     }
-    private static boolean matches(JspPropertyGroup group, String path) {
+    public static boolean matches(JspPropertyGroup group, String path) {
         return group.patterns().stream().anyMatch(pattern -> match(pattern, path) != null);
     }
     private static Match match(String pattern, String path) {

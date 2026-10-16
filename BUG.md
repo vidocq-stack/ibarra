@@ -1,5 +1,20 @@
 # BUG.md — Ibarra
 
+## IBARRA-149 · 2026-10-16 · JSP property groups do not select custom-extension pages
+
+- Symptom: `jspConfigurationIsXmlTrueTest` fails because the XML JSP under
+  `/xmltrue/XmlJspTest.xsp` is not compiled or registered as a page.
+- Minimal repro: run
+  `./run-official-tck-pages-4.0.sh --no-install --no-prepare
+  -Dtest=ee.jakarta.tck.pages.spec.configuration.xml.URLClientIT#jspConfigurationIsXmlTrueTest`.
+- Cause: deployment precompilation selected only `.jsp` and `.jspx` resources and
+  ignored JSP property-group URL patterns. The `is-xml=true` group therefore could
+  not declare its matching `.xsp` resource as a JSP document.
+- Fix: include resources matched by configured JSP property-group patterns among
+  page candidates, using the same URL-pattern matcher as translation.
+- Status: FIXED (2026-10-16). TCK-024 passes 3/3; the combined full suite passes
+  605/682 methods with 77 method-level errors across 22 classes and no setup errors.
+
 ## IBARRA-148 · 2026-10-16 · scripting-invalid rejects request-time tag attributes
 
 - Symptom: the official scripting configuration test returned HTTP 500 for a

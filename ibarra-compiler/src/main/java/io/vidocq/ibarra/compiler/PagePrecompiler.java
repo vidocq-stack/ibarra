@@ -98,7 +98,8 @@ public final class PagePrecompiler {
         var failures = new TreeMap<String, String>();
         var pagePaths = new TreeSet<String>();
         var units = new TreeMap<String, TranslationUnit.Result>();
-        for (var entry : resources.entrySet()) if (entry.getKey().endsWith(".jsp") || entry.getKey().endsWith(".jspx")) {
+        for (var entry : resources.entrySet()) if (entry.getKey().endsWith(".jsp") || entry.getKey().endsWith(".jspx")
+                || options.propertyGroups().stream().anyMatch(group -> TranslationUnit.matches(group, entry.getKey()))) {
             PageDescriptor.validatePath(entry.getKey());
             pagePaths.add(entry.getKey());
             try { units.put(entry.getKey(), new TranslationUnit(initial).read(entry.getKey(), entry.getValue())); }

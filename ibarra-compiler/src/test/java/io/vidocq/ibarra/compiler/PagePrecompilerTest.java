@@ -51,6 +51,27 @@ class PagePrecompilerTest {
     }
 
     @Test
+    void propertyGroupCanDeclareAnXmlPageWithANonstandardExtension() throws Exception {
+        prepare(false);
+        Path page = web.resolve("xmltrue/XmlJspTest.xsp");
+        Files.createDirectories(page.getParent());
+        Files.writeString(page, """
+                <?xml version="1.0"?>
+                <root xmlns:jsp="http://java.sun.com/JSP/Page">
+                    <jsp:directive.page contentType="text/xml"/>
+                    <jsp:text><![CDATA[<result>Test PASSED</result>]]></jsp:text>
+                </root>
+                """);
+        var group = new JspPropertyGroup(List.of("/xmltrue/*"), Map.of("is-xml", "true"), List.of(), List.of());
+
+        var deployment = new PagePrecompiler().precompileDeployment(web, classes, modulePaths(),
+                "demo.generated", new GenerationOptions(List.of(group), Map.of()));
+
+        assertTrue(deployment.failures().isEmpty(), deployment.failures().toString());
+        assertEquals(Set.of("/xmltrue/XmlJspTest.xsp"), deployment.pages().pagePaths());
+    }
+
+    @Test
     void deploymentCompilationCannotResolveRemovedOwnedClassesFromPreviousRuns() throws Exception {
         prepare(false);
         Files.writeString(web.resolve("b.jsp"), "<%! public static class Helper { public static String value(){return \"old\";} } %>");

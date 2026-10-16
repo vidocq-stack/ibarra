@@ -572,6 +572,16 @@ scripting check to those attribute values. TCK-023 passes 3/3 after IBARRA-148.
 The full official suite passes 604/682 methods, with 78 method-level errors across
 23 classes and no new errors compared with the previous full run.
 
+## JSP property groups select custom-extension pages (2026-10-16)
+
+The `is-xml` property group can identify JSP documents with extensions other than
+`.jsp` and `.jspx`. Deployment precompilation now includes resources selected by
+configured JSP property-group URL patterns, so `/xmltrue/XmlJspTest.xsp` is parsed
+as XML syntax and registered for dispatch. TCK-024 passes 3/3 after IBARRA-149.
+The combined full suite with IBARRA-148 and IBARRA-149 passes 605/682 methods,
+with 77 method-level errors across 22 classes and no setup errors, assertion
+failures or skipped methods.
+
 ## Open questions
 
 1. **Generator back end** — the initial I3 implementation uses Java source +
