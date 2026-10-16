@@ -1,15 +1,16 @@
 # Official Pages failure inventory
 
-Date: 2026-10-15, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-The latest full suite exercised all 682 official methods across 92 classes: 603
-pass and 79 report method-level errors, with no class-level setup errors,
+Date: 2026-10-16, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
+The latest full suite exercised all 682 official methods across 92 classes: 604
+pass and 78 report method-level errors, with no class-level setup errors,
 assertion failures or skipped methods. TCK-013 passes 3/3 after IBARRA-144,
 TCK-014 passes 14/14 after IBARRA-145, TCK-015 passes 13/13 after IBARRA-146,
 and TCK-018 passes 5/5 after IBARRA-143;
 TCK-054 passes 7/7 after IBARRA-140, TCK-056 passes 8/8 after IBARRA-141, and
 TCK-057 passes 12/12 after IBARRA-142. TCK-021 passes 3/3 after Foy #51 and
-IBARRA-147; TCK-031 passes 12/12 after IBARRA-147. Twenty-four classes still have method-level
-errors, so certification remains pending.
+IBARRA-147; TCK-031 passes 12/12 after IBARRA-147. TCK-023 passes 3/3 after
+IBARRA-148. Twenty-three classes still have method-level errors, so certification
+remains pending.
 See [BASELINE.md](BASELINE.md) for current counts and historical snapshots. Each
 class keeps its previous stable id.
 The parallel compiler batch restores literal editor conversion, opaque tagdependent
@@ -418,13 +419,19 @@ Resolved methods (2026-10-13, XML output omission aliases):
 
 ## TCK-023 — ee.jakarta.tck.pages.spec.configuration.scripting.URLClientIT
 
-- Date: 2026-10-12.
-- Status: OPEN.
-- Symptom: the official HTTP/signature assertion reported an error.
-- Minimal repro: select `ee.jakarta.tck.pages.spec.configuration.scripting.URLClientIT` and any method below.
-- Hypothesis: an unsupported page/tag/API scenario or a response mismatch; inspect translation-errors.txt and server.log before assigning a root cause.
+- Date: 2026-10-16.
+- Status: RESOLVED; all three official methods pass after IBARRA-148.
+- Symptom: `jspConfigurationScriptingTrueTest` received HTTP 500 for a custom-tag
+  attribute containing a request-time Java expression.
+- Minimal repro: run
+  `./run-official-tck-pages-4.0.sh -Dtest=ee.jakarta.tck.pages.spec.configuration.scripting.URLClientIT#jspConfigurationScriptingTrueTest`.
+- Cause: `PageGenerator.value` treated a request-time attribute expression as a
+  scripting element and rejected it when the JSP property group set
+  `scripting-invalid` to `true`.
+- Fix: keep the setting's validation on page scripting elements while allowing
+  request-time expressions in action attributes.
 
-Failing methods:
+Resolved method:
 
 - `jspConfigurationScriptingTrueTest`
 

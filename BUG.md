@@ -1,5 +1,20 @@
 # BUG.md — Ibarra
 
+## IBARRA-148 · 2026-10-16 · scripting-invalid rejects request-time tag attributes
+
+- Symptom: the official scripting configuration test returned HTTP 500 for a
+  custom-tag attribute expression, although that expression must be evaluated
+  as an action attribute.
+- Minimal repro: run
+  `./run-official-tck-pages-4.0.sh -Dtest=ee.jakarta.tck.pages.spec.configuration.scripting.URLClientIT#jspConfigurationScriptingTrueTest`.
+- Cause: `tagValue` delegated request-time expressions to `PageGenerator.value`,
+  which incorrectly applied the `scripting-invalid` check used for page scripting
+  elements.
+- Fix: allow request-time expressions in action attributes while retaining the
+  `scripting-invalid` checks for declarations, expressions and scriptlets.
+- Status: FIXED (2026-10-16). TCK-023 passes 3/3; the full suite passes 604/682
+  methods with 78 method-level errors and no setup errors.
+
 ## IBARRA-147 · 2026-10-15 · JSP property-group prefix routes lose path information
 
 - Symptom: JSP pages routed by a prefix property group returned 404 because the

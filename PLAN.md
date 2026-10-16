@@ -563,6 +563,15 @@ extension mappings and Foy deployment are verified by the initial I5 HTTP fixtur
 startup EL interpretation. Maven's provided/build dependencies are named in the
 Antora Maven plugin reference; none enter application/runtime artifacts.
 
+## Request-time attribute expressions under scripting-invalid (2026-10-16)
+
+The `scripting-invalid` property group disables declarations, page expressions and
+scriptlets. Request-time Java expressions in action attributes remain valid; they
+are evaluated as attribute values. The generator no longer applies the page-level
+scripting check to those attribute values. TCK-023 passes 3/3 after IBARRA-148.
+The full official suite passes 604/682 methods, with 78 method-level errors across
+23 classes and no new errors compared with the previous full run.
+
 ## Open questions
 
 1. **Generator back end** — the initial I3 implementation uses Java source +

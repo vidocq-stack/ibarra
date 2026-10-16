@@ -1351,7 +1351,6 @@ public final class PageGenerator {
         }
         private String value(String raw, SourceLocation at, boolean xmlLiteral) {
             if (raw.startsWith("<%=") && raw.endsWith("%>")) {
-                if (bool("scriptingInvalid", false)) throw error(at, "Scripting attributes are disabled");
                 return "(" + raw.substring(3, raw.length() - 2) + ")";
             }
             var temporary = new PageNode.Text(raw, at);

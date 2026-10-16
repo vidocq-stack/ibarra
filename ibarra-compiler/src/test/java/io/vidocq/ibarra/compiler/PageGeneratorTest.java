@@ -198,6 +198,15 @@ class PageGeneratorTest {
     }
 
     @Test
+    void scriptingInvalidStillAllowsRequestTimeExpressionsInActionAttributes() throws Exception {
+        var options = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"),
+                Map.of("scripting-invalid", "true"), List.of(), List.of())), Map.of());
+        String jsp = "<%@ page session='false' %><jsp:include page='<%= \"/part.jsp\" %>' flush='false'/>";
+        var generated = generator().generate("/fixture.jsp", jsp, PAGE_CLASS, options);
+        assertEquals("INCLUDED", run(generated, dispatchSetup(), ""));
+    }
+
+    @Test
     void forwardDropsPendingOutputAndStopsThePage() throws Exception {
         String jsp = "<%@ page session='false' %>discard<jsp:forward page='/part.jsp'/>unreachable";
         assertEquals("FORWARDED", render(jsp, dispatchSetup(), ""));

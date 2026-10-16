@@ -1,22 +1,22 @@
 = TCK status
-:description: Latest Jakarta Pages 4.0 TCK run: 603 of 682 methods pass; certification remains pending.
+:description: Latest Jakarta Pages 4.0 TCK run: 604 of 682 methods pass; certification remains pending.
 
 [.lead]
 The official Jakarta Pages 4.0.0 TCK runs through a build-side Arquillian adapter
-on Foy. The latest full run on 2026-10-15 executes all 682 methods in 92 classes:
-603 pass and 79 report method-level errors, with no setup errors, assertion
-failures or skipped methods (88.4%). TCK-013 passes 3/3 after IBARRA-144,
+on Foy. The latest full run on 2026-10-16 executes all 682 methods in 92 classes:
+604 pass and 78 report method-level errors, with no setup errors, assertion
+failures or skipped methods (88.6%). TCK-013 passes 3/3 after IBARRA-144,
 TCK-014 passes 14/14 after IBARRA-145, TCK-015 passes 13/13 after IBARRA-146, and
 TCK-018 passes 5/5 after IBARRA-143; TCK-054
 passes 7/7 after IBARRA-140, TCK-056 passes 8/8 after IBARRA-141, and TCK-057
 passes 12/12 after IBARRA-142. TCK-021 passes 3/3 after Foy #51 and IBARRA-147;
-TCK-031 passes 12/12 after IBARRA-147. Ibarra remains uncertified while method
-errors remain.
+TCK-031 passes 12/12 after IBARRA-147. TCK-023 passes 3/3 after IBARRA-148.
+Ibarra remains uncertified while method errors remain.
 
 == Recorded baseline
 
-Run date: 2026-10-15, Temurin Java 25 and Maven 3.9.16. The run uses merged base
-commit `5054d9e` with the IBARRA-147 changes applied and Foy PR #51 merged.
+Run date: 2026-10-16, Temurin Java 25 and Maven 3.9.16. The run uses merged base
+commit `8e71c90` with the IBARRA-148 changes applied and Foy PR #51 merged.
 
 [source,bash]
 ----
@@ -28,28 +28,29 @@ The script prepared official artifacts, built the Ibarra reactor and ran the
 selected official classes. The ordinary reactor passes 367 tests; the adapter
 regression suite has a separate recorded result of 37/37. The verified official
 binary contains 92 test classes and 682 declared JUnit `@Test` methods. Surefire
-records *603 passing methods* and *79 method-level errors*, with *zero class-level
+records *604 passing methods* and *78 method-level errors*, with *zero class-level
 setup/deployment errors*, assertion failures or skips, and exits nonzero. The
 upstream HTTP assertion helper reports failures as exceptions.
 
-*603/682 = 88.4% measured full-suite pass rate*. All declared methods execute across
+*604/682 = 88.6% measured full-suite pass rate*. All declared methods execute across
 the 92 official classes, with no skipped methods or deployment blockers. The suite
-remains failing and uncertified because 79 methods report errors. TCK-014 passes
+remains failing and uncertified because 78 methods report errors. TCK-014 passes
 14/14 after IBARRA-145 and TCK-015 passes 13/13 after IBARRA-146. The TCK-013
 `tagfileinfo.URLClientIT` class passes 3/3 after IBARRA-144; TCK-018
 `tagvariableinfo.URLClientIT` passes 5/5 after IBARRA-143. The focused
 `simpletagsupport.URLClientIT` rerun passes 11/11, TCK-054 passes 7/7, TCK-056
 passes 8/8 after IBARRA-141, and TCK-057 passes 12/12 after IBARRA-142.
 TCK-021 passes all three methods after Foy #51 and IBARRA-147; TCK-031 passes all
-twelve methods after IBARRA-147.
+twelve methods after IBARRA-147. TCK-023 passes all three methods after IBARRA-148.
 
 The previous full run after IBARRA-142 passed 571/682 with 111 method errors. The
 full run after IBARRA-143 recorded 576/682 with 106 errors; after IBARRA-144 it
 recorded 581/682 with 101 errors, and after IBARRA-145 it recorded 595/682 with 87
 errors, including the focused 14/14 TCK-014 pass. The run after IBARRA-146 records
-600/682 with 82 errors and includes the focused 13/13 TCK-015 pass. The latest run
-after IBARRA-147 records 603/682 with 79 errors, with all TCK-021 and TCK-031
-methods passing.
+600/682 with 82 errors and includes the focused 13/13 TCK-015 pass. The run after
+IBARRA-147 records 603/682 with 79 errors, with all TCK-021 and TCK-031 methods
+passing. The latest run after IBARRA-148 records 604/682 with 78 errors; TCK-023
+passes 3/3 with no regression among previously passing methods.
 An earlier 2026-10-14 invocation reported 513/655; its 27-entry shortfall remains
 an incomplete historical snapshot, while the later full runs execute all 682
 declared methods.
