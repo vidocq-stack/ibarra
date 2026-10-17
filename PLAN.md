@@ -257,7 +257,8 @@ the runtime's packaging goal, after I8.
   Degraded runtime translation is not used as a fallback.
 - Script `run-official-tck-pages-4.0.sh` (`smoke` / `all` / `-Dtest=`), modelled
   on `foy/run-official-tck-servlet6.1.sh`.
-- Gate: once green, 100 % PASS is a merge gate; challenges go to a `TCK.md`.
+- Gate: 100 % PASS is the merge gate; fulfilled on 2026-10-17 with 682/682
+  official methods passing. Challenges, if filed, go to a `TCK.md`.
 
 ## Milestones (TDD — test first, every milestone)
 
@@ -270,8 +271,8 @@ the runtime's packaging goal, after I8.
 | I4 | `ibarra-maven-plugin` precompile goal + page index; extend `ibarra-api` SPI | initial implementation: independent application JAR precompiled and rendered; web fragments and broader configuration pending |
 | I5 | `ibarra-foy` + Foy's JSP-engine SPI (Foy-side PR), `*.jsp` mapping, `addJspFile`, `getJspConfigDescriptor`, TLD listeners | initial HTTP implementation with build-generated TLD listeners; broader deployment/TCK coverage pending |
 | I6 | Custom tags: TLD parsing, classic + simple handlers, scripting variables, validators | initial rendering: Tag/IterationTag/BodyTag/TryCatchFinally, SimpleTag bodies, named scalar/fragment attributes, explicit bodies and unqualified dynamic attributes; static TEI and name-given TLD variables synchronize across tag lifecycles; generated page initialization invokes `TagExtraInfo.validate` and TLD `TagLibraryValidator.validate` with available metadata and PageData XML; complete `TagInfo`/`TagLibraryInfo` metadata remains pending |
-| I7 | Tag files, fragments, `jsp:invoke` / `jsp:doBody`; Peano compiled expressions in pages | initial standard `.tag` support: import/attribute/variable/taglib directives, scripting, scalar setters, nested declared attributes, PageData validators, per-invocation page-scope wrappers, dynamic-attribute maps and literal-page `jsp:forward`; initial XML `.tagx` subset remains static markup and per-invocation `jsp:output`; EL, bodies, fragments, forward parameters and broader XML tag-file actions remain pending |
-| I8 | Official TCK through `ibarra-tck` (Arquillian adapter on Foy) | in progress: initial adapter and smoke delivered, full diagnostic baseline failing; acceptance remains 100 % PASS recorded in docs `tck` page |
+| I7 | Tag files, fragments, `jsp:invoke` / `jsp:doBody`; Peano compiled expressions in pages | standard `.tag` and XML `.tagx` translation covers the official Pages 4.0 TCK, including directives, EL, scripting, nested tags, variables, fragments, body invocation, standard actions and validators; remaining non-TCK scope is tracked separately |
+| I8 | Official TCK through `ibarra-tck` (Arquillian adapter on Foy) | complete: the full official Pages 4.0 suite passes 682/682 methods across 92 classes (2026-10-17); 100 % PASS merge gate met |
 | I9 | Degraded runtime translation polish, Class-File API path for scriptless pages, `ibarra-bench` (vs Jasper), Vidocq Runtime extension | numbers in `BENCH.md` only |
 
 ## Implementation progress
@@ -321,8 +322,9 @@ Parsing is separate from translation semantics. Include expansion, encoding
 detection, full directive/action/TLD validation, Java generation and EL evaluation
 remain later work. Attribute values are retained for later interpretation.
 DOCTYPE declarations and external entities are explicitly unsupported by this
-initial XML parser; it performs no external document lookup. The official TCK
-has not been run. Generator back-end questions below remain open.
+initial XML parser; it performs no external document lookup. At that early parser
+stage, official TCK runs were not yet part of the project. Generator back-end
+questions below remain open.
 
 ### Initial I3 generator (2026-10-10)
 
@@ -537,9 +539,8 @@ tag-file actions remain pending.
 
 The full Ibarra reactor passes 362 tests, and the focused official
 `tagfiles.semantics.URLClientIT` run passes all 8 methods after IBARRA-141. The
-complete official Pages suite has not been rerun after these changes; its last
-full-run aggregate remains the separate diagnostic snapshot in
-`ibarra-tck/BASELINE.md`.
+complete official Pages suite now passes 682/682 methods; the verified full-run
+aggregate is recorded in `ibarra-tck/BASELINE.md`.
 
 ## Absolute tag-library URI validation (2026-10-14)
 
@@ -547,8 +548,8 @@ Standard taglib directives now validate absolute URIs against the discovered
 tag-library alias map even when the declared prefix is unused. Unknown absolute
 URIs become per-page translation errors; `urn:jsptagdir:` continues through the
 separate tag-directory path. The TCK-057 `tldres.URLClientIT` class passes all
-12 methods after IBARRA-142. The full official suite has not been rerun, so its
-recorded aggregate and pending certification status remain unchanged.
+12 methods after IBARRA-142. The complete official suite was subsequently rerun
+and passed 682/682 methods on 2026-10-17; see `ibarra-tck/BASELINE.md`.
 
 ## Initial I4 implementation
 
@@ -569,8 +570,9 @@ The `scripting-invalid` property group disables declarations, page expressions a
 scriptlets. Request-time Java expressions in action attributes remain valid; they
 are evaluated as attribute values. The generator no longer applies the page-level
 scripting check to those attribute values. TCK-023 passes 3/3 after IBARRA-148.
-The full official suite passes 604/682 methods, with 78 method-level errors across
-23 classes and no new errors compared with the previous full run.
+The 2026-10-16 full-suite checkpoint passed 604/682 methods, with 78 method-level
+errors across 23 classes and no new errors compared with the previous run. The
+complete 2026-10-17 run subsequently passed 682/682; see `ibarra-tck/BASELINE.md`.
 
 ## JSP property groups select custom-extension pages (2026-10-16)
 
@@ -578,9 +580,10 @@ The `is-xml` property group can identify JSP documents with extensions other tha
 `.jsp` and `.jspx`. Deployment precompilation now includes resources selected by
 configured JSP property-group URL patterns, so `/xmltrue/XmlJspTest.xsp` is parsed
 as XML syntax and registered for dispatch. TCK-024 passes 3/3 after IBARRA-149.
-The combined full suite with IBARRA-148 and IBARRA-149 passes 605/682 methods,
-with 77 method-level errors across 22 classes and no setup errors, assertion
-failures or skipped methods.
+The 2026-10-16 full-suite checkpoint with IBARRA-148 and IBARRA-149 passed
+605/682 methods, with 77 method-level errors across 22 classes and no setup
+errors, assertion failures or skipped methods. The complete 2026-10-17 run
+subsequently passed 682/682; see `ibarra-tck/BASELINE.md`.
 
 ## Open questions
 

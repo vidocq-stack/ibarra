@@ -228,6 +228,14 @@ class PageParserTest {
     }
 
     @Test
+    void standardSyntaxRejectsJspRootEvenForAnXmlNamedFile() {
+        String source = "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE
+                + "' version='4.0'><jsp:text>content</jsp:text></jsp:root>";
+        assertThrows(PageParseException.class,
+                () -> parser.parse("/notJspDocument.jspx", source, Page.Syntax.STANDARD, ParserOptions.DEFAULT));
+    }
+
+    @Test
     void reportsMalformedXmlAndDisallowsExternalEntityResolution() {
         var malformed = assertThrows(PageParseException.class, () -> parser.parse("/bad.jspx", "<p>\n<a></p>"));
         assertEquals("/bad.jspx", malformed.location().source());

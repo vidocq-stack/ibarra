@@ -40,7 +40,9 @@ public final class TldReferences {
                 return resources.get(path(uri.substring(11), at));
             var library = libraries.get(uri);
             if (library != null || !standard || uri.contains(":")) return library;
-            return resources.get(path(uri, at));
+            String resourcePath = path(uri, at);
+            library = libraries.get(resourcePath);
+            return library != null ? library : resources.get(resourcePath);
         }
     }
     private TldReferences() { }

@@ -96,6 +96,28 @@ public final class BeanClasses {
     public void constructor(String type, SourceLocation at) {
         constructor(type, at, "Bean");
     }
+
+    /** Checks a class hierarchy for an inherited final instance method without loading its classes. */
+    public boolean hasFinalMethod(String type, String name, String descriptor, SourceLocation at) {
+        var visited = new HashSet<String>();
+        String current = type;
+        while (current != null && visited.add(current)) {
+            ClassModel model;
+            try {
+                model = read(current, at);
+            } catch (PageParseException missing) {
+                if (missing.getMessage().contains("absent from the build module path")) return false;
+                throw missing;
+            }
+            var method = model.methods().stream().filter(candidate -> candidate.methodName().equalsString(name)
+                    && candidate.methodType().stringValue().equals(descriptor)).findFirst();
+            if (method.isPresent())
+                return (method.orElseThrow().flags().flagsMask() & ClassFile.ACC_FINAL) != 0;
+            current = model.superclass().map(parent -> parent.asInternalName().replace('/', '.')).orElse(null);
+        }
+        return false;
+    }
+
     private void constructor(String type, SourceLocation at, String role) {
         var model = read(type, at);
         if ((model.flags().flagsMask() & (ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT | ClassFile.ACC_INTERFACE)) != ClassFile.ACC_PUBLIC)

@@ -34,6 +34,7 @@ public final class TranslationUnit {
         }
     }
     private final GenerationOptions options;
+    private final ParserOptions parserDefaults;
     private final Map<PageNode.Text, List<SourceLocation>> origins = new IdentityHashMap<>();
     private final Set<String> stack = new LinkedHashSet<>();
     private Page.Syntax syntax;
@@ -47,7 +48,11 @@ public final class TranslationUnit {
 
     private final TagDependentBodies rawBodies;
     public TranslationUnit(GenerationOptions options) {
+        this(options, ParserOptions.DEFAULT);
+    }
+    public TranslationUnit(GenerationOptions options, ParserOptions parserDefaults) {
         this.options = options;
+        this.parserDefaults = Objects.requireNonNull(parserDefaults);
         rawBodies = new TagDependentBodies(options, this::bodySource,
                 document -> fileSyntax(document.name, document.text, properties(document.name)));
     }
@@ -67,8 +72,7 @@ public final class TranslationUnit {
         for (var group : options.propertyGroups()) if (matches(group, path))
             for (String prelude : group.preludes()) rawBodies.includeBindings(
                     new PageNode.Directive("include", Map.of("file", prelude), new SourceLocation(path, 1, 1)),
-                    rawBodies.bindings(), rawBodies.origins(), new ParserOptions(bool(properties(path).get("el-ignored"), false),
-                            bool(properties(path).get("deferred-syntax-allowed-as-literal"), false)));
+                    rawBodies.bindings(), rawBodies.origins(), parserOptions(properties(path)));
         var decoded = decode(path, bytes);
         return read(path, decoded.text());
     }
@@ -86,10 +90,10 @@ public final class TranslationUnit {
 
     public Result read(String path, String source) {
         var properties = properties(path);
+        var defaults = parserOptions(properties);
         syntax = fileSyntax(path, source, properties);
+        unitOptions = defaults;
         var raw = readRoot(path, source, properties);
-        var defaults = new ParserOptions(bool(properties.get("el-ignored"), false),
-                bool(properties.get("deferred-syntax-allowed-as-literal"), false));
         var settings = new LinkedHashMap<String, String>();
         collectUnitSettings(raw, settings);
         unitOptions = new ParserOptions(bool(settings.get("isELIgnored"), defaults.elIgnored()),
@@ -101,6 +105,11 @@ public final class TranslationUnit {
         var nodes = new PageNormalizer(syntax, defaults, origins, sourceSyntaxes).normalizeStructured(raw);
         return new Result(new Page(path, syntax, nodes), Map.copyOf(properties), Map.copyOf(sourceSyntaxes),
                 decodedSources.containsKey(path) ? decodedSources.get(path).responseEncoding() : null, List.copyOf(tagLibraries));
+    }
+
+    private ParserOptions parserOptions(Map<String, String> properties) {
+        return new ParserOptions(bool(properties.get("el-ignored"), parserDefaults.elIgnored()),
+                bool(properties.get("deferred-syntax-allowed-as-literal"), parserDefaults.deferredSyntaxAllowedAsLiteral()));
     }
 
     private List<PageNode> readRoot(String path, String source, Map<String, String> properties) {
@@ -173,7 +182,7 @@ public final class TranslationUnit {
             if (fileSyntax == Page.Syntax.XML) {
                 var parser = new XmlParser(document, rawBodies); raw = parser.parse(); origins.putAll(parser.origins());
             } else raw = new StandardParser(document, unitOptions == null
-                    ? new ParserOptions(bool(properties.get("el-ignored"), false), bool(properties.get("deferred-syntax-allowed-as-literal"), false))
+                    ? parserOptions(properties)
                     : unitOptions, unitBindings, strictNamespaces, rawBodies, Map.of()).parse();
             tagLibraries(raw);
             validateEncoding(raw, properties(path), new HashSet<>());

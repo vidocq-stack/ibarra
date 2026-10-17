@@ -1,23 +1,17 @@
 = TCK status
-:description: Latest Jakarta Pages 4.0 TCK run: 605 of 682 methods pass; certification remains pending.
+:description: The complete Jakarta Pages 4.0 TCK passes all 682 methods across 92 classes.
 
 [.lead]
-The official Jakarta Pages 4.0.0 TCK runs through a build-side Arquillian adapter
-on Foy. The latest full run on 2026-10-16 executes all 682 methods in 92 classes:
-605 pass and 77 report method-level errors, with no setup errors, assertion
-failures or skipped methods (88.7%). TCK-013 passes 3/3 after IBARRA-144,
-TCK-014 passes 14/14 after IBARRA-145, TCK-015 passes 13/13 after IBARRA-146, and
-TCK-018 passes 5/5 after IBARRA-143; TCK-054
-passes 7/7 after IBARRA-140, TCK-056 passes 8/8 after IBARRA-141, and TCK-057
-passes 12/12 after IBARRA-142. TCK-021 passes 3/3 after Foy #51 and IBARRA-147;
-TCK-031 passes 12/12 after IBARRA-147. TCK-023 passes 3/3 after IBARRA-148;
-TCK-024 passes 3/3 after IBARRA-149.
-Ibarra remains uncertified while method errors remain.
+The complete official Jakarta Pages 4.0.0 TCK passes **682/682 methods (100%)**
+across all 92 selected classes. Surefire reports zero failures, errors or skipped
+methods. This fulfills Ibarra milestone I8's full-suite merge gate. Formal Jakarta
+certification remains a separate process.
 
 == Recorded baseline
 
-Run date: 2026-10-16, Temurin Java 25 and Maven 3.9.16. The run uses merged base
-commit `8e71c90` with the IBARRA-148 changes applied and Foy PR #51 merged.
+Run date: 2026-10-17, Temurin Java 25 and Maven 3.9.16. The run prepared the
+official artifacts, built the Ibarra reactor and executed the complete official
+suite without provenance skips.
 
 [source,bash]
 ----
@@ -25,160 +19,47 @@ sdk env
 ./run-official-tck-pages-4.0.sh all
 ----
 
-The script prepared official artifacts, built the Ibarra reactor and ran the
-selected official classes. The ordinary reactor passes 369 tests; the adapter
-regression suite has a separate recorded result of 37/37. The verified official
-binary contains 92 test classes and 682 declared JUnit `@Test` methods. Surefire
-records *605 passing methods* and *77 method-level errors*, with *zero class-level
-setup/deployment errors*, assertion failures or skips, and exits nonzero. The
-upstream HTTP assertion helper reports failures as exceptions.
+| Measure | Result |
+|---|---:|
+| Official classes selected | 92 |
+| Official methods executed | 682 |
+| Passing methods | 682 |
+| Pass rate | 100% |
+| Failures, errors, skipped methods | 0, 0, 0 |
 
-*605/682 = 88.7% measured full-suite pass rate*. All declared methods execute across
-the 92 official classes, with no skipped methods or deployment blockers. The suite
-remains failing and uncertified because 77 methods report errors. TCK-014 passes
-14/14 after IBARRA-145 and TCK-015 passes 13/13 after IBARRA-146. The TCK-013
-`tagfileinfo.URLClientIT` class passes 3/3 after IBARRA-144; TCK-018
-`tagvariableinfo.URLClientIT` passes 5/5 after IBARRA-143. The focused
-`simpletagsupport.URLClientIT` rerun passes 11/11, TCK-054 passes 7/7, TCK-056
-passes 8/8 after IBARRA-141, and TCK-057 passes 12/12 after IBARRA-142.
-TCK-021 passes all three methods after Foy #51 and IBARRA-147; TCK-031 passes all
-twelve methods after IBARRA-147. TCK-023 passes all three methods after IBARRA-148;
-TCK-024 passes all three after IBARRA-149.
-
-The previous full run after IBARRA-142 passed 571/682 with 111 method errors. The
-full run after IBARRA-143 recorded 576/682 with 106 errors; after IBARRA-144 it
-recorded 581/682 with 101 errors, and after IBARRA-145 it recorded 595/682 with 87
-errors, including the focused 14/14 TCK-014 pass. The run after IBARRA-146 records
-600/682 with 82 errors and includes the focused 13/13 TCK-015 pass. The run after
-IBARRA-147 records 603/682 with 79 errors, with all TCK-021 and TCK-031 methods
-passing. The run after IBARRA-148 records 604/682 with 78 errors; TCK-023
-passes 3/3. The combined run after IBARRA-148 and IBARRA-149 records 605/682
-with 77 errors; TCK-023 and TCK-024 both pass 3/3.
-An earlier 2026-10-14 invocation reported 513/655; its 27-entry shortfall remains
-an incomplete historical snapshot, while the later full runs execute all 682
-declared methods.
-
-Static XML output and the initial `.tagx` subset restore all six previously failing
-methods in the output-action class: `doctypeSystemPublicTest`, `simpleDefaultTest`,
-`doctypeSystemTest`, `jspOutputJspRootOmitDeclDefaultTest`,
-`jspOutputOmitDeclValidValuesTest` and `jspOutputUsageContextTest`. All 523 previous
-passes remain, and all 682 class/method keys match with no missing or extra entry.
-The run has 49 completely passing classes. XML tag files support static markup and
-empty `jsp:output` omission metadata; requested declarations use UTF-8 and are emitted
-at each invocation without changing the caller's response charset. Standard `.tag`
-files support directives, scripting, variables, dynamic-attribute maps, declared
-attributes and empty nested simple/classic actions. Each invocation has an isolated
-page scope with other scopes delegated to its caller; literal-path `jsp:forward`
-stops both the tag file and caller page. Nested tag attributes and bodies, classic
-body or exception callbacks, EL, fragments, forward parameters and XML tag-file
-actions remain unsupported.
-
-The detailed command, binary inventory, counts and remaining categories are in
+The detailed environment, report totals and historical snapshots are in
 link:{repo-ibarra}/src/branch/main/ibarra-tck/BASELINE.md[the recorded baseline].
-Peano's independent EL TCK result is not a Pages TCK result.
+The previous method-level diagnostic records remain in
+link:{repo-ibarra}/src/branch/main/ibarra-tck/FAILURES.md[the historical failure inventory];
+there are no outstanding official TCK failures.
 
-== Passing coverage and CI
+== Smoke and CI
 
-Passing classes include JspFactory, JspEngineInfo, JspWriter, PageContext,
-ErrorData, BodyContent, DynamicAttributes, TagAdapter, VariableInfo, several
-EL/implicit-resolver API tests, implicit objects, character-sequence/EL/encoding
-configuration, i18n and scripting syntax.
-Other classes pass partially; remaining failures include translation,
-tag metadata/files, routing, API and signature-tooling gaps.
-
-Ordinary TLD keyword/setter fixes add 40 confirmed passes, remove three setup
-blockers and restore four previously failing EL methods, without a regression
-among previously passing methods. See xref:modules/tag-handlers.adoc[Tag handlers]
-for the actual-property binding rules and remaining boundaries.
-
-The three JspIdConsumer methods now pass with stable compiler-provided tag IDs,
-including inherited classic/simple consumers. No previous pass regressed.
-See xref:modules/tag-handlers.adoc[Tag handlers] for identifier initialization,
-repeatable fragments and protection of the reserved container setter.
-
-Direct legacy WAR property accessors restore sixteen more methods across
-BodyTagSupport, TagSupport, TryCatchFinally and scripting EL coercion. The
-TryCatchFinally failure was its private verifier's denied property access;
-handler lifecycle generation is unchanged. No previous pass regressed.
-See xref:modules/official-tck-runner.adoc[the runner reference] for the bounded
-property services and preserved reflection/module boundaries.
-
-Direct collection method tables restore the official methodInfoTest and
-positiveELDeferredMethodValueTest. Compiled Vector calls now expose metadata and
-invoke without reflection, preserving native list property resolution. No previous
-pass regressed; this bounded runner adaptation does not alter production packaging.
-
-All seven standard forward-action methods now pass. The runtime refuses forwarding
-after unbuffered output or a JSP flush even while the Servlet response remains
-uncommitted; it includes error pages after emitted output. The original exception
-is retained, unwritten pages still forward, and no previous pass regressed.
-See xref:internals.adoc[Runtime internals] for the output-state rules.
-
-The parallel compiler batch restores three methods through direct literal BeanInfo
-editor conversion, opaque tagdependent bodies and precompilation request validation.
-The resulting run has 44 completely passing classes and no regression against main.
-Valid precompile requests now suppress the page body, including through jsp-file
-aliases; invalid decoded values send HTTP 500. The stronger HTTP counter test
-checks suppression beyond the official positive tests' text assertion.
-
-The unsafe include-forward prototype was withheld after a reproduced child
-response-wrapper regression. Its typed replacement now restores the original
-positiveIncludeForwardTest (IBARRA-119/130), preserving all 518 prior passes.
-All twelve include-action methods pass and the full run has 48 completely passing
-classes. The stronger HTTP fixture checks wrapper headers, cached writers, nested
-ancestors, stopped parent side effects and missing-target 404 behavior.
-The source evidence and follow-up are in
-link:{repo-ibarra}/src/branch/main/studies/include-forward-wrapper-dispatch.md[the dispatch study].
-
-The signature/envelope follow-up restores eight more methods with no regression.
-The unchanged official signature driver checks the configured spec API jars;
-tagdependent named attributes use ordinary semantics while explicit bodies stay
-opaque. XML output accepts its specified yes/no omission aliases and rejects
-nonempty bodies before normalization. All JSP document general methods now pass;
-that stage's final run had 47 completely passing classes. The subsequent XML output
-delivery collects declaration and DOCTYPE settings statically over the translation
-unit and emits declaration, DOCTYPE and body in order. Source DTDs and external
-entities remain rejected; no official fixture was changed.
-
-`official-pages-tck-smoke` runs on pull requests and `main`. It clean-installs
-Ibarra, runs 34 adapter regression tests, then three official JspFactory
-tests, one JspEngineInfo test and fourteen character-sequence/EL/encoding
-configuration tests. This deliberately bounded regression check
-does not claim 100% Pages coverage. Full-suite certification is milestone I8;
-100% PASS becomes the gate once that suite is green.
+The pull-request smoke workflow is a bounded regression subset and does not
+replace the full `all` run. The complete command above is the acceptance check for
+milestone I8.
 
 == Runner
 
 `ibarra-tck` enters the reactor only under `-Ptck`; official artifact scanning
-requires `-Ptck,tck-official`. Coordinates verified from the embedded POM:
-`jakarta.tck:jakarta-pages-tck:4.0.0`, distributed by Eclipse rather than Central.
-Preparation preserves the original POM and supplies the omitted JavaTest 5.0
-dependency, with mandatory SHA-256 checks.
+requires `-Ptck,tck-official`. The official distribution is
+`jakarta.tck:jakarta-pages-tck:4.0.0`, published by Eclipse rather than Maven
+Central. Preparation preserves its embedded POM, supplies the omitted JavaTest
+5.0 dependency and checks artifact SHA-256 digests.
 
-The adapter precompiles pages before launching modular Foy/Chappe; the server
-contains neither compiler nor `java.compiler` and retains reflection denial.
-It supports multiple isolated WARs and their filesystem resources. Root JSP
-property groups reach the compiler through build-side descriptor parsing.
-Explicit deployment precompilation retains genuine per-page translation failures
-as compiled error servlets, so valid pages and negative translation tests can
-coexist. No source is parsed in the server. Normal packaging still rejects errors.
-Root web.xml Servlet/filter/listener classes in WEB-INF/classes now receive direct
-build-generated Foy factories, with application packages kept private. This removes
-three setup blockers and adds three passing API tests; general configuration now
-executes and exposes three method errors. No previous pass regressed.
-Legacy WAR libraries now assemble into the existing private module, preserving
-shared packages, physical JAR references and distinct TLD discovery paths.
-This removes the final two setup blockers and adds 15 passes from 22 newly runnable
-methods. Seven new method errors remain, with no regression among previous passes.
-Unadapted library metadata, Servlet annotations and initializers fail explicitly;
-invalid global metadata still aborts deployment.
+The adapter precompiles pages before launching modular Foy/Chappe. The server
+contains neither the compiler nor `java.compiler`, and retains reflection denial.
+It supports isolated WARs and filesystem resources. Root JSP property groups reach
+the compiler through build-side descriptor parsing. Explicit deployment
+precompilation preserves per-page translation failures as error servlets so valid
+pages and negative translation tests can coexist; normal packaging still rejects
+translation errors.
 
 See xref:modules/official-tck-runner.adoc[Official TCK runner] for dependencies,
 commands, artifact preparation, retained logs and limits.
 
 == Tracking
 
-* Reproducible issues: link:{repo-ibarra}/src/branch/main/BUG.md[BUG.md], plus the
-  link:{repo-ibarra}/src/branch/main/ibarra-tck/FAILURES.md[remaining official failure inventory].
+* Reproducible issues: link:{repo-ibarra}/src/branch/main/BUG.md[BUG.md].
 * Plan and milestones: link:{repo-ibarra}/src/branch/main/PLAN.md[PLAN.md].
-* Challenges, if actually filed, belong in `TCK.md` with a specification citation.
+* Challenges, if filed, belong in `TCK.md` with a specification citation.

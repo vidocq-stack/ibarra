@@ -93,6 +93,28 @@ class PageElIntegrationTest {
     }
 
     @Test
+    void pageContextRequestAndHttpRequestContextPathResolveWithDotAndIndexSyntax() throws Exception {
+        var web = new PageRuntimeTest.Web();
+        var page = web.open(false, null);
+        var context = page.getELContext();
+        var factory = ExpressionFactory.newInstance();
+        var previous = System.getProperty("peano.reflection");
+        try {
+            System.setProperty("peano.reflection", "deny");
+            var indexed = factory.createValueExpression(context,
+                    "${pageContext['request']['contextPath']}", String.class).getValue(context);
+            var dotted = factory.createValueExpression(context,
+                    "${pageContext.request.contextPath}", String.class).getValue(context);
+
+            assertEquals(web.request.getContextPath(), indexed);
+            assertEquals(indexed, dotted);
+        } finally {
+            if (previous == null) System.clearProperty("peano.reflection");
+            else System.setProperty("peano.reflection", previous);
+        }
+    }
+
+    @Test
     void implicitObjectsAreReadOnlyButTheirScopeMapsAreWritable() throws Exception {
         var web = new PageRuntimeTest.Web();
         var page = web.open(false, null);

@@ -66,7 +66,20 @@ public final class StandardParser {
         directivesOnly();
         if (rawBodies != null) rawBodies.remember(bindings, bindingOrigins);
         cursor = 0;
-        return nodes(null, 0);
+        var parsed = nodes(null, 0);
+        rejectJspRoot(parsed);
+        return parsed;
+    }
+
+    private static void rejectJspRoot(List<PageNode> nodes) {
+        for (var node : nodes) {
+            if (node instanceof PageNode.Element element) {
+                String localName = element.name().substring(element.name().lastIndexOf(':') + 1);
+                if (element.namespace().equals(PageParser.JSP_NAMESPACE) && localName.equals("root"))
+                    throw new PageParseException(element.location(), "jsp:root is only valid in XML syntax");
+                rejectJspRoot(element.children());
+            }
+        }
     }
 
     /** Reads real directives for byte-encoding detection, without binding custom tags. */
@@ -302,12 +315,16 @@ public final class StandardParser {
         space();
         String name = identifier();
         if (!DIRECTIVES.contains(name)) throw error(start, "Unknown directive: " + name);
-        var attributes = attributes(true);
+        var attributes = attributes(true, name);
         expect("%>");
         return new PageNode.Directive(name, attributes, source.at(start));
     }
 
     private Map<String, String> attributes(boolean directive) {
+        return attributes(directive, null);
+    }
+
+    private Map<String, String> attributes(boolean directive, String directiveName) {
         var result = new LinkedHashMap<String, String>();
         while (true) {
             int beforeSpace = cursor;
@@ -336,7 +353,14 @@ public final class StandardParser {
                 value.append(c);
             }
             if (!closed) throw error(start, "Unclosed attribute value");
-            if (result.putIfAbsent(name, value.toString()) != null) throw error(start, "Duplicate attribute: " + name);
+            String attributeValue = value.toString();
+            String previous = result.putIfAbsent(name, attributeValue);
+            if (previous != null) {
+                if (directive && ("page".equals(directiveName) || "tag".equals(directiveName)) && name.equals("import"))
+                    result.put(name, previous + "," + attributeValue);
+                else if (directive && "tag".equals(directiveName) && previous.equals(attributeValue)) { /* identical metadata is harmless */ }
+                else throw error(start, "Duplicate attribute: " + name);
+            }
         }
     }
 

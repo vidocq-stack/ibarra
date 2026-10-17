@@ -114,6 +114,8 @@ final class IbarraApplicationContext implements JspApplicationContext {
         var resolvers = new CompositeELResolver();
         resolvers.add(new PagesImplicitObjectResolver(page));
         for (var resolver : current.resolvers()) resolvers.add(resolver);
+        resolvers.add(new JspPropertyELResolver());
+        resolvers.add(new ServletStaticFieldELResolver());
         var providerResolver = getExpressionFactory().getStreamELResolver();
         if (providerResolver != null) resolvers.add(providerResolver);
         resolvers.add(new StaticFieldELResolver());
@@ -150,6 +152,34 @@ final class IbarraApplicationContext implements JspApplicationContext {
         @Override public void importPackage(String name) {
             if (page == null) super.importPackage(name);
             else throw new ELException("Runtime import changes are unsupported for precompiled pages");
+        }
+    }
+
+    /** Serves implicit Servlet API static constants without shadowing generated application accessors. */
+    private static final class ServletStaticFieldELResolver extends StaticFieldELResolver {
+        private static boolean servletApi(Object base) {
+            if (!(base instanceof ELClass type)) return false;
+            String module = type.getKlass().getModule().getName();
+            return "jakarta.servlet".equals(module) || "jakarta.servlet.jsp".equals(module);
+        }
+
+        @Override public Object getValue(ELContext context, Object base, Object property) {
+            return servletApi(base) ? super.getValue(context, base, property) : null;
+        }
+        @Override public Class<?> getType(ELContext context, Object base, Object property) {
+            return servletApi(base) ? super.getType(context, base, property) : null;
+        }
+        @Override public void setValue(ELContext context, Object base, Object property, Object value) {
+            if (servletApi(base)) super.setValue(context, base, property, value);
+        }
+        @Override public boolean isReadOnly(ELContext context, Object base, Object property) {
+            return servletApi(base) && super.isReadOnly(context, base, property);
+        }
+        @Override public Object invoke(ELContext context, Object base, Object method, Class<?>[] types, Object[] arguments) {
+            return servletApi(base) ? super.invoke(context, base, method, types, arguments) : null;
+        }
+        @Override public Class<?> getCommonPropertyType(ELContext context, Object base) {
+            return servletApi(base) ? super.getCommonPropertyType(context, base) : null;
         }
     }
 

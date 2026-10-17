@@ -1,16 +1,10 @@
-# Official Pages failure inventory
+# Historical official Pages failure inventory
 
-Date: 2026-10-16, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
-The latest full suite exercised all 682 official methods across 92 classes: 605
-pass and 77 report method-level errors, with no class-level setup errors,
-assertion failures or skipped methods. TCK-013 passes 3/3 after IBARRA-144,
-TCK-014 passes 14/14 after IBARRA-145, TCK-015 passes 13/13 after IBARRA-146,
-and TCK-018 passes 5/5 after IBARRA-143;
-TCK-054 passes 7/7 after IBARRA-140, TCK-056 passes 8/8 after IBARRA-141, and
-TCK-057 passes 12/12 after IBARRA-142. TCK-021 passes 3/3 after Foy #51 and
-IBARRA-147; TCK-031 passes 12/12 after IBARRA-147. TCK-023 passes 3/3 after
-IBARRA-148; TCK-024 passes 3/3 after IBARRA-149. Twenty-two classes still have
-method-level errors, so certification remains pending.
+Date: 2026-10-17, Pages 4.0.0; tracked by IBARRA-098 in [BUG.md](../BUG.md).
+The latest full suite passes all 682 official methods across 92 classes, with zero
+method errors, setup errors, assertion failures or skipped methods. There are no
+outstanding official TCK failures. The entries below preserve the diagnostic
+history and resolution records for the previously failing classes.
 See [BASELINE.md](BASELINE.md) for current counts and historical snapshots. Each
 class keeps its previous stable id.
 The parallel compiler batch restores literal editor conversion, opaque tagdependent
@@ -107,7 +101,8 @@ Resolved methods (2026-10-13, direct WAR bean property access; 2026-10-14, TEI v
 ## TCK-006 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.functioninfo.URLClientIT
 
 - Date: 2026-10-14.
-- Status: RESOLVED in the targeted 3-method class run; the full aggregate has not been rerun.
+- Status: RESOLVED in the targeted 3-method class run and confirmed by the complete
+  2026-10-17 suite, which passes all 682 methods.
 - Symptom: the official HTTP/signature assertion reported an error.
 - Minimal repro: select `ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.functioninfo.URLClientIT` and any method below.
 - Cause: generated `TagInfo` did not link to a `TagLibraryInfo` exposing the TLD's function catalogue, so the TEI could not find the declared `FunctionInfo`.
@@ -155,7 +150,8 @@ Resolved methods (2026-10-14): both methods above pass.
 ## TCK-009 — ee.jakarta.tck.pages.api.jakarta_servlet.jsp.tagext.simpletagsupport.URLClientIT
 
 - Date: 2026-10-14 (updated; original baseline 2026-10-12).
-- Status: RESOLVED in the targeted 11-method class run; the 682-method aggregate has not been rerun.
+- Status: RESOLVED in the targeted 11-method class run and confirmed by the complete
+  2026-10-17 suite, which passes all 682 methods.
 - Symptom: the unchanged official class had three method errors. The
   `jspFragmentGetJspContextTest` page failed translation because the fragment
   handler's setter accepts `Object`.
@@ -447,8 +443,9 @@ Resolved method:
 - Cause: the precompiler only selected `.jsp` and `.jspx` resources; it ignored
   JSP property-group URL patterns that can designate pages with other extensions.
 - Fix: select resources matched by configured JSP property groups and parse them
-  with the matched properties. TCK-024 passes 3/3; the combined full suite passes
-  605/682 methods, with 77 method-level errors across 22 classes.
+  with the matched properties. TCK-024 passes 3/3; the 2026-10-16 full-suite
+  checkpoint passed 605/682 methods, with 77 method-level errors across 22 classes.
+  The final 2026-10-17 run passes all 682 methods.
 
 Resolved method:
 
@@ -969,8 +966,8 @@ Failing methods:
 - Fix: use an isolated `PageContext` wrapper, publish declared and dynamic
   attributes into its page scope, synchronize tag-file variables and stop after
   literal-path forwarding.
-- Latest focused run (2026-10-14): all 8 methods pass. The full-suite aggregate
-  recorded above predates IBARRA-141 and has not been rerun.
+- Latest focused run (2026-10-14): all 8 methods pass. The complete 2026-10-17
+  suite subsequently confirmed the class with all 682 methods passing.
 
 Methods passed (8/8):
 

@@ -26,6 +26,9 @@ import java.nio.file.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import io.vidocq.ibarra.compiler.internal.TagFileCompiler;
+import io.vidocq.ibarra.compiler.internal.TldReferences;
+import io.vidocq.ibarra.compiler.internal.TranslationUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import static org.junit.jupiter.api.Assertions.*;
@@ -697,6 +700,630 @@ class TagGenerationTest {
 
         assertEquals("ok", render("<x:inspect/>", false, configured));
     }
+
+    @Test void compilesDeferredTagFileAttributesWithTheirDeferredContracts() {
+        String tagFile = """
+                <%@ attribute name="typedValue" deferredValueType="java.lang.String" %>
+                <%@ attribute name="defaultValue" deferredValue="true" %>
+                <%@ attribute name="typedMethod" deferredMethodSignature="boolean add(java.lang.Object)" %>
+                <%@ attribute name="defaultMethod" deferredMethod="true" %>
+                """;
+
+        var compiled = compileTagFile(tagFile);
+        var tag = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+        assertFalse(tag.unsupportedMetadata(), tag.unsupportedReason());
+        assertEquals("jakarta.el.ValueExpression", tag.attributes().get("typedValue").type());
+        assertEquals("java.lang.String", tag.attributes().get("typedValue").deferredValueType());
+        assertEquals("jakarta.el.ValueExpression", tag.attributes().get("defaultValue").type());
+        assertEquals("java.lang.Object", tag.attributes().get("defaultValue").deferredValueType());
+        assertEquals("jakarta.el.MethodExpression", tag.attributes().get("typedMethod").type());
+        assertEquals("boolean", tag.attributes().get("typedMethod").deferredMethod().returnType());
+        assertEquals(List.of("java.lang.Object"), tag.attributes().get("typedMethod").deferredMethod().parameters());
+        assertEquals("jakarta.el.MethodExpression", tag.attributes().get("defaultMethod").type());
+        assertEquals("void", tag.attributes().get("defaultMethod").deferredMethod().returnType());
+        assertTrue(compiled.sources().getFirst().source().contains("setTypedValue(jakarta.el.ValueExpression value)"));
+        assertTrue(compiled.sources().getFirst().source().contains("setTypedMethod(jakarta.el.MethodExpression value)"));
+    }
+
+    @Test void standardTagFileEvaluatesImmediateElInTemplateText() {
+        var compiled = compileTagFile("<%@ attribute name='x' %>value=${x}");
+        var tag = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+
+        assertFalse(tag.unsupportedMetadata(), tag.unsupportedReason());
+        String generated = compiled.sources().getFirst().source();
+        assertTrue(generated.contains("createValueExpression(pageContext.getELContext(), \"${x}\", Object.class)"), generated);
+        assertTrue(generated.contains("if (_jspxTagFileEl0 != null) out.write(String.valueOf(_jspxTagFileEl0));"), generated);
+    }
+
+    @Test void passesErrorOnElNotFoundToTheTagFileContext() {
+        var compiled = compileTagFile("<%@ tag errorOnELNotFound='true' %>${missing}");
+        var tag = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+
+        assertFalse(tag.unsupportedMetadata(), tag.unsupportedReason());
+        assertTrue(compiled.sources().getFirst().source().contains("new TagFileJspContext(page, true)"),
+                compiled.sources().getFirst().source());
+    }
+
+    @Test void tagDirectiveAllowsDeferredSyntaxAsLiteralInNestedTagAttributes() {
+        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of(
+                "/WEB-INF/tags/outer.tag", ("<%@ tag deferredSyntaxAllowedAsLiteral='true' %>"
+                        + "<%@ taglib prefix='nested' tagdir='/WEB-INF/tags/nested' %>"
+                        + "<nested:echo literal=\"#{expr}\"/>\n").getBytes(StandardCharsets.UTF_8),
+                "/WEB-INF/tags/nested/echo.tag", "<%@ attribute name='literal' %><% out.print(literal); %>"
+                        .getBytes(StandardCharsets.UTF_8),
+                "/WEB-INF/tags/implicit.tld", "<taglib><jsp-version>3.0</jsp-version></taglib>"
+                        .getBytes(StandardCharsets.UTF_8)), Map.of());
+        var page = new TranslationUnit(options).read("/index.jsp",
+                "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:outer/>");
+
+        var compiled = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of());
+        var outer = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("outer");
+
+        assertFalse(outer.unsupportedMetadata(), outer.unsupportedReason());
+        assertTrue(compiled.sources().stream().anyMatch(source -> source.source()
+                .contains("setLiteral((java.lang.String) (\"#{expr}\"));")), compiled.sources().toString());
+    }
+
+    @Test void deferredValueTagFileAttributesAreExposedThroughTheVariableMapper() {
+        var compiled = compileTagFile("<%@ attribute name='x' deferredValue='true' %>");
+        String generated = compiled.sources().getFirst().source();
+
+        assertTrue(generated.contains("mapper.setVariable(\"x\", value)"), generated);
+        assertTrue(generated.contains("_jspxTagFileELContext.getVariableMapper().setVariable(\"x\", _jspxPreviousVariable_x)"), generated);
+    }
+
+    @Test void acceptsRepeatedImportsAndIdenticalAttributesWithinOneTagDirective() {
+        var compiled = compileTagFile("<%@ tag import='java.util.List' import='java.util.Map' display-name='Sample' "
+                + "display-name='Sample' %>");
+        var tag = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+
+        assertFalse(tag.unsupportedMetadata(), tag.unsupportedReason());
+        String generated = compiled.sources().getFirst().source();
+        assertTrue(generated.contains("import java.util.List;"), generated);
+        assertTrue(generated.contains("import java.util.Map;"), generated);
+    }
+
+    @Test void rejectsDifferingRepeatedExampleDirectives() {
+        var tag = compileTagFile("<%@ tag example='a test, too' %><%@ tag example='a test' %>")
+                .libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+
+        assertTrue(tag.unsupportedMetadata());
+        assertTrue(tag.unsupportedReason().contains("Conflicting"), tag.unsupportedReason());
+    }
+
+    @Test void ignoresNamespacedDynamicAttributesInTagFileDynamicAttributeMap() {
+        var compiled = compileTagFile("<%@ tag dynamic-attributes='attrs' %>");
+        String generated = compiled.sources().getFirst().source();
+
+        assertTrue(generated.contains("if (uri == null || uri.isEmpty()) attrs.put(localName, value);"), generated);
+    }
+
+    @Test void makesVariablesExportedByNestedTagFilesAvailableToTheContainingTagFile() {
+        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of(
+                "/WEB-INF/tags/outer.tag", ("<%@ taglib prefix='nested' tagdir='/WEB-INF/tags/nested' %>"
+                        + "<nested:inner/><% out.print(declared); %>").getBytes(StandardCharsets.UTF_8),
+                "/WEB-INF/tags/nested/inner.tag", ("<%@ variable name-given='declared' scope='AT_END' %>"
+                        + "<% jspContext.setAttribute(\"declared\", \"ready\"); %>").getBytes(StandardCharsets.UTF_8)), Map.of());
+        var page = new TranslationUnit(options).read("/index.jsp",
+                "<%@ taglib prefix='outer' tagdir='/WEB-INF/tags' %><outer:outer/>");
+
+        var compiled = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of());
+        var outer = compiled.sources().stream().filter(source -> source.source().contains("out.print(declared)")).findFirst().orElseThrow();
+
+        assertTrue(outer.source().contains("java.lang.String declared"), outer.source());
+        assertTrue(outer.source().contains("declared = (java.lang.String) jspContext.getAttribute(\"declared\")"), outer.source());
+    }
+
+    @Test void nestedTagFileVariablesAreCopiedFromTheChildContext() throws Exception {
+        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of(
+                "/WEB-INF/tags/outer.tag", ("<%@ taglib prefix='nested' tagdir='/WEB-INF/tags/nested' %>"
+                        + "<nested:inner/><% out.print(\"declared2:\" + declared2); %>").getBytes(StandardCharsets.UTF_8),
+                "/WEB-INF/tags/nested/inner.tag", ("<%@ variable name-given='declared2' scope='AT_END' %>"
+                        + "<% jspContext.setAttribute(\"declared2\", \"Test PASSED\"); %>").getBytes(StandardCharsets.UTF_8)), Map.of());
+
+        assertEquals("declared2:Test PASSED", render(
+                "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:outer/>", false, options));
+    }
+
+    @Test void nestedTagFileUndeclaredVariablesUpdateTheExistingParentVariable() throws Exception {
+        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of(
+                "/WEB-INF/tags/outer.tag", ("<%@ taglib prefix='nested' tagdir='/WEB-INF/tags/nested' %>"
+                        + "<%! String declared2; %><nested:inner/><% out.print(declared2); %>")
+                                .getBytes(StandardCharsets.UTF_8),
+                "/WEB-INF/tags/nested/inner.tag", ("<%@ variable name-given='declared2' declare='false' scope='AT_END' %>"
+                        + "<% jspContext.setAttribute(\"declared2\", \"was declared2\"); %>")
+                                .getBytes(StandardCharsets.UTF_8)), Map.of());
+
+        assertEquals("was declared2", render(
+                "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:outer/>", false, options));
+    }
+
+    @Test void compilesTagDirectoriesReachedTransitivelyFromTldDeclaredTagFiles() {
+        String tld = "<taglib><uri>urn:outer</uri><tag-file><name>outer</name>"
+                + "<path>/WEB-INF/tags/outer.tag</path></tag-file></taglib>";
+        var library = new TldParser().parse("/WEB-INF/outer.tld", tld.getBytes(StandardCharsets.UTF_8));
+        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of(
+                "/WEB-INF/tags/outer.tag", ("<%@ taglib prefix='nested' tagdir='/WEB-INF/tags/nested' %>"
+                        + "<nested:inner x='ok'/>").getBytes(StandardCharsets.UTF_8),
+                "/WEB-INF/tags/nested/inner.tag", "<%@ attribute name='x' required='true' %>${x}"
+                        .getBytes(StandardCharsets.UTF_8)), Map.of("urn:outer", library));
+        var page = new TranslationUnit(options).read("/index.jsp",
+                "<%@ taglib prefix='o' uri='urn:outer' %><o:outer/>");
+
+        var compiled = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of());
+
+        assertEquals(2, compiled.sources().size(), compiled.sources().toString());
+        assertTrue(compiled.sources().stream().anyMatch(source -> source.source().contains("setX(")));
+    }
+
+    @Test void invokesTheCallingBodyFromAStandardTagFile() {
+        var compiled = compileTagFile("<jsp:doBody/>");
+        var tag = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+
+        assertFalse(tag.unsupportedMetadata(), tag.unsupportedReason());
+        assertTrue(compiled.sources().getFirst().source().contains("getJspBody().invoke(null);"));
+    }
+
+    @Test void capturesDoBodyOutputIntoConfiguredVariableAndReaderScopes() {
+        var compiled = compileTagFile("<jsp:doBody var='content' scope='request'/><jsp:doBody varReader='reader'/>");
+        String generated = compiled.sources().getFirst().source();
+
+        assertTrue(generated.contains("pageContext.setAttribute(\"content\", _jspxDoBodyContent0, PageContext.REQUEST_SCOPE)"), generated);
+        assertTrue(generated.contains("new java.io.StringReader(_jspxDoBodyContent1)"), generated);
+    }
+
+    @Test void invokesFragmentAttributesAndSupportsVarReaderCapture() {
+        var compiled = compileTagFile("<%@ attribute name='content' fragment='true' required='true' %>"
+                + "<jsp:invoke fragment='content' varReader='reader' scope='request'/>");
+        var tag = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+        assertFalse(tag.unsupportedMetadata(), tag.unsupportedReason());
+        String generated = compiled.sources().getFirst().source();
+        assertEquals("jakarta.servlet.jsp.tagext.JspFragment", tag.attributes().get("content").type());
+        assertTrue(generated.contains("content.invoke(_jspxInvokeWriter0)"), generated);
+        assertTrue(generated.contains("new java.io.StringReader(_jspxInvokeContent0)"), generated);
+    }
+
+    @Test void supportsDynamicJspElementsAndTheirAttributeAndBodyEnvelopesInTagFiles() {
+        var compiled = compileTagFile("<jsp:element name=\"${'element1'}\"><jsp:attribute name='id'>value</jsp:attribute>"
+                + "<jsp:body>body1</jsp:body></jsp:element>");
+        var tag = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+        String generated = compiled.sources().getFirst().source();
+
+        assertFalse(tag.unsupportedMetadata(), tag.unsupportedReason());
+        assertTrue(generated.contains("createValueExpression(pageContext.getELContext(), \"${'element1'}\", Object.class)"), generated);
+        assertTrue(generated.contains("out.write(\" id=\\\"\")"), generated);
+        assertTrue(generated.contains("out.write(\"body1\")"), generated);
+    }
+
+    @Test void dynamicJspElementWithOnlyNamedAttributesHasNoBody() {
+        var compiled = compileTagFile("<jsp:element name='element1'><jsp:attribute name='attr1'>value1</jsp:attribute></jsp:element>");
+        var tag = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+        assertFalse(tag.unsupportedMetadata(), tag.unsupportedReason());
+        String generated = compiled.sources().getFirst().source();
+
+        assertTrue(generated.contains("out.write(\" attr1=\\\"\")"), generated);
+        assertTrue(generated.contains("out.write(\">\")"), generated);
+        assertFalse(generated.contains("jsp:attribute"), generated);
+    }
+
+    @Test void supportsJspTextInStandardTagFiles() {
+        var compiled = compileTagFile("<jsp:text>inside text</jsp:text>");
+        var tag = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+
+        assertFalse(tag.unsupportedMetadata(), tag.unsupportedReason());
+        assertTrue(compiled.sources().getFirst().source().contains("out.write(\"inside text\");"));
+    }
+
+    @Test void unwrapsJspRootAndBodyInStandardTagFiles() {
+        var compiled = compileTagFile("<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='2.0'>"
+                + "<jsp:body>inside root</jsp:body></jsp:root>");
+        var tag = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+
+        assertFalse(tag.unsupportedMetadata(), tag.unsupportedReason());
+        String generated = compiled.sources().getFirst().source();
+        assertTrue(generated.contains("out.write(\"inside root\");"), generated);
+        assertFalse(generated.contains("jsp:root"), generated);
+    }
+
+    @Test void rejectsInvalidJspRootVersionInStandardTagFiles() {
+        var compiled = compileTagFile("<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='2.00'>invalid</jsp:root>");
+        var tag = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+
+        assertTrue(tag.unsupportedMetadata(), tag.unsupportedReason());
+        assertTrue(tag.unsupportedReason().contains("Invalid jsp:root version"), tag.unsupportedReason());
+    }
+
+    @Test void compilesXmlSyntaxInStandardTagFiles() throws Exception {
+        String tagFile = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='2.0'>"
+                + "<jsp:body><status>Test PASSED</status></jsp:body></jsp:root>";
+
+        var output = render("<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>", false,
+                tagFileOptions(tagFile));
+
+        assertTrue(output.contains("<status>Test PASSED</status>"), output);
+    }
+
+    @Test void compilesScriptingAndDoBodyInXmlTagFiles() throws Exception {
+        String xml = """
+                <?xml version="1.0"?>
+                <jsp:root xmlns:jsp="http://java.sun.com/JSP/Page" version="2.0">
+                  <jsp:directive.tag import="java.io.IOException" />
+                  <jsp:declaration><![CDATA[public void status(JspWriter out) throws IOException { out.print("Test PASSED"); }]]></jsp:declaration>
+                  <jsp:scriptlet><![CDATA[status(out);]]></jsp:scriptlet>
+                  <jsp:expression>" expression"</jsp:expression>
+                </jsp:root>
+                """;
+        var output = render("<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>", false,
+                tagxOptions(xml));
+
+        assertTrue(output.contains("Test PASSED expression"), output);
+    }
+
+    @Test void compilesScriptingActionElementsInStandardPages() throws Exception {
+        String page = "<%@ page contentType='text/plain' import='java.io.IOException' %>"
+                + "<jsp:declaration>public void status(JspWriter out) throws IOException { out.print(\"Test PASSED|\"); }</jsp:declaration>"
+                + "<jsp:scriptlet>status(out);</jsp:scriptlet>"
+                + "<jsp:expression>\"Test PASSED|\"</jsp:expression>"
+                + "<% out.print(\"Test PASSED\"); %>";
+
+        assertEquals("Test PASSED|Test PASSED|Test PASSED", render(page));
+    }
+
+    @Test void compilesScriptingActionElementsInStandardTagFiles() throws Exception {
+        String tagFile = "<%@ tag import='java.io.IOException' %>"
+                + "<jsp:declaration>public void status(JspWriter out) throws IOException { out.print(\"Test PASSED\"); }</jsp:declaration>"
+                + "<jsp:scriptlet>status(out);</jsp:scriptlet>";
+
+        assertEquals("Test PASSED", render("<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>", false,
+                tagFileOptions(tagFile)));
+    }
+
+    @Test void invokesTheCallerBodyFromXmlTagFiles() throws Exception {
+        String xml = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='2.0'><jsp:doBody/></jsp:root>";
+        var output = render("<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample>caller body</t:sample>", false,
+                tagxOptions(xml));
+
+        assertTrue(output.contains("caller body"), output);
+    }
+
+    @Test void unwrapsJspRootAndJspBodyWhenCompilingXmlTagFiles() {
+        String xml = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='2.0'>"
+                + "<jsp:body><status>Test PASSED</status></jsp:body></jsp:root>";
+        var options = new GenerationOptions(List.of(), Map.of(), false,
+                Map.of("/WEB-INF/tags/sample.tagx", xml.getBytes(StandardCharsets.UTF_8)), Map.of());
+        var page = new TranslationUnit(options).read("/index.jsp",
+                "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>");
+
+        var compiled = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of());
+
+        assertEquals(1, compiled.sources().size());
+        String generated = compiled.sources().getFirst().source();
+        assertTrue(generated.contains("out.write(\"<status>\");"), generated);
+        assertTrue(generated.contains("out.write(\"Test PASSED\");"), generated);
+        assertFalse(generated.contains("jsp:root"), generated);
+    }
+
+    @Test void preservesNonJspDocumentRootWhenCompilingXmlTagFiles() throws Exception {
+        String xml = "<subroot xmlns:jsp='http://java.sun.com/JSP/Page'>"
+                + "<jsp:expression>\"Test PASSED\"</jsp:expression></subroot>";
+        var options = new GenerationOptions(List.of(), Map.of(), false,
+                Map.of("/WEB-INF/tags/sample.tagx", xml.getBytes(StandardCharsets.UTF_8)), Map.of());
+        assertEquals("<subroot>Test PASSED</subroot>", render(
+                "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>", false, options));
+    }
+
+    @Test void rejectsInvalidJspRootVersionInXmlTagFiles() {
+        String xml = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='2.00'><status>invalid</status></jsp:root>";
+        var options = new GenerationOptions(List.of(), Map.of(), false,
+                Map.of("/WEB-INF/tags/sample.tagx", xml.getBytes(StandardCharsets.UTF_8)), Map.of());
+        var page = new TranslationUnit(options).read("/index.jsp",
+                "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>");
+
+        var compiled = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of());
+        var tag = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+
+        assertTrue(tag.unsupportedMetadata(), tag.unsupportedReason());
+        assertTrue(tag.unsupportedReason().contains("Invalid jsp:root version"), tag.unsupportedReason());
+    }
+
+    @Test void acceptsRepeatedTagFileImportsLanguageAndIdenticalMetadata() {
+        String tagFile = """
+                <%@ tag import="java.util.List" language="java" body-content="scriptless"
+                    description="Sample tag" display-name="Sample" example="example" %>
+                <%@ tag import="java.util.Map" language="java" body-content="scriptless"
+                    description="Sample tag" display-name="Sample" %>
+                """;
+
+        var compiled = compileTagFile(tagFile);
+        var tag = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+        assertFalse(tag.unsupportedMetadata(), tag.unsupportedReason());
+        assertEquals("scriptless", tag.bodyContent());
+        String generated = compiled.sources().getFirst().source();
+        assertTrue(generated.contains("import java.util.List;"));
+        assertTrue(generated.contains("import java.util.Map;"));
+        var options = tagFileOptions(tagFile);
+        var metadata = TagFileCompiler.tagInfoMetadata(new TranslationUnit(options)
+                .read("/WEB-INF/tags/sample.tag", tagFile));
+        assertEquals("Sample tag", metadata.infoString());
+        assertEquals("Sample", metadata.displayName());
+    }
+
+    @Test void tagFilesReceiveTheImplicitServletImports() {
+        var compiled = compileTagFile("<%@ tag language=\"java\" %><% Cookie cookie = new Cookie(\"name\", \"value\"); "
+                + "ServletException failure = new ServletException(); %>");
+        String generated = compiled.sources().getFirst().source();
+        assertTrue(generated.contains("import jakarta.servlet.*;"));
+        assertTrue(generated.contains("import jakarta.servlet.http.*;"));
+    }
+
+    @Test void compilesTagDirectoriesReferencedByAnotherTagFile() {
+        String outer = "<%@ taglib prefix=\"nested\" tagdir=\"/WEB-INF/tags/nested\" %><nested:inner/>";
+        String inner = "inner";
+        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of(
+                "/WEB-INF/tags/outer.tag", outer.getBytes(StandardCharsets.UTF_8),
+                "/WEB-INF/tags/nested/inner.tag", inner.getBytes(StandardCharsets.UTF_8)), Map.of());
+        var page = new TranslationUnit(options).read("/index.jsp",
+                "<%@ taglib prefix=\"root\" tagdir=\"/WEB-INF/tags\" %><root:outer/>");
+
+        var compiled = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of());
+
+        var rootTag = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("outer");
+        assertFalse(rootTag.unsupportedMetadata(), rootTag.unsupportedReason());
+        assertTrue(compiled.libraries().containsKey("urn:jsptagdir:/WEB-INF/tags/nested"));
+        assertEquals(2, compiled.sources().size());
+    }
+
+    @Test void honorsImplicitTldMetadataForATagDirectory() {
+        String implicitTld = """
+                <taglib version="2.1"><description>Tag directory</description>
+                  <tlib-version>1.0</tlib-version><short-name>implicit</short-name>
+                </taglib>
+                """;
+        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of(
+                "/WEB-INF/tags/sample.tag", new byte[0],
+                "/WEB-INF/tags/implicit.tld", implicitTld.getBytes(StandardCharsets.UTF_8)), Map.of());
+        var page = new TranslationUnit(options).read("/index.jsp",
+                "<%@ taglib prefix=\"t\" tagdir=\"/WEB-INF/tags\" %><t:sample/>");
+
+        var library = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of())
+                .libraries().get("urn:jsptagdir:/WEB-INF/tags");
+
+        assertEquals("2.1", library.requiredVersion());
+        assertEquals("1.0", library.tlibVersion());
+        assertEquals("implicit", library.shortName());
+        assertEquals("Tag directory", library.infoString());
+    }
+
+    @Test void rejectsImplicitTldBelowMinimumJspVersion() {
+        var options = tagDirectoryOptions("<taglib version='1.2'><tlib-version>1.0</tlib-version></taglib>");
+        var page = new TranslationUnit(options).read("/index.jsp",
+                "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>");
+
+        var failure = assertThrows(PageParseException.class,
+                () -> TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of()));
+
+        assertTrue(failure.getMessage().contains("implicit.tld"));
+    }
+
+    @Test void rejectsTagDeclarationsInImplicitTld() {
+        var options = tagDirectoryOptions("""
+                <taglib version="2.1"><tlib-version>1.0</tlib-version>
+                  <tag><name>extra</name><tag-class>fixture.ExtraTag</tag-class><body-content>empty</body-content></tag>
+                </taglib>
+                """);
+        var page = new TranslationUnit(options).read("/index.jsp",
+                "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>");
+
+        var failure = assertThrows(PageParseException.class,
+                () -> TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of()));
+
+        assertTrue(failure.getMessage().contains("implicit.tld"));
+    }
+
+    @Test void usesImplicitTldDefaultJspVersionWhenParsingTagFileDeferredSyntax() {
+        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of(
+                "/WEB-INF/tags/sample.tag", "#{literal}".getBytes(StandardCharsets.UTF_8)), Map.of());
+        var page = new TranslationUnit(options).read("/index.jsp",
+                "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>");
+
+        var compiled = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of());
+
+        assertEquals(1, compiled.sources().size(),
+                compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample").unsupportedReason());
+        assertTrue(compiled.sources().getFirst().source().contains("out.write(\"#{literal}\");"));
+    }
+
+    @Test void honorsImplicitTldJspVersionWhenParsingTagFileDeferredSyntax() {
+        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of(
+                "/WEB-INF/tags/sample.tag", "#{expression}".getBytes(StandardCharsets.UTF_8),
+                "/WEB-INF/tags/implicit.tld", "<taglib><jsp-version>2.1</jsp-version></taglib>"
+                        .getBytes(StandardCharsets.UTF_8)), Map.of());
+        var page = new TranslationUnit(options).read("/index.jsp",
+                "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>");
+
+        var compiled = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of());
+
+        var tag = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+        assertTrue(tag.unsupportedReason().contains("EL in standard tag files is not supported yet"));
+    }
+
+    @Test void allowsDeferredSyntaxAsLiteralInNestedTagFileAttributesForJsp20() {
+        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of(
+                "/WEB-INF/tags/outer.tag", "<%@ taglib prefix='nested' tagdir='/WEB-INF/tags/nested' %>"
+                        .concat("<nested:echo literal=\"#{expr}\"/>\n").getBytes(StandardCharsets.UTF_8),
+                "/WEB-INF/tags/nested/echo.tag", "<%@ attribute name='literal' %><% out.print(literal); %>"
+                        .getBytes(StandardCharsets.UTF_8),
+                "/WEB-INF/tags/implicit.tld", "<taglib version='2.0'></taglib>".getBytes(StandardCharsets.UTF_8)), Map.of());
+        var page = new TranslationUnit(options).read("/index.jsp",
+                "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:outer/>");
+
+        var compiled = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of());
+
+        assertEquals(2, compiled.sources().size(), compiled.libraries().toString());
+        assertTrue(compiled.sources().stream().anyMatch(source -> source.source()
+                .contains("setLiteral((java.lang.String) (\"#{expr}\"));")));
+    }
+
+    @Test void compilesTagFilesDeclaredByATld() {
+        String tld = """
+                <taglib version="3.0"><uri>urn:packaged-tags</uri>
+                  <tag-file><name>sample</name><path>/WEB-INF/tags/sample.tag</path></tag-file>
+                </taglib>
+                """;
+        var library = new TldParser().parse("/WEB-INF/packaged.tld", tld.getBytes(StandardCharsets.UTF_8));
+        var options = new GenerationOptions(List.of(), Map.of(), false,
+                Map.of("/WEB-INF/tags/sample.tag", "packaged".getBytes(StandardCharsets.UTF_8)),
+                Map.of("urn:packaged-tags", library));
+        var page = new TranslationUnit(options).read("/index.jsp",
+                "<%@ taglib prefix=\"p\" uri=\"urn:packaged-tags\" %><p:sample/>");
+
+        var compiled = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of());
+
+        var compiledLibrary = compiled.libraries().get("urn:packaged-tags");
+        assertNotNull(compiledLibrary);
+        var tag = compiledLibrary.tags().get("sample");
+        assertFalse(tag.unsupportedMetadata(), tag.unsupportedReason());
+        assertNotNull(tag.handlerClass());
+        assertEquals(1, compiled.sources().size());
+    }
+
+    @Test void compilesTldTagFilesReferencedByRelativeResourceUri() {
+        String tld = """
+                <taglib version="3.0"><uri>urn:packaged-tags</uri>
+                  <tag-file><name>sample</name><path>/WEB-INF/tags/sample.tag</path></tag-file>
+                </taglib>
+                """;
+        var library = new TldParser().parse("/WEB-INF/tag.tld", tld.getBytes(StandardCharsets.UTF_8));
+        var options = new GenerationOptions(List.of(), Map.of(), false,
+                Map.of("/WEB-INF/tag.tld", tld.getBytes(StandardCharsets.UTF_8),
+                        "/WEB-INF/tags/sample.tag", "packaged".getBytes(StandardCharsets.UTF_8)),
+                Map.of("/WEB-INF/tag.tld", library));
+        var page = new TranslationUnit(options).read("/index.jsp",
+                "<%@ taglib prefix=\"p\" uri=\"WEB-INF/tag.tld\" %><p:sample/>");
+
+        var compiled = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of());
+
+        var compiledLibrary = compiled.libraries().get("/WEB-INF/tag.tld");
+        assertNotNull(compiledLibrary);
+        var tag = compiledLibrary.tags().get("sample");
+        assertFalse(tag.unsupportedMetadata(), tag.unsupportedReason());
+        assertNotNull(tag.handlerClass());
+        assertEquals(1, compiled.sources().size());
+
+        var configured = new GenerationOptions(List.of(), Map.of(), false, options.byteSources(), compiled.libraries());
+        var resolved = TldReferences.discoverStrict(List.of(page), configured, options.tagLibraries());
+        var resolvedTag = resolved.resolve("WEB-INF/tag.tld", page.tagLibraries().getFirst().location(), true)
+                .tags().get("sample");
+        assertFalse(resolvedTag.unsupportedMetadata(), resolvedTag.unsupportedReason());
+        assertEquals(tag.handlerClass(), resolvedTag.handlerClass());
+    }
+
+    @Test void rejectsConflictingRepeatedTagFileMetadata() {
+        String tagFile = """
+                <%@ tag body-content="empty" description="First" %>
+                <%@ tag body-content="scriptless" description="Second" %>
+                """;
+
+        var tag = compileTagFile(tagFile).libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+        assertTrue(tag.unsupportedMetadata());
+        assertTrue(tag.unsupportedReason().contains("Conflicting"), tag.unsupportedReason());
+    }
+
+    @Test void rejectsPrimitiveTagFileAttributeTypes() {
+        var tag = compileTagFile("<%@ attribute name=\"value\" type=\"double\" %>")
+                .libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+        assertTrue(tag.unsupportedMetadata());
+        assertTrue(tag.unsupportedReason().contains("Invalid tag-file attribute type"), tag.unsupportedReason());
+    }
+
+    @Test void rejectsExplicitFalseRtexprvalueForFragmentTagFileAttributes() {
+        var tag = compileTagFile("<%@ attribute name='piece' fragment='true' rtexprvalue='false' %>")
+                .libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+
+        assertTrue(tag.unsupportedMetadata(), tag.unsupportedReason());
+        assertTrue(tag.unsupportedReason().contains("rtexprvalue"), tag.unsupportedReason());
+    }
+
+    @Test void supportsTagFileVariableNamesDerivedFromRequiredStringAttributes() {
+        var compiled = compileTagFile("<%@ attribute name='var' type='java.lang.String' required='true' rtexprvalue='false' %>"
+                + "<%@ variable alias='result' name-from-attribute='var' scope='AT_BEGIN' %>");
+        var tag = compiled.libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+
+        assertFalse(tag.unsupportedMetadata(), tag.unsupportedReason());
+        assertEquals(1, tag.variables().size());
+        var variable = tag.variables().getFirst();
+        assertNull(variable.name());
+        assertEquals("var", variable.nameFromAttribute());
+        assertEquals("result", variable.alias());
+        assertEquals("java.lang.String", variable.className());
+        assertEquals(TagVariableDescriptor.AT_BEGIN, variable.scope());
+    }
+
+    @Test void synchronizesTagFileVariableAliasesWithTheirExternalNames() throws Exception {
+        String tagFile = "<%@ attribute name='var' required='true' rtexprvalue='false' %>"
+                + "<%@ variable alias='result' name-from-attribute='var' scope='AT_BEGIN' %>"
+                + "<% jspContext.setAttribute(\"x\", \"ignoredInCallingPage\");"
+                + " jspContext.setAttribute(\"result\", \"tagFileResult\"); %>"
+                + "<jsp:doBody/>${x}|${result}|"
+                + "<% jspContext.setAttribute(\"x\", \"stillIgnoredInCallingPage\");"
+                + " jspContext.setAttribute(\"result\", \"4\"); %>";
+        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of(
+                "/WEB-INF/tags/aliased.tag", tagFile.getBytes(StandardCharsets.UTF_8)), Map.of());
+        String page = "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %>"
+                + "<% pageContext.setAttribute(\"x\", \"1\");"
+                + " pageContext.setAttribute(\"result\", \"callingPageResult\"); %>"
+                + "<t:aliased var='x'>${x}|${result}|</t:aliased>${x}|${result}";
+
+        assertEquals("tagFileResult|callingPageResult|ignoredInCallingPage|tagFileResult|4|callingPageResult",
+                render(page, false, options));
+    }
+
+    @Test void rejectsInvalidNameFromAttributeContractsInTagFileVariables() {
+        for (String source : List.of(
+                "<%@ variable name-from-attribute='var' %>",
+                "<%@ attribute name='var' type='java.lang.Integer' required='true' rtexprvalue='false' %>"
+                        + "<%@ variable name-from-attribute='var' %>",
+                "<%@ attribute name='var' type='java.lang.String' rtexprvalue='false' %>"
+                        + "<%@ variable name-from-attribute='var' %>",
+                "<%@ attribute name='var' required='true' rtexprvalue='true' %>"
+                        + "<%@ variable name-from-attribute='var' %>")) {
+            var tag = compileTagFile(source).libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+            assertTrue(tag.unsupportedMetadata(), tag.unsupportedReason());
+        }
+    }
+
+    @Test void invokingAnUnsetOptionalTagFileFragmentIsANoop() throws Exception {
+        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of(
+                "/WEB-INF/tags/sample.tag", "<%@ attribute name='piece' fragment='true' %><jsp:invoke fragment='piece'/>"
+                        .getBytes(StandardCharsets.UTF_8)), Map.of());
+
+        assertEquals("", render("<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>", false, options));
+    }
+
+    @Test void dynamicElementElNamesAreCoercedFromObjects() throws Exception {
+        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of(
+                "/WEB-INF/tags/sample.tag", "<jsp:element name=\"${'element1'}\">body</jsp:element>"
+                        .getBytes(StandardCharsets.UTF_8)), Map.of());
+
+        var output = render("<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>", false, options);
+
+        assertTrue(output.contains("<element1>body</element1>"), output);
+    }
+
+    @Test void rejectsTagFileVariableAliasWithoutNameFromAttribute() {
+        var tag = compileTagFile("<%@ variable name-given=\"value\" alias=\"other\" %>")
+                .libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+        assertTrue(tag.unsupportedMetadata());
+        assertTrue(tag.unsupportedReason().contains("alias"), tag.unsupportedReason());
+    }
+
+    @Test void rejectsTagFileAttributeAndVariableNameCollisions() {
+        var tag = compileTagFile("<%@ attribute name=\"value\" %><%@ variable name-given=\"value\" %>")
+                .libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+        assertTrue(tag.unsupportedMetadata());
+        assertTrue(tag.unsupportedReason().contains("conflict"), tag.unsupportedReason());
+    }
+
     @Test void bufferedIterationsRetainContentUntilTheHandlerClearsIt() throws Exception {
         assertEquals("[ia][iaa]",render("<x:bufferedRepeat>a</x:bufferedRepeat>"));
     }
@@ -709,6 +1336,25 @@ class TagGenerationTest {
         }
     }
     private String prefix() { return "<%@ page session='false' %><%@ taglib prefix='x' uri='urn:test' %>"; }
+    private TagFileCompiler.Result compileTagFile(String source) {
+        var options = tagFileOptions(source);
+        var page = new TranslationUnit(options).read("/index.jsp",
+                "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>");
+        return TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of());
+    }
+    private GenerationOptions tagxOptions(String source) {
+        return new GenerationOptions(List.of(), Map.of(), false,
+                Map.of("/WEB-INF/tags/sample.tagx", source.getBytes(StandardCharsets.UTF_8)), Map.of());
+    }
+    private GenerationOptions tagFileOptions(String source) {
+        return new GenerationOptions(List.of(), Map.of(), false,
+                Map.of("/WEB-INF/tags/sample.tag", source.getBytes(StandardCharsets.UTF_8)), Map.of());
+    }
+    private GenerationOptions tagDirectoryOptions(String implicitTld) {
+        return new GenerationOptions(List.of(), Map.of(), false, Map.of(
+                "/WEB-INF/tags/sample.tag", "sample".getBytes(StandardCharsets.UTF_8),
+                "/WEB-INF/tags/implicit.tld", implicitTld.getBytes(StandardCharsets.UTF_8)), Map.of());
+    }
     private GenerationOptions options() {
         String tld = """
                 <taglib><uri>urn:test</uri>
@@ -781,7 +1427,16 @@ class TagGenerationTest {
     }
     private String render(String source, boolean expectFailure, GenerationOptions options, int requests) throws Exception {
         prepare();
-        var generated = generator().generate("/tags.jsp", source.startsWith("<jsp:root") ? source : prefix()+source, "fixture.GeneratedPage", options);
+        String pageSource = source.startsWith("<jsp:root") ? source : prefix()+source;
+        var page = new TranslationUnit(options).read("/tags.jsp", pageSource);
+        var paths = new ArrayList<Path>();
+        paths.add(directory);
+        for (String path : modulePath().split(java.util.regex.Pattern.quote(File.pathSeparator))) paths.add(Path.of(path));
+        var tagFiles = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", paths);
+        var tagLibraries = new LinkedHashMap<>(options.tagLibraries());
+        tagLibraries.putAll(tagFiles.libraries());
+        options = options.withTagLibraries(tagLibraries);
+        var generated = generator().generate("/tags.jsp", pageSource, "fixture.GeneratedPage", options);
         String main = """
                 package io.vidocq.ibarra.core.internal;
                 import jakarta.servlet.*; import jakarta.servlet.jsp.*;
@@ -807,8 +1462,11 @@ class TagGenerationTest {
                 """.replace("EXPECT_FAILURE", String.valueOf(expectFailure)).replace("REQUEST_COUNT", String.valueOf(requests)).replace("response.output.toString().getBytes", "(failureTrace+response.output).getBytes");
         Path root=Path.of(System.getProperty("user.dir")).toAbsolutePath(); if(!Files.isDirectory(root.resolve("ibarra-core"))) root=root.getParent();
         String doubles=Files.readString(root.resolve("ibarra-core/src/test/java/io/vidocq/ibarra/core/internal/ServletDoubles.java"));
-        compile(List.of(generated,new GeneratedPage("io.vidocq.ibarra.core.internal.TagMain",main,Map.of()),
-                new GeneratedPage("io.vidocq.ibarra.core.internal.ServletDoubles",doubles,Map.of())));
+        var sources = new ArrayList<>(tagFiles.sources());
+        sources.add(generated);
+        sources.add(new GeneratedPage("io.vidocq.ibarra.core.internal.TagMain",main,Map.of()));
+        sources.add(new GeneratedPage("io.vidocq.ibarra.core.internal.ServletDoubles",doubles,Map.of()));
+        compile(sources);
         var process=new ProcessBuilder(Path.of(System.getProperty("java.home"),"bin/java").toString(),
                 "--limit-modules","io.vidocq.ibarra.core,io.vidocq.peano.core","--add-modules","io.vidocq.peano.core",
                 "--add-reads","io.vidocq.ibarra.core=io.vidocq.peano.api","--module-path",modulePath(),

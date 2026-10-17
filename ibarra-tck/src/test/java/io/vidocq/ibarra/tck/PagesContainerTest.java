@@ -39,7 +39,8 @@ class PagesContainerTest {
         String jsp = "<%@ page contentType='text/plain' %><%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:declaration/>";
         String utf8Jsp = "<%@ page contentType='text/plain;charset=UTF-8' %>"
                 + "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:declaration/>";
-        String tagx = "<root xmlns:jsp='http://java.sun.com/JSP/Page'><jsp:output omit-xml-declaration='false'/></root>";
+        String tagx = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='2.0'>"
+                + "<jsp:output omit-xml-declaration='false'/></jsp:root>";
         var war = ShrinkWrap.create(WebArchive.class, "tag-file-encoding.war")
                 .addAsWebResource(new StringAsset(jsp), "index.jsp")
                 .addAsWebResource(new StringAsset(utf8Jsp), "utf8.jsp")

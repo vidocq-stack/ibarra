@@ -20,6 +20,7 @@
 package io.vidocq.ibarra.core.internal;
 
 import jakarta.el.*;
+import io.vidocq.ibarra.spi.TagFileJspContext;
 
 /** Final resolver for unresolved reads; resolved null values never reach it. */
 final class NotFoundELResolver extends ELResolver {
@@ -29,7 +30,10 @@ final class NotFoundELResolver extends ELResolver {
     @Override
     public Object getValue(ELContext context, Object base, Object property) {
         context.setPropertyResolved(true);
-        if (strict) throw new PropertyNotFoundException("Unresolved EL identifier or property: " + property);
+        boolean tagFileStrict = context.getContext(TagFileJspContext.class) instanceof TagFileJspContext tagFile
+                && tagFile.errorOnELNotFound();
+        if (strict || tagFileStrict)
+            throw new PropertyNotFoundException("Unresolved EL identifier or property: " + property);
         return null;
     }
 

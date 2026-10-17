@@ -66,6 +66,21 @@ class PageGeneratorTest {
     }
 
     @Test
+    void jspRootAcceptsAnExplicitBodyEnvelope() throws Exception {
+        String xml = "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='2.0'>"
+                + "<jsp:body><jsp:directive.page session='false'/><status>Test PASSED</status></jsp:body></jsp:root>";
+        var page = generator().generate("/root.jspx", xml, PAGE_CLASS, GenerationOptions.DEFAULT);
+        assertEquals("<status>Test PASSED</status>", run(page, "", ""));
+    }
+
+    @Test
+    void jspRootRejectsAnUnsupportedVersion() {
+        String xml = "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='999.2'><status>Test FAILED</status></jsp:root>";
+        assertThrows(PageParseException.class,
+                () -> generator().generate("/invalid-version.jspx", xml, PAGE_CLASS, GenerationOptions.DEFAULT));
+    }
+
+    @Test
     void xmlDocumentWithoutJspRootAddsDefaultDeclarationBeforeTemplate() throws Exception {
         assertEquals("<?xml version=\"1.0\" encoding=\"UTF-8\"?><hello/>",
                 run(generator().generate("/document.jspx", "\n<hello/>\n", PAGE_CLASS, GenerationOptions.DEFAULT), "", ""));
@@ -198,6 +213,16 @@ class PageGeneratorTest {
     }
 
     @Test
+    void includeParametersAcceptNamedJspAttributes() throws Exception {
+        String jsp = "<%@ page session='false' %><jsp:include page='/part.jsp'>"
+                + "<jsp:param value='one'><jsp:attribute name='name'>first</jsp:attribute></jsp:param>"
+                + "<jsp:param name='second'><jsp:attribute name='value' trim='true'> ${param.v} </jsp:attribute></jsp:param>"
+                + "</jsp:include>";
+        assertEquals("INCLUDED", render(jsp, dispatchSetup() + "request.parameters.put(\"v\", new String[]{\"two\"});",
+                "if (!context.lastDispatchPath.equals(\"/part.jsp?first=one&second=two\")) throw new AssertionError(context.lastDispatchPath);"));
+    }
+
+    @Test
     void scriptingInvalidStillAllowsRequestTimeExpressionsInActionAttributes() throws Exception {
         var options = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"),
                 Map.of("scripting-invalid", "true"), List.of(), List.of())), Map.of());
@@ -261,6 +286,39 @@ class PageGeneratorTest {
         assertTrue(generated.source().contains(".getName()"));
         assertFalse(generated.source().contains("java.lang.reflect"));
         assertEquals("Ada:7", run(generated, "request.parameters.put(\"name\", new String[]{\"Ada\"});", ""));
+    }
+
+    @Test
+    void useBeanBeanNameInstantiatesClassAndCastsToDeclaredType() throws Exception {
+        prepareBean();
+        String jsp = "<%@ page session='false' %><jsp:useBean id='bean' type='fixture.Bean' beanName='fixture.Bean'>"
+                + "<jsp:setProperty name='bean' property='name' value='Ada'/></jsp:useBean>"
+                + "<jsp:getProperty name='bean' property='name'/>";
+        var generated = generator().generate("/bean.jsp", jsp, PAGE_CLASS, GenerationOptions.DEFAULT);
+        assertTrue(generated.source().contains("new fixture.Bean()"));
+        assertFalse(generated.source().contains("_jspxInstantiateBean"));
+        assertEquals("Ada", run(generated, "", ""));
+    }
+
+    @Test
+    void useBeanBeanNameEvaluatesRequestTimeExpression() throws Exception {
+        prepareBean();
+        String jsp = "<%@ page session='false' %><% String className = request.getParameter(\"className\"); %>"
+                + "<jsp:useBean id='bean' type='fixture.Bean' beanName='<%= className %>'>"
+                + "<jsp:setProperty name='bean' property='name' value='Grace'/></jsp:useBean>"
+                + "<jsp:getProperty name='bean' property='name'/>";
+        assertEquals("Grace", render(jsp,
+                "request.parameters.put(\"className\", new String[]{\"fixture.Bean\"});", ""));
+    }
+
+    @Test
+    void useBeanBeanNameLoadsSerializedResourceAndCastsToDeclaredType() throws Exception {
+        try (var output = new java.io.ObjectOutputStream(Files.newOutputStream(directory.resolve("date.ser")))) {
+            output.writeObject(new java.util.Date(42));
+        }
+        String jsp = "<%@ page session='false' %><jsp:useBean id='bean' type='java.util.Date' beanName='date'/>"
+                + "<%= bean.getTime() %>";
+        assertEquals("42", render(jsp, "", ""));
     }
 
     @Test
@@ -369,6 +427,25 @@ class PageGeneratorTest {
     }
 
     @Test
+    void pageDirectiveCanExtendASuperclassWithFinalServletLifecycleMethods() throws Exception {
+        GeneratedPage parent = finalLifecycleSuperPage();
+        compile(List.of(parent));
+        var page = generator().generate("/extends.jsp", "<%@ page extends='fixture.SuperPage' session='false' %>body",
+                PAGE_CLASS, GenerationOptions.DEFAULT);
+        compile(List.of(page));
+    }
+
+    @Test
+    void repeatedPageDirectivesMayDeclareTheSameSuperclass() throws Exception {
+        GeneratedPage parent = finalLifecycleSuperPage();
+        compile(List.of(parent));
+        var page = generator().generate("/duplicate-extends.jsp",
+                "<%@ page extends='fixture.SuperPage' session='false' %><%@ page extends='fixture.SuperPage' %>body",
+                PAGE_CLASS, GenerationOptions.DEFAULT);
+        compile(List.of(page));
+    }
+
+    @Test
     void wildcardPropertiesGenerateStaticParameterToSetterCalls() throws Exception {
         prepareBean();
         assertEquals("Ada:7", render("<%@ page session='false' %><jsp:useBean id='bean' class='fixture.Bean'/>"
@@ -383,6 +460,14 @@ class PageGeneratorTest {
                 + "<jsp:attribute name='class'>a & b</jsp:attribute><jsp:body>Hello ${param.q}</jsp:body></jsp:element>";
         assertEquals("<h1 class=\"a &amp; b\">Hello Ada</h1>", render(jsp,
                 "request.parameters.put(\"tag\", new String[]{\"h1\"}); request.parameters.put(\"q\", new String[]{\"Ada\"});", ""));
+    }
+
+    @Test
+    void dynamicElementEvaluatesXmlSyntaxScriptletExpressionsInItsName() throws Exception {
+        String xml = "<root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "'>"
+                + "<jsp:directive.page session='false'/><jsp:element name='%= \"h2\" %'>body</jsp:element></root>";
+        var page = generator().generate("/fixture.jspx", xml, PAGE_CLASS, GenerationOptions.DEFAULT);
+        assertEquals("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root><h2>body</h2></root>", run(page, "", ""));
     }
 
     @Test
@@ -847,6 +932,101 @@ class PageGeneratorTest {
     @Test void defaultExplicitWildcardAndNestedImportsAreVisibleToEl() throws Exception {
         assertEquals("200|true|true", render("<%@ page session='false' import='java.util.*,java.util.Map.Entry' %>${HttpServletResponse.SC_OK}|${List != null}|${Entry != null}", "", ""));
     }
+    @Test void implicitServletApiTypesAreVisibleToElWithoutExplicitPageImports() throws Exception {
+        assertEquals("ASYNC|CONTEXT_ROOT", render("<%@ page session='false' %>${DispatcherType.ASYNC}|${MappingMatch.CONTEXT_ROOT}", "", ""));
+    }
+    @Test void typedDeferredTagAttributesPreserveValueAndMethodExpressions() throws Exception {
+        compile(List.of(new GeneratedPage("fixture.AllowedDeferredValuesTag", """
+                package fixture;
+                public final class AllowedDeferredValuesTag extends jakarta.servlet.jsp.tagext.TagSupport {
+                    private Object valueExpr;
+                    private jakarta.el.MethodExpression methodExpr;
+                    public void setLitExpr(String value) { }
+                    public void setScriptExpr(String value) { }
+                    public void setDollarExpr(String value) { }
+                    public void setValueExpr(Object value) { valueExpr = value; }
+                    public void setMethodExpr(jakarta.el.MethodExpression value) { methodExpr = value; }
+                    @Override public int doStartTag() throws jakarta.servlet.jsp.JspException {
+                        try {
+                            var context = pageContext;
+                            context.getOut().print((valueExpr instanceof jakarta.el.ValueExpression) + ":"
+                                    + ((jakarta.el.ValueExpression) valueExpr).getValue(context.getELContext()) + ":"
+                                    + (methodExpr instanceof jakarta.el.MethodExpression));
+                        } catch (java.io.IOException failure) { throw new jakarta.servlet.jsp.JspException(failure); }
+                        return SKIP_BODY;
+                    }
+                }
+                """, Map.of())));
+        var attributes = new LinkedHashMap<String, TagAttribute>();
+        attributes.put("litExpr", new TagAttribute("litExpr", "java.lang.String", true, true, false));
+        attributes.put("scriptExpr", new TagAttribute("scriptExpr", "java.lang.String", true, true, false));
+        attributes.put("dollarExpr", new TagAttribute("dollarExpr", "java.lang.String", true, true, false));
+        attributes.put("valueExpr", new TagAttribute("valueExpr", "java.lang.Object", true, true, false, "java.lang.Object", null));
+        attributes.put("methodExpr", new TagAttribute("methodExpr", "java.lang.Object", true, true, false, null,
+                new DeferredMethodSignature("boolean", List.of("java.lang.Object"))));
+        var tag = new TagDescriptor("AllowedDeferredValues", "fixture.AllowedDeferredValuesTag", "JSP", attributes, false, false);
+        var library = new TagLibraryDescriptor("/WEB-INF/el_jsp.tld", "urn:ibarra:test:el", List.of(),
+                Map.of(tag.name(), tag), null, Map.of());
+        var options = GenerationOptions.DEFAULT.withTagLibraries(Map.of(library.uri(), library));
+        String source = "<%@ page session='false' %><%@ taglib prefix='test' uri='urn:ibarra:test:el' %>"
+                + "<% pageContext.setAttribute(\"vexp\", \"value\", PageContext.PAGE_SCOPE); "
+                + "pageContext.setAttribute(\"vect\", new java.util.Vector<>(), PageContext.PAGE_SCOPE); %>"
+                + "<test:AllowedDeferredValues litExpr='literal' scriptExpr='<%= \"script\" %>' "
+                + "dollarExpr='${vexp}' valueExpr='#{vexp}' methodExpr='#{vect.add}'/>";
+        var generated = generatorWithRuntimeModulePath().generate("/allowed-deferred.jsp", source, PAGE_CLASS, options);
+        assertEquals("true:value:true", run(generated, "", ""));
+    }
+    @Test void deferredExpressionsOnUndeclaredDynamicAttributesRemainValueExpressions() throws Exception {
+        compile(List.of(new GeneratedPage("fixture.DynamicExpressionTag", """
+                package fixture;
+                public final class DynamicExpressionTag extends jakarta.servlet.jsp.tagext.SimpleTagSupport
+                        implements jakarta.servlet.jsp.tagext.DynamicAttributes {
+                    private Object deferred;
+                    @Override public void setDynamicAttribute(String uri, String name, Object value) {
+                        if (name.equals("deferred")) deferred = value;
+                    }
+                    @Override public void doTag() throws jakarta.servlet.jsp.JspException, java.io.IOException {
+                        var expression = (jakarta.el.ValueExpression) deferred;
+                        Object value = expression.getValue(getJspContext().getELContext());
+                        getJspContext().getOut().print(value);
+                    }
+                }
+                """, Map.of())));
+        var tag = new TagDescriptor("dynamic", "fixture.DynamicExpressionTag", "empty", Map.of(), true, false);
+        var library = new TagLibraryDescriptor("/WEB-INF/dynamic.tld", "urn:ibarra:test:dynamic", List.of(),
+                Map.of(tag.name(), tag), null, Map.of());
+        var options = GenerationOptions.DEFAULT.withTagLibraries(Map.of(library.uri(), library));
+        String prefix = "<%@ page session='false' %><%@ taglib prefix='test' uri='urn:ibarra:test:dynamic' %>"
+                + "<% pageContext.setAttribute(\"vexp\", \"value\", PageContext.PAGE_SCOPE); %>";
+        for (String invocation : List.of("<test:dynamic deferred='#{vexp}'/>",
+                "<test:dynamic><jsp:attribute name='deferred'>#{vexp}</jsp:attribute></test:dynamic>")) {
+            var generated = generatorWithRuntimeModulePath().generate("/dynamic-el.jsp", prefix + invocation, PAGE_CLASS, options);
+            assertEquals("value", run(generated, "", ""));
+        }
+    }
+    @Test void tagFileDynamicAttributesWithAUriAreOmittedFromTheDynamicMap() throws Exception {
+        compile(List.of(new GeneratedPage("fixture.DynamicMapTag", """
+                package fixture;
+                public final class DynamicMapTag extends jakarta.servlet.jsp.tagext.SimpleTagSupport
+                        implements jakarta.servlet.jsp.tagext.DynamicAttributes {
+                    private final java.util.Map<String, Object> attributes = new java.util.LinkedHashMap<>();
+                    @Override public void setDynamicAttribute(String uri, String name, Object value) {
+                        attributes.put(name, value);
+                    }
+                    @Override public void doTag() throws jakarta.servlet.jsp.JspException, java.io.IOException {
+                        getJspContext().getOut().print(attributes.get("d1") + ":" + attributes.containsKey("my:d2"));
+                    }
+                }
+                """, Map.of())));
+        var tag = new TagDescriptor("dynamicAttributesNoUri", "fixture.DynamicMapTag", "scriptless", Map.of(), true, false, true);
+        var library = new TagLibraryDescriptor("/WEB-INF/tags", "urn:ibarra:test:tagdir", List.of(),
+                Map.of(tag.name(), tag), null, Map.of());
+        var options = GenerationOptions.DEFAULT.withTagLibraries(Map.of(library.uri(), library));
+        var generated = generator().generate("/dynamic-attributes.jsp",
+                "<%@ page session='false' %><%@ taglib prefix='my' uri='urn:ibarra:test:tagdir' %>"
+                        + "<my:dynamicAttributesNoUri d1='Test PASSED' my:d2='Test FAILED'/>", PAGE_CLASS, options);
+        assertEquals("Test PASSED:false", run(generated, "", ""));
+    }
     @Test void scopedValuesShadowImportedClasses() throws Exception {
         assertEquals("scope", render("<%@ page session='false' import='java.util.Map.Entry' %>${Entry}",
                 "request.setAttribute(\"Entry\", \"scope\");", ""));
@@ -869,7 +1049,46 @@ class PageGeneratorTest {
         assertTrue(failure.getMessage().contains("/missing-import.jsp:2:"));
     }
 
+    @Test
+    void tagFileVariablesSynchronizeAtBeginEndAndNestedScopesDuringBodyInvocation() throws Exception {
+        String prefix = "<% pageContext.setAttribute(\"x\", \"1\"); %>${x}|";
+        String suffix = "|${x}";
+        assertEquals("1|[2]|4", renderTagFileVariablePage(TagVariableDescriptor.AT_BEGIN, "x", true,
+                tagFileVariablePage(prefix + "<t:variable variable='x'>[${x}]</t:variable>" + suffix)));
+        assertEquals("1|[1]|4", renderTagFileVariablePage(TagVariableDescriptor.AT_END, "x", true,
+                tagFileVariablePage(prefix + "<t:variable variable='x'>[${x}]</t:variable>" + suffix)));
+        assertEquals("1|[2]|1", renderTagFileVariablePage(TagVariableDescriptor.NESTED, "x", true,
+                tagFileVariablePage(prefix + "<t:variable variable='x'>[${x}]</t:variable>" + suffix)));
+    }
+
+    @Test
+    void tagFileVariableRemovalsAreVisibleToEachBodyInvocation() throws Exception {
+        String page = tagFileVariablePage("<% pageContext.setAttribute(\"x\", \"2\"); %>${x}|"
+                + "<t:variable variable='x' removeAfterBody='true'>[${x}]</t:variable>|${x}");
+        assertEquals("2|[1][]|", renderTagFileVariablePage(TagVariableDescriptor.AT_BEGIN, "x", true, page));
+        assertEquals("2|[2][2]|", renderTagFileVariablePage(TagVariableDescriptor.AT_END, "x", true, page));
+        assertEquals("2|[1][]|2", renderTagFileVariablePage(TagVariableDescriptor.NESTED, "x", true, page));
+    }
+
+    @Test
+    void tagFileVariablesSynchronizeWithDeclaredAndExistingScriptletVariables() throws Exception {
+        for (boolean declare : List.of(true, false)) {
+            String declaration = declare ? "" : "<%! String declared; %>";
+            String page = tagFileVariablePage(declaration
+                    + "<t:variable variable='declared'/><%= declared %>");
+            assertEquals("4", renderTagFileVariablePage(TagVariableDescriptor.AT_END, "declared", declare, page));
+        }
+    }
+
     private PageGenerator generator() { return new PageGenerator(List.of(directory)); }
+
+    private PageGenerator generatorWithRuntimeModulePath() {
+        var beanModulePath = new ArrayList<Path>();
+        beanModulePath.add(directory);
+        Arrays.stream(modulePath().split(java.util.regex.Pattern.quote(File.pathSeparator)))
+                .filter(path -> !path.isBlank()).map(Path::of).forEach(beanModulePath::add);
+        return new PageGenerator(beanModulePath);
+    }
 
     @Test
     void beanInfoEditorsConvertLiteralsAndParametersButNotElValues() throws Exception {
@@ -995,11 +1214,92 @@ class PageGeneratorTest {
                         shape.equals("invalid-descriptor") ? ", new java.beans.PropertyDescriptor(\"missing\", EditedBean.class)" : ""), Map.of())));
     }
 
+    private GeneratedPage finalLifecycleSuperPage() {
+        return new GeneratedPage("fixture.SuperPage", """
+                package fixture;
+                public abstract class SuperPage extends jakarta.servlet.http.HttpServlet implements jakarta.servlet.jsp.HttpJspPage {
+                    @Override public final void init(jakarta.servlet.ServletConfig config) throws jakarta.servlet.ServletException {
+                        super.init(config);
+                        jspInit();
+                    }
+                    @Override public final void service(jakarta.servlet.ServletRequest request, jakarta.servlet.ServletResponse response)
+                            throws jakarta.servlet.ServletException, java.io.IOException {
+                        _jspService((jakarta.servlet.http.HttpServletRequest) request,
+                                (jakarta.servlet.http.HttpServletResponse) response);
+                    }
+                    @Override public final void destroy() {
+                        jspDestroy();
+                        super.destroy();
+                    }
+                    @Override public void jspInit() { }
+                    @Override public void jspDestroy() { }
+                }
+                """, Map.of());
+    }
+
     private String render(String source, String setup, String after) throws Exception {
         return run(generator().generate("/fixture.jsp", source, PAGE_CLASS, GenerationOptions.DEFAULT.withStartupEl(true)), setup, after);
     }
 
+    private String tagFileVariablePage(String content) {
+        return "<%@ page session='false' %><%@ taglib prefix='t' uri='urn:test:tagfile-variables' %>" + content;
+    }
+
+    private String renderTagFileVariablePage(int scope, String variable, boolean declare, String source) throws Exception {
+        var attributes = Map.of(
+                "variable", new TagAttribute("variable", "java.lang.String", false, false, false),
+                "removeAfterBody", new TagAttribute("removeAfterBody", "boolean", false, false, false));
+        var tag = new TagDescriptor("variable", "fixture.VariableTag", "scriptless", attributes,
+                false, false, true, null, false, null,
+                List.of(new TagVariableDescriptor(variable, "java.lang.String", declare, scope)));
+        var library = new TagLibraryDescriptor("/WEB-INF/tagfile-variables.tld", "urn:test:tagfile-variables",
+                List.of(), Map.of("variable", tag), null, Map.of());
+        var options = GenerationOptions.DEFAULT.withStartupEl(true)
+                .withTagLibraries(Map.of("urn:test:tagfile-variables", library));
+        var generated = generator().generate("/tag-file-variables.jsp", source, PAGE_CLASS, options);
+        return run(generated, List.of(variableTagHandler()), "", "");
+    }
+
+    private GeneratedPage variableTagHandler() {
+        return new GeneratedPage("fixture.VariableTag", """
+                package fixture;
+                import java.io.IOException;
+                import jakarta.servlet.jsp.JspContext;
+                import jakarta.servlet.jsp.JspException;
+                import jakarta.servlet.jsp.PageContext;
+                import jakarta.servlet.jsp.tagext.SimpleTagSupport;
+                import io.vidocq.ibarra.spi.TagFileJspContext;
+                public final class VariableTag extends SimpleTagSupport {
+                    private String variable;
+                    private boolean removeAfterBody;
+                    @Override public void setJspContext(JspContext context) {
+                        super.setJspContext(context instanceof PageContext page ? new TagFileJspContext(page) : context);
+                    }
+                    public TagFileJspContext _jspxTagFileContext() { return (TagFileJspContext) getJspContext(); }
+                    public void setVariable(String variable) { this.variable = variable; }
+                    public void setRemoveAfterBody(boolean removeAfterBody) { this.removeAfterBody = removeAfterBody; }
+                    @Override public void doTag() throws JspException, IOException {
+                        var context = getJspContext();
+                        if (context.getAttribute(variable, PageContext.PAGE_SCOPE) != null)
+                            throw new JspException("Tag-file page scope did not start empty: " + variable);
+                        context.setAttribute(variable, removeAfterBody ? "1" : "2", PageContext.PAGE_SCOPE);
+                        if (getJspBody() != null) getJspBody().invoke(null);
+                        if (removeAfterBody) {
+                            context.removeAttribute(variable, PageContext.PAGE_SCOPE);
+                            if (getJspBody() != null) getJspBody().invoke(null);
+                        } else {
+                            context.setAttribute(variable, "4", PageContext.PAGE_SCOPE);
+                        }
+                    }
+                }
+                """, Map.of());
+    }
+
     private String run(GeneratedPage generated, String setup, String after) throws Exception {
+        return run(generated, List.of(), setup, after);
+    }
+
+    private String run(GeneratedPage generated, List<GeneratedPage> supportingSources, String setup, String after) throws Exception {
         String fixture = """
                 package io.vidocq.ibarra.core.internal;
                 import jakarta.servlet.*;
@@ -1029,11 +1329,14 @@ class PageGeneratorTest {
         var root = Path.of(System.getProperty("user.dir")).toAbsolutePath();
         if (!Files.isDirectory(root.resolve("ibarra-core"))) root = root.getParent();
         String doubles = Files.readString(root.resolve("ibarra-core/src/test/java/io/vidocq/ibarra/core/internal/ServletDoubles.java"));
-        compile(List.of(generated, new GeneratedPage("io.vidocq.ibarra.core.internal.RenderMain", fixture, Map.of()),
-                new GeneratedPage("io.vidocq.ibarra.core.internal.ServletDoubles", doubles, Map.of())));
+        var sources = new ArrayList<GeneratedPage>(supportingSources);
+        sources.add(generated);
+        sources.add(new GeneratedPage("io.vidocq.ibarra.core.internal.RenderMain", fixture, Map.of()));
+        sources.add(new GeneratedPage("io.vidocq.ibarra.core.internal.ServletDoubles", doubles, Map.of()));
+        compile(sources);
         var process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin/java").toString(),
-                "--module-path", modulePath(), "--add-modules", "io.vidocq.peano.core,java.desktop",
-                "--add-reads", "io.vidocq.ibarra.core=java.desktop",
+                "--module-path", modulePath(), "--add-modules", "io.vidocq.peano.core,io.vidocq.peano.api,java.desktop",
+                "--add-reads", "io.vidocq.ibarra.core=java.desktop,io.vidocq.peano.api",
                 "--patch-module", "io.vidocq.ibarra.core=" + directory,
                 "-m", "io.vidocq.ibarra.core/io.vidocq.ibarra.core.internal.RenderMain")
                 .redirectErrorStream(true).redirectOutput(directory.resolve("result.log").toFile()).start();
@@ -1046,7 +1349,8 @@ class PageGeneratorTest {
 
     private void compile(List<GeneratedPage> sources) throws Exception {
         new PageCompiler().compile(sources, directory, List.of("--module-path", modulePath(),
-                "--add-modules", "io.vidocq.ibarra.core,java.desktop", "--add-reads", "io.vidocq.ibarra.core=java.desktop",
+                "--add-modules", "io.vidocq.ibarra.core,io.vidocq.peano.api,java.desktop",
+                "--add-reads", "io.vidocq.ibarra.core=java.desktop,io.vidocq.peano.api",
                 "--patch-module", "io.vidocq.ibarra.core=" + directory));
     }
 

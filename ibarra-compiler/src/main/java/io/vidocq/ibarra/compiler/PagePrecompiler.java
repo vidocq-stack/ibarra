@@ -87,6 +87,14 @@ public final class PagePrecompiler {
         for (var entry : resources.entrySet())
             if (options.sources().containsKey(entry.getKey()) || bytes.putIfAbsent(entry.getKey(), entry.getValue()) != null)
                 throw new IllegalArgumentException("Resource supplied more than once: " + entry.getKey());
+        try (var files = Files.walk(output)) {
+            for (Path file : files.filter(Files::isRegularFile)
+                    .filter(file -> file.toString().endsWith(".tag") || file.toString().endsWith(".tagx")).sorted().toList()) {
+                String path = "/" + output.relativize(file).toString().replace('\\', '/');
+                if (bytes.putIfAbsent(path, Files.readAllBytes(file)) != null)
+                    throw new IllegalArgumentException("Resource supplied more than once: " + path);
+            }
+        }
         var catalog = TldListeners.catalog(resources, modulePath, output, descriptor);
         var libraries = new LinkedHashMap<>(catalog.libraries());
         for (var entry : options.tagLibraries().entrySet()) {
@@ -124,9 +132,15 @@ public final class PagePrecompiler {
             }
         }
         for (var entry : tagFiles.libraries().entrySet()) {
-            var previousLibrary = libraries.putIfAbsent(entry.getKey(), entry.getValue());
-            if (previousLibrary != null && !previousLibrary.equals(entry.getValue()))
-                throw new IllegalArgumentException("Conflicting tagdir library: " + entry.getKey());
+            var previousLibrary = libraries.get(entry.getKey());
+            if (previousLibrary == null) libraries.put(entry.getKey(), entry.getValue());
+            else if (!previousLibrary.equals(entry.getValue())) {
+                boolean compiledTldTagFiles = previousLibrary.resourcePath().equals(entry.getValue().resourcePath())
+                        && entry.getValue().tags().values().stream().anyMatch(tag -> tag.tagFilePath() != null
+                                && tag.handlerClass() != null && !tag.unsupportedMetadata());
+                if (compiledTldTagFiles) libraries.put(entry.getKey(), entry.getValue());
+                else throw new IllegalArgumentException("Conflicting tagdir library: " + entry.getKey());
+            }
         }
         var configured = new GenerationOptions(options.propertyGroups(), options.sources(), false, bytes, libraries);
         TldReferences.Resolved resolved;

@@ -22,4 +22,8 @@ done
 if "$prepare"; then python3 ibarra-tck/prepare-tck.py; fi
 if "$install"; then ./mvnw -ntp clean install; fi
 ./mvnw -ntp -Ptck -pl ibarra-tck clean test
-./mvnw -ntp -Ptck,tck-official -pl ibarra-tck clean test "$selection" "${extra[@]}"
+if ((${#extra[@]})); then
+    ./mvnw -ntp -Ptck,tck-official -pl ibarra-tck clean test "$selection" "${extra[@]}"
+else
+    ./mvnw -ntp -Ptck,tck-official -pl ibarra-tck clean test "$selection"
+fi

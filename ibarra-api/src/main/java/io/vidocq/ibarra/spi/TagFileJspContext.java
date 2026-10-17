@@ -20,12 +20,20 @@
 package io.vidocq.ibarra.spi;
 
 import java.io.IOException;
+import java.util.AbstractMap;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import jakarta.el.CompositeELResolver;
 import jakarta.el.ELContext;
+import jakarta.el.ELResolver;
+import jakarta.el.EvaluationListener;
+import jakarta.el.FunctionMapper;
+import jakarta.el.ImportHandler;
+import jakarta.el.VariableMapper;
 import jakarta.servlet.Servlet;
 import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletContext;
@@ -33,6 +41,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpSession;
+import jakarta.servlet.jsp.JspContext;
 import jakarta.servlet.jsp.JspWriter;
 import jakarta.servlet.jsp.PageContext;
 import jakarta.servlet.jsp.tagext.BodyContent;
@@ -46,10 +55,29 @@ import jakarta.servlet.jsp.tagext.BodyContent;
  */
 public final class TagFileJspContext extends PageContext {
     private final PageContext invoking;
+    private final boolean errorOnELNotFound;
     private final Map<String, Object> pageAttributes = new LinkedHashMap<>();
+    private ELContext elContext;
 
     public TagFileJspContext(PageContext invoking) {
-        this.invoking = Objects.requireNonNull(invoking, "invoking page context");
+        this(invoking, false);
+    }
+
+    public TagFileJspContext(JspContext invokingContext, boolean errorOnELNotFound) {
+        Objects.requireNonNull(invokingContext, "invoking JSP context");
+        if (!(invokingContext instanceof PageContext pageContext))
+            throw new IllegalArgumentException("A tag-file context requires an invoking PageContext");
+        this.invoking = pageContext;
+        this.errorOnELNotFound = errorOnELNotFound;
+    }
+
+    /**
+     * Returns whether this tag-file directive enables strict handling of unresolved EL names.
+     * The value is exposed in the wrapped EL context for the final unresolved-name resolver;
+     * {@code false} leaves the invoking page's policy in effect.
+     */
+    public boolean errorOnELNotFound() {
+        return errorOnELNotFound;
     }
 
     @Override
@@ -58,7 +86,7 @@ public final class TagFileJspContext extends PageContext {
         throw new IllegalStateException("A tag-file JSP context wrapper cannot be initialized");
     }
 
-    @Override public void release() { pageAttributes.clear(); }
+    @Override public void release() { pageAttributes.clear(); elContext = null; }
     @Override public HttpSession getSession() { return invoking.getSession(); }
     @Override public Object getPage() { return invoking.getPage(); }
     @Override public ServletRequest getRequest() { return invoking.getRequest(); }
@@ -75,7 +103,11 @@ public final class TagFileJspContext extends PageContext {
     @Override public JspWriter pushBody(java.io.Writer writer) { return invoking.pushBody(writer); }
     @Override public JspWriter popBody() { return invoking.popBody(); }
     @Override public JspWriter getOut() { return invoking.getOut(); }
-    @Override public ELContext getELContext() { return invoking.getELContext(); }
+    @Override
+    public ELContext getELContext() {
+        if (elContext == null) elContext = new TagFileELContext(invoking.getELContext());
+        return elContext;
+    }
     @Override public jakarta.servlet.jsp.ErrorData getErrorData() { return invoking.getErrorData(); }
 
     @Override
@@ -145,5 +177,127 @@ public final class TagFileJspContext extends PageContext {
         Objects.requireNonNull(name, "attribute name");
         if (scope == PAGE_SCOPE) pageAttributes.remove(name);
         else invoking.removeAttribute(name, scope);
+    }
+
+    private final class TagFileELContext extends ELContext {
+        private final ELContext delegate;
+        private final ELResolver resolver;
+
+        TagFileELContext(ELContext delegate) {
+            this.delegate = Objects.requireNonNull(delegate, "invoking EL context");
+            var resolvers = new CompositeELResolver();
+            resolvers.add(new TagFilePageResolver());
+            resolvers.add(delegate.getELResolver());
+            this.resolver = resolvers;
+        }
+
+        @Override public ELResolver getELResolver() { return resolver; }
+        @Override public FunctionMapper getFunctionMapper() { return delegate.getFunctionMapper(); }
+        @Override public VariableMapper getVariableMapper() { return delegate.getVariableMapper(); }
+        @Override public ImportHandler getImportHandler() { return delegate.getImportHandler(); }
+        @Override public Object getContext(Class<?> key) {
+            if (key == TagFileJspContext.class || key == JspContext.class || key == PageContext.class)
+                return TagFileJspContext.this;
+            return delegate.getContext(key);
+        }
+        @Override public void putContext(Class<?> key, Object value) { delegate.putContext(key, value); }
+        @Override public boolean isPropertyResolved() { return delegate.isPropertyResolved(); }
+        @Override public void setPropertyResolved(boolean resolved) { delegate.setPropertyResolved(resolved); }
+        @Override public void setPropertyResolved(Object base, Object property) { delegate.setPropertyResolved(base, property); }
+        @Override public java.util.Locale getLocale() { return delegate.getLocale(); }
+        @Override public void setLocale(java.util.Locale locale) { delegate.setLocale(locale); }
+        @Override public void addEvaluationListener(EvaluationListener listener) { delegate.addEvaluationListener(listener); }
+        @Override public java.util.List<EvaluationListener> getEvaluationListeners() { return delegate.getEvaluationListeners(); }
+        @Override public void notifyBeforeEvaluation(String expression) { delegate.notifyBeforeEvaluation(expression); }
+        @Override public void notifyAfterEvaluation(String expression) { delegate.notifyAfterEvaluation(expression); }
+        @Override public void notifyPropertyResolved(Object base, Object property) { delegate.notifyPropertyResolved(base, property); }
+        @Override public boolean isLambdaArgument(String name) { return delegate.isLambdaArgument(name); }
+        @Override public Object getLambdaArgument(String name) { return delegate.getLambdaArgument(name); }
+        @Override public void enterLambdaScope(Map<String, Object> arguments) { delegate.enterLambdaScope(arguments); }
+        @Override public void exitLambdaScope() { delegate.exitLambdaScope(); }
+        @Override public <T> T convertToType(Object value, Class<T> type) { return delegate.convertToType(value, type); }
+    }
+
+    private final class TagFilePageResolver extends ELResolver {
+        private final Map<String, Object> pageScope = new AbstractMap<>() {
+            @Override public Object get(Object key) {
+                return key instanceof String name ? getAttribute(name, PAGE_SCOPE) : null;
+            }
+            @Override public Object put(String key, Object value) {
+                Object previous = getAttribute(key, PAGE_SCOPE);
+                setAttribute(key, value, PAGE_SCOPE);
+                return previous;
+            }
+            @Override public Object remove(Object key) {
+                if (!(key instanceof String name)) return null;
+                Object previous = getAttribute(name, PAGE_SCOPE);
+                removeAttribute(name, PAGE_SCOPE);
+                return previous;
+            }
+            @Override public Set<Entry<String, Object>> entrySet() {
+                var entries = new LinkedHashMap<String, Object>();
+                var names = getAttributeNamesInScope(PAGE_SCOPE);
+                while (names.hasMoreElements()) {
+                    String name = names.nextElement();
+                    entries.put(name, getAttribute(name, PAGE_SCOPE));
+                }
+                return entries.entrySet();
+            }
+        };
+
+        @Override
+        public Object getValue(ELContext context, Object base, Object property) {
+            if (base != null || !(property instanceof String name)) return null;
+            if (name.equals("pageContext")) {
+                context.setPropertyResolved(true);
+                return TagFileJspContext.this;
+            }
+            if (name.equals("pageScope")) {
+                context.setPropertyResolved(true);
+                return pageScope;
+            }
+            if (pageAttributes.containsKey(name)) {
+                context.setPropertyResolved(true);
+                return pageAttributes.get(name);
+            }
+            return null;
+        }
+
+        @Override
+        public Class<?> getType(ELContext context, Object base, Object property) {
+            if (base != null || !(property instanceof String name)) return null;
+            if (name.equals("pageContext") || name.equals("pageScope") || pageAttributes.containsKey(name)) {
+                context.setPropertyResolved(true);
+                return Object.class;
+            }
+            return null;
+        }
+
+        @Override
+        public void setValue(ELContext context, Object base, Object property, Object value) {
+            if (base == null && property instanceof String name && pageAttributes.containsKey(name)) {
+                context.setPropertyResolved(true);
+                setAttribute(name, value, PAGE_SCOPE);
+            }
+        }
+
+        @Override
+        public boolean isReadOnly(ELContext context, Object base, Object property) {
+            if (base == null && property instanceof String name) {
+                if (name.equals("pageContext") || name.equals("pageScope")) {
+                    context.setPropertyResolved(true);
+                    return true;
+                }
+                if (pageAttributes.containsKey(name)) {
+                    context.setPropertyResolved(true);
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        @Override public Class<?> getCommonPropertyType(ELContext context, Object base) {
+            return base == null ? String.class : null;
+        }
     }
 }

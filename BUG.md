@@ -1,5 +1,52 @@
 # BUG.md — Ibarra
 
+## IBARRA-152 · 2026-10-17 · Tag-file directives and standard actions fail TCK cases
+
+- Symptom: valid tag-file directives, EL, deferred attributes, nested variables,
+  standard JSP actions and XML tag-file output failed translation or rendered
+  incorrectly; XML tag files also accepted an invalid `jsp:root` version such as
+  `2.00` and discarded a non-JSP document element such as `<subroot>`.
+- Minimal repro: compile a `.tag` containing `${x}`, a deferred-value attribute,
+  repeated `tag` imports, a nested tag declaring an `AT_BEGIN` variable, or
+  `jsp:doBody`, `jsp:invoke`, `jsp:element` or `jsp:text`; render a `.tagx` whose
+  `<subroot>` contains a JSP expression; compile a `.tagx` with
+  `<jsp:root version="2.00">`.
+- Cause: tag-file parsing and generation did not cover the exercised directive,
+  variable and standard-action contracts, and XML tag-file normalization treated
+  every document element as a wrapper instead of only unwrapping `jsp:root`.
+- Fix: complete the exercised tag-file translation paths, validate `jsp:root`
+  versions, and preserve non-JSP document elements as rendered markup. Regression
+  coverage is in `TagGenerationTest`.
+- Verification: `TagGenerationTest` passes 109/109. The complete official Jakarta
+  Pages 4.0 TCK passes 682/682 methods across 92 classes, with zero failures,
+  errors or skips, using `./run-official-tck-pages-4.0.sh all`.
+- Status: FIXED (2026-10-17).
+
+## IBARRA-151 · 2026-10-17 · Repeated page imports are rejected
+
+- Symptom: a page directive listing more than one `import` attribute is rejected,
+  although Jakarta Pages permits repeated imports.
+- Minimal repro: `<%@ page import="java.util.Properties" import="java.util.Hashtable" %>`.
+- Cause: the standard-syntax parser applied its duplicate-attribute rule to `import`.
+- Fix: combine repeated `import` values in order while retaining duplicate checks
+  for every other page-directive attribute.
+- Status: FIXED (2026-10-17). Red/green regression tests pass; the targeted
+  official `positiveMultipleImportTest` is pending the next TCK run.
+
+## IBARRA-150 · 2026-10-17 · Official TCK runner aborts on an empty argument array
+
+- Symptom: `./run-official-tck-pages-4.0.sh all` exits before starting the official
+  suite with `extra[@]: unbound variable` on the stock macOS Bash 3.2.
+- Minimal repro: run `./run-official-tck-pages-4.0.sh all` on macOS, or run the
+  runner regression test with `/bin/bash`.
+- Cause: `set -u` treats expansion of an initialized but empty array as an unset
+  array in Bash 3.2.
+- Fix: expand the optional argument array only when it contains at least one value.
+- Status: FIXED (2026-10-17). The two `/bin/bash` regression cases pass after the
+  fix. The earlier 2026-10-17 snapshot completed all 682 official methods with
+  605 passes and 77 method-level errors; the final run later that day passed
+  682/682, as recorded in `ibarra-tck/BASELINE.md`.
+
 ## IBARRA-149 · 2026-10-16 · JSP property groups do not select custom-extension pages
 
 - Symptom: `jspConfigurationIsXmlTrueTest` fails because the XML JSP under
@@ -12,8 +59,9 @@
   not declare its matching `.xsp` resource as a JSP document.
 - Fix: include resources matched by configured JSP property-group patterns among
   page candidates, using the same URL-pattern matcher as translation.
-- Status: FIXED (2026-10-16). TCK-024 passes 3/3; the combined full suite passes
-  605/682 methods with 77 method-level errors across 22 classes and no setup errors.
+- Status: FIXED (2026-10-16). TCK-024 passes 3/3; the full-suite checkpoint at
+  that time passed 605/682 methods with 77 method-level errors across 22 classes
+  and no setup errors. The final 2026-10-17 run passes 682/682.
 
 ## IBARRA-148 · 2026-10-16 · scripting-invalid rejects request-time tag attributes
 
@@ -27,8 +75,9 @@
   elements.
 - Fix: allow request-time expressions in action attributes while retaining the
   `scripting-invalid` checks for declarations, expressions and scriptlets.
-- Status: FIXED (2026-10-16). TCK-023 passes 3/3; the full suite passes 604/682
-  methods with 78 method-level errors and no setup errors.
+- Status: FIXED (2026-10-16). TCK-023 passes 3/3; the full-suite checkpoint at
+  that time passed 604/682 methods with 78 method-level errors and no setup errors.
+  The final 2026-10-17 run passes 682/682.
 
 ## IBARRA-147 · 2026-10-15 · JSP property-group prefix routes lose path information
 
@@ -110,7 +159,7 @@
   declared and dynamic attributes into its page scope, synchronize tag-file
   variables back to the caller and stop execution after a literal-path forward.
 - Status: FIXED (2026-10-14). The focused official TCK-056 class passes 8/8;
-  the latest complete-suite aggregate has not been rerun.
+  the complete 2026-10-17 suite also confirms the class with all 682 methods passing.
 
 ## IBARRA-140 · 2026-10-14 · Generated tag files omit JSP implicit objects
 

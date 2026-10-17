@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import jakarta.el.*;
 import jakarta.servlet.jsp.PageContext;
 import io.vidocq.ibarra.spi.PageOptions;
+import io.vidocq.ibarra.spi.TagFileJspContext;
 import org.junit.jupiter.api.Test;
 
 /** Pages 4.0 sections 2.10 and 3.3.4: only unresolved identifiers use this policy. */
@@ -56,6 +57,40 @@ class PagePolicyTest {
         assertThrows(PropertyNotFoundException.class, () -> evaluate(factory, strict, "${missing}"));
         assertEquals("", evaluate(factory, permissive, "${missing}"));
         assertThrows(PropertyNotFoundException.class, () -> evaluate(factory, strict, "${missing}"));
+    }
+
+    @Test
+    void tagFileELContextSeesWrapperPageAttributesAndDelegatesOtherScopes() throws Exception {
+        var web = new PageRuntimeTest.Web();
+        web.request.setAttribute("requestValue", "request");
+        var page = open(web, new IbarraApplicationContext(), false);
+        var tag = new TagFileJspContext(page);
+        tag.setAttribute("tagValue", "tag", PageContext.PAGE_SCOPE);
+        var factory = ExpressionFactory.newInstance();
+        var context = tag.getELContext();
+
+        assertSame(tag, context.getContext(PageContext.class));
+        assertSame(tag, context.getContext(jakarta.servlet.jsp.JspContext.class));
+        assertEquals("tag", evaluate(factory, context, "${tagValue}"));
+        assertEquals("tag", evaluate(factory, context, "${pageScope.tagValue}"));
+        assertEquals("request", evaluate(factory, context, "${requestValue}"));
+        assertEquals("request", evaluate(factory, context, "${requestScope.requestValue}"));
+    }
+
+    @Test
+    void tagFileStrictELPolicyOverridesPermissiveParentAndFalseInheritsParentPolicy() throws Exception {
+        var web = new PageRuntimeTest.Web();
+        var application = new IbarraApplicationContext();
+        var factory = ExpressionFactory.newInstance();
+        var permissiveParent = open(web, application, false);
+
+        assertThrows(PropertyNotFoundException.class,
+                () -> evaluate(factory, new TagFileJspContext(permissiveParent, true).getELContext(), "${missing}"));
+        assertEquals("", evaluate(factory, new TagFileJspContext(permissiveParent, false).getELContext(), "${missing}"));
+
+        var strictParent = open(web, application, true);
+        assertThrows(PropertyNotFoundException.class,
+                () -> evaluate(factory, new TagFileJspContext(strictParent, false).getELContext(), "${missing}"));
     }
 
     @Test
@@ -111,7 +146,10 @@ class PagePolicyTest {
     }
 
     private Object evaluate(ExpressionFactory factory, IbarraPageContext page, String text) {
-        var context = page.getELContext();
+        return evaluate(factory, page.getELContext(), text);
+    }
+
+    private Object evaluate(ExpressionFactory factory, ELContext context, String text) {
         return factory.createValueExpression(context, text, String.class).getValue(context);
     }
 
