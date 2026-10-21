@@ -73,6 +73,13 @@
         <peano.version>0.4.0-SNAPSHOT</peano.version>
         <foy.version>0.4.0-SNAPSHOT</foy.version>
         <chappe.version>0.4.0-SNAPSHOT</chappe.version>
+
+        <!--
+            SonarQube (Vidocq/vidocq#284): every module reads the aggregated JaCoCo report of
+            ibarra-coverage (quality profile), so the tests of one module count for the code they
+            exercise in the others.
+        -->
+        <sonar.coverage.jacoco.xmlReportPaths>${maven.multiModuleProjectDirectory}/ibarra-coverage/target/site/jacoco-aggregate/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
     </properties>
 
     <!--
@@ -169,6 +176,16 @@
             <id>tck</id>
             <modules>
                 <module>ibarra-tck</module>
+            </modules>
+        </profile>
+        <!--
+            Quality profile (with the one of vidocq-parent, which runs the JaCoCo agent): adds
+            the aggregated coverage report that SonarQube reads (Vidocq/vidocq#284).
+        -->
+        <profile>
+            <id>quality</id>
+            <modules>
+                <module>ibarra-coverage</module>
             </modules>
         </profile>
     </profiles>
