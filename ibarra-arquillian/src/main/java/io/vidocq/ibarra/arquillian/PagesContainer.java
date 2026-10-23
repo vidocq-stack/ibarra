@@ -93,6 +93,13 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
             "jakarta.servlet", "jakarta.servlet.jsp", EL_MODULE);
     private static final String CHAPPE_PREFIX = "io.vidocq.chappe.";
     private static final String COMPILER_MODULE = "io.vidocq.ibarra.compiler";
+    /**
+     * The build-side compilers the server must never contain: the same list as the guard of the host
+     * {@code Main}, which is compiled apart and cannot read this constant.
+     */
+    static final Set<String> BUILD_TOOLING = Set.of("java.compiler", COMPILER_MODULE, "io.vidocq.peano.compiler");
+    /** The end of every refusal of a configured module that is, or brings, build tooling. */
+    static final String BUILD_TOOLING_REFUSAL = " is build tooling, which the server must never contain";
     private static final Pattern VERSIONED_DESCRIPTOR = Pattern.compile("META-INF/versions/[0-9]+/module-info.class");
     private static final String DESCRIPTOR_DEPLOYMENT_UNSUPPORTED = "Descriptor-only deployment is unsupported";
 

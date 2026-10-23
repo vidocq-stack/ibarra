@@ -25,6 +25,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import org.jboss.arquillian.container.spi.ConfigurationException;
 import org.jboss.arquillian.container.spi.client.container.DeploymentException;
@@ -36,6 +37,7 @@ import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -131,6 +133,18 @@ class ApplicationModuleOptionsTest {
         var failure = assertThrows(ConfigurationException.class, configuration::validate);
         assertTrue(failure.getMessage().contains("io.vidocq.foy.core"), failure.getMessage());
         assertTrue(failure.getMessage().contains("is not a JDK module"), failure.getMessage());
+
+        // java.compiler is refused by the host guard; jdk.compiler would bring it into the boot layer.
+        for (String tooling : List.of("java.compiler", "jdk.compiler")) {
+            var buildTooling = configuration();
+            buildTooling.setJdkModules("java.naming, " + tooling);
+            var refused = assertThrows(ConfigurationException.class, buildTooling::validate);
+            assertTrue(refused.getMessage().contains(tooling), refused.getMessage());
+            assertTrue(refused.getMessage().contains("build tooling"), refused.getMessage());
+        }
+        var jdkModule = configuration();
+        jdkModule.setJdkModules("java.naming, jdk.localedata");
+        assertDoesNotThrow(jdkModule::validate);
 
         var invalid = configuration();
         invalid.setApplicationOpens("not a package");

@@ -19,10 +19,13 @@
  */
 package io.vidocq.ibarra.arquillian;
 
+import java.lang.module.Configuration;
 import java.lang.module.ModuleFinder;
+import java.lang.module.ResolvedModule;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import javax.lang.model.SourceVersion;
 import org.jboss.arquillian.container.spi.ConfigurationException;
 import org.jboss.arquillian.container.spi.client.container.ContainerConfiguration;
@@ -94,11 +97,25 @@ public final class PagesConfiguration implements ContainerConfiguration {
             if (jdk.find(name).isEmpty()) {
                 throw new ConfigurationException("jdkModules: '" + name + "' is not a JDK module");
             }
+            rejectBuildTooling(jdk, name);
         }
         for (String name : applicationOpens()) {
             if (!SourceVersion.isName(name)) {
                 throw new ConfigurationException("applicationOpens: '" + name + "' is not a package name");
             }
+        }
+    }
+
+    /**
+     * Refuses a JDK module that is build tooling or that requires it: {@code --limit-modules} puts the whole
+     * requires closure in the server boot layer, where the host refuses build tooling.
+     */
+    private static void rejectBuildTooling(ModuleFinder jdk, String name) {
+        var tooling = Configuration.empty().resolve(jdk, ModuleFinder.of(), Set.of(name)).modules().stream()
+                .map(ResolvedModule::name).filter(PagesContainer.BUILD_TOOLING::contains).sorted().findFirst();
+        if (tooling.isPresent()) {
+            String subject = tooling.get().equals(name) ? "'" + name + "'" : "'" + name + "' (it requires " + tooling.get() + ")";
+            throw new ConfigurationException("jdkModules: " + subject + PagesContainer.BUILD_TOOLING_REFUSAL);
         }
     }
 

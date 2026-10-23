@@ -38,9 +38,6 @@ final class ApplicationLibraries {
     /** One library module: its name, its jar or directory, and whether it is an automatic module. */
     record Library(String name, Path location, boolean automatic) { }
 
-    /** The build-side compilers: the server refuses them, so no library may bring them into the application layer. */
-    private static final Set<String> BUILD_TOOLING = Set.of("java.compiler", "io.vidocq.ibarra.compiler", "io.vidocq.peano.compiler");
-
     private ApplicationLibraries() { }
 
     /**
@@ -50,9 +47,9 @@ final class ApplicationLibraries {
      */
     static List<Library> resolve(List<String> names, List<Path> searchPath) {
         for (String name : names) {
-            if (BUILD_TOOLING.contains(name)) {
+            if (PagesContainer.BUILD_TOOLING.contains(name)) {
                 throw new ConfigurationException("applicationLibraries: " + name
-                        + " is build tooling, which the server must never contain");
+                        + PagesContainer.BUILD_TOOLING_REFUSAL);
             }
             if (PagesContainer.isHostModule(name)) {
                 throw new ConfigurationException("applicationLibraries: " + name
