@@ -34,8 +34,12 @@ public final class Main {
     public static void main(String[] args) throws Exception {
         for (String forbidden : List.of("java.compiler", "io.vidocq.ibarra.compiler", "io.vidocq.peano.compiler"))
             if (ModuleLayer.boot().findModule(forbidden).isPresent()) throw new IllegalStateException("Build tooling present in runtime: " + forbidden);
-        var finder = ModuleFinder.of(Path.of(args[0]));
-        var configuration = ModuleLayer.boot().configuration().resolveAndBind(finder, ModuleFinder.of(), Set.of("tck.application"));
+        // args[0]: the application classes, then the library modules, as a platform path list.
+        var finder = ModuleFinder.of(Arrays.stream(args[0].split(File.pathSeparator)).map(Path::of).toArray(Path[]::new));
+        // Every module of the list is a root: an automatic library (a JDBC driver) is read by no descriptor.
+        var roots = new TreeSet<String>();
+        finder.findAll().forEach(module -> roots.add(module.descriptor().name()));
+        var configuration = ModuleLayer.boot().configuration().resolveAndBind(finder, ModuleFinder.of(), roots);
         var layer = ModuleLayer.defineModulesWithOneLoader(configuration, List.of(ModuleLayer.boot()), ClassLoader.getSystemClassLoader()).layer();
         var options = DeployOptions.defaults(layer.findLoader("tck.application"))
                 .withResourceProvider(new Resources(Path.of(args[1])));

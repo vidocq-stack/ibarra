@@ -35,6 +35,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -101,6 +102,29 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
     private record Layout(Path work, Path web, Path classes, List<Path> modules) { }
 
     private final Map<String, Running> deployments = new LinkedHashMap<>();
+    /** Where the runtime modules and the configured libraries are looked up. */
+    private final List<Path> lookupPath;
+    private List<ApplicationLibraries.Library> libraries = List.of();
+
+    /** An adapter that looks up its modules on the test class path: {@code jdk.module.path} plus the class path. */
+    public PagesContainer() {
+        this(testClassPath());
+    }
+
+    /** An adapter that looks up its modules on {@code searchPath}, a platform path list. */
+    PagesContainer(String searchPath) {
+        this.lookupPath = searchPath(searchPath);
+    }
+
+    private static String testClassPath() {
+        return System.getProperty("jdk.module.path", "") + File.pathSeparator
+                + System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
+    }
+
+    /** The non-empty entries of a platform path list. */
+    static List<Path> searchPath(String path) {
+        return Arrays.stream(path.split(Pattern.quote(File.pathSeparator))).filter(item -> !item.isEmpty()).map(Path::of).toList();
+    }
 
     @Override
     public Class<PagesConfiguration> getConfigurationClass() {
@@ -110,6 +134,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
     @Override
     public void setup(PagesConfiguration configuration) {
         configuration.validate();
+        libraries = ApplicationLibraries.resolve(configuration.applicationLibraries(), lookupPath);
     }
 
     @Override
@@ -141,7 +166,8 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
             rejectUnadaptedMetadata(classes);
             var groups = jspPropertyGroups(web);
             var descriptor = generateComponents(web, classes);
-            var layout = new Layout(work, web, classes, modulePaths(true));
+            explicitLibraries().forEach(library -> descriptor.requires(library.name()));
+            var layout = new Layout(work, web, classes, buildModulePath());
             compileDescriptor(layout, descriptor);
             var accessorDiagnostics = new ArrayList<String>();
             generateBeanAccessors(layout, descriptor, accessorDiagnostics);
@@ -149,7 +175,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
             generateCollectionAccessors(layout, accessorDiagnostics);
             Path host = buildHost(layout);
             String context = "/" + name.replaceFirst("\\.war$", "");
-            process = launch(layout, host, context);
+            process = launch(layout, host, applicationPath(classes), context);
             int port = awaitReady(process, work.resolve(SERVER_LOG));
             deployments.put(name, new Running(process, work));
             return new ProtocolMetaData().addContext(new HTTPContext("127.0.0.1", port).add(new Servlet("Pages", context)));
@@ -159,6 +185,25 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
             }
             throw abandon(name, process, work, failure);
         }
+    }
+
+    /** The libraries the build side compiles against: automatic modules stay runtime-only. */
+    private List<ApplicationLibraries.Library> explicitLibraries() {
+        return libraries.stream().filter(library -> !library.automatic()).toList();
+    }
+
+    /** The adapter's runtime and compiler modules, then the explicit libraries. */
+    private List<Path> buildModulePath() throws IOException {
+        var modules = new ArrayList<>(modulePaths(lookupPath, true));
+        explicitLibraries().forEach(library -> modules.add(library.location()));
+        return modules;
+    }
+
+    /** The application layer of the server: the application classes, then every library. */
+    private List<Path> applicationPath(Path classes) {
+        var path = new ArrayList<>(List.of(classes));
+        libraries.forEach(library -> path.add(library.location()));
+        return path;
     }
 
     private static Path createWorkDirectory() throws IOException {
@@ -304,11 +349,11 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
         return host;
     }
 
-    private static Process launch(Layout layout, Path host, String context) throws IOException {
-        var runtime = new ArrayList<>(modulePaths(false));
+    private Process launch(Layout layout, Path host, List<Path> applicationPath, String context) throws IOException {
+        var runtime = new ArrayList<>(modulePaths(lookupPath, false));
         runtime.add(host);
         Path java = Path.of(System.getProperty("java.home"), "bin/java");
-        var command = hostCommand(java, runtime, List.of(), List.of(layout.classes()), layout.web(), context);
+        var command = hostCommand(java, runtime, List.of(), applicationPath, layout.web(), context);
         return new ProcessBuilder(command)
                 .redirectErrorStream(true)
                 .redirectOutput(layout.work().resolve(SERVER_LOG).toFile())
@@ -376,13 +421,16 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
         return String.join(File.pathSeparator, paths.stream().map(Path::toString).toList());
     }
 
+    /** The host modules of the test class path; {@code compiler} adds the Ibarra compiler. */
     static List<Path> modulePaths(boolean compiler) throws IOException {
-        String available = System.getProperty("jdk.module.path", "") + File.pathSeparator
-                + System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
+        return modulePaths(searchPath(testClassPath()), compiler);
+    }
+
+    private static List<Path> modulePaths(List<Path> searchPath, boolean compiler) throws IOException {
         var paths = new ArrayList<Path>();
-        for (String item : available.split(Pattern.quote(File.pathSeparator))) {
-            if (!item.isEmpty() && isModular(Path.of(item))) {
-                paths.add(Path.of(item));
+        for (Path item : searchPath) {
+            if (isModular(item)) {
+                paths.add(item);
             }
         }
         return ModuleFinder.of(paths.toArray(Path[]::new)).findAll().stream()
@@ -399,6 +447,11 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
             }
         }
         return Files.isRegularFile(path.resolve(MODULE_INFO_CLASS));
+    }
+
+    /** Whether {@code name} is a module the server boot layer or the build side already has. */
+    static boolean isHostModule(String name) {
+        return isRuntimeModule(name, true);
     }
 
     private static boolean isRuntimeModule(String name, boolean compiler) {
