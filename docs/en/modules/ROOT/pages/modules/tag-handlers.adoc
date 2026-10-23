@@ -119,8 +119,17 @@ during generated servlet initialization. The view includes tag-library namespace
 JSP directives, scripting elements, custom actions and unique `jsp:id` values;
 request-time attribute expressions use the XML-view `%=` form. A nonempty
 validation result fails initialization. For a standard `.tag` file, validators
-declared by its tag libraries receive the tag-file XML view once when its generated
-handler is first invoked.
+declared by the libraries of its `taglib` directives receive the tag-file XML view
+once per generated class, when its handler is first invoked. The generated class
+guards that call with a static `FutureTask`, not `synchronized`: concurrent first
+invocations wait for the single run, and a failure is kept and reported to every
+invocation as a `JspException` caused by the original failure.
+
+NOTE: JSP.7.4 describes `TagLibraryValidator` and `TagExtraInfo` validation as
+translation-time checks. Ibarra runs them from generated code at servlet or
+tag-file initialization instead, so an invalid page is reported when it is first
+initialized, not when it is built. Moving validation to the build is deferred until
+the Bodoni Tags TCK shows a need for it.
 
 == Standard tag files
 
@@ -226,7 +235,7 @@ with JSP requests. Build-side validation alone does not preserve that state in t
 separate server process. The observed contract and remaining design work are recorded
 in link:{repo-ibarra}/src/branch/main/studies/tag-extra-info-aot.md[the TEI/AOT study].
 The static variable synchronization case passes without replaying TEI code at request
-time or rewriting fixtures; validation and broader metadata APIs remain incomplete.
+time or rewriting fixtures; broader metadata APIs remain incomplete.
 
 Java-expression request values must be compatible with the selected ordinary setter
 parameter. Fragment, ValueExpression, MethodExpression and mixed Object setter
@@ -235,8 +244,8 @@ Production packaging compiles immediate EL with Peano; runtime parsing is not
 enabled. Fixed-arity TLD functions use direct static invokers as described in
 xref:modules/compiled-el.adoc[Compiled EL]. Typed deferred-value/deferred-method
 attributes follow the contracts described there.
-The initial official Pages TCK baseline is recorded in xref:tck.adoc[TCK status];
-full tag/TLV coverage remains incomplete and failing.
+The official Pages TCK result, including its `TagLibraryValidator` and
+`TagExtraInfo` classes, is recorded in xref:tck.adoc[TCK status].
 
 == Verification
 

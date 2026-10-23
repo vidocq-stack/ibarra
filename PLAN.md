@@ -590,6 +590,22 @@ The 2026-10-16 full-suite checkpoint with IBARRA-148 and IBARRA-149 passed
 errors, assertion failures or skipped methods. The complete 2026-10-17 run
 subsequently passed 682/682; see `ibarra-tck/BASELINE.md`.
 
+## Known deviation: validation at initialization (2026-10-23)
+
+JSP.7.4 describes `TagLibraryValidator` and `TagExtraInfo` validation as
+translation-time checks. Since IBARRA-087, Ibarra runs them from generated code:
+a page's TLD validators and `TagExtraInfo.validate` calls run once in servlet
+`init()`, before `jspInit`, and a standard tag file's validators run once per
+generated class on the first `doTag()`, behind a static `FutureTask` rather than
+`synchronized` (IBARRA-153). An invalid page is therefore reported when it is first
+initialized, not when the application is built. TEI `getVariableInfo` metadata is
+already read at build time from class files.
+
+Maintainer decision (2026-10-23): keep validation at initialization for now.
+Moving it to translation time is deferred until the Bodoni Tags TCK shows a need,
+so the cost and the TCK fixtures that share static state with requests (see
+[studies/tag-extra-info-aot.md](studies/tag-extra-info-aot.md)) are measured first.
+
 ## Open questions
 
 1. **Generator back end** — the initial I3 implementation uses Java source +

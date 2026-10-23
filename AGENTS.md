@@ -152,8 +152,19 @@ ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
     and directive probes. Standard bodies use the first exact closing delimiter;
     XML preserves structural nesting and decoded character data. Named jsp:attribute
     envelopes use their ordinary contracts; explicit jsp:body payloads stay opaque.
-    Namespaced dynamic attributes, variables, TEI/TLV and tag files remain unsupported
-    with translation diagnostics; do not silently ignore their semantics.
+    TLD validators (`<validator>`) run from generated code at initialization, not
+    at translation time as JSP.7.4 describes (IBARRA-087; known deviation, PLAN.md):
+    a page's validators and the `TagExtraInfo.validate` calls of its TEI-bearing
+    tags (the API default delegates to `isValid`) run once in servlet `init()`,
+    before `jspInit`, and any message fails initialization. A tag file's validators
+    (libraries of its `taglib` directives) run once per generated class on the first
+    `doTag()`, lock-free (IBARRA-153); the failure is kept and reported to every call.
+    TEI `getVariableInfo` is read from class files at build time when it is a static
+    contract; other TEI variable metadata fails translation. TLD and tag-file
+    variables, unqualified dynamic attributes and `.tag`/`.tagx` files are supported.
+    Namespaced dynamic attributes and the tag-file constructs reported as "not
+    supported yet" by `TagFileCompiler` (e.g. TEI- or variable-bearing tags nested
+    in a tag file) fail translation; do not silently ignore their semantics.
     Deferred named attributes accept text/EL; executable body capture and custom
     literal method return conversion remain explicit follow-up boundaries.
 
