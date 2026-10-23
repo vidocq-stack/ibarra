@@ -145,12 +145,14 @@ reflective fallback and Vauban's runtime fallbacks.
 | `ibarra-compiler` | `io.vidocq.ibarra.compiler` | build (+ dev mode planned) | `io.vidocq.ibarra.api`, `java.xml`, `static java.compiler`, `io.vidocq.peano.compiler` | `io.vidocq.ibarra.compiler` |
 | `ibarra-maven-plugin` | (Maven plugin, class path) | build | `ibarra-compiler` | — |
 | `ibarra-foy` | `io.vidocq.ibarra.foy` | runtime | `io.vidocq.ibarra.api`, `io.vidocq.ibarra.core`, Foy's SPI module | nothing — `provides` Foy's JSP-engine SPI |
-| `ibarra-tck` | — | test, `-Ptck` | `ibarra-core` (+ Foy, Arquillian adapter later) | — |
+| `ibarra-arquillian` | — (class path) | test tooling, published | `ibarra-compiler`, `ibarra-core`, `ibarra-foy`, Foy, Peano, Chappe, Arquillian container SPI, ShrinkWrap | — (`LoadableExtension` service file) |
+| `ibarra-tck` | — | test, `-Ptck` | `ibarra-arquillian` (test scope), official TCK under `tck-official` | — |
 | `ibarra-bench` | — | JMH, not deployed | — | — |
 
 Today `ibarra-api`, `ibarra-core` (I1 runtime), `ibarra-compiler` (I2 parser/model,
 initial I3/I4 generation and packaging), `ibarra-maven-plugin`, `ibarra-foy` and `ibarra-tck`
-(skeleton) exist. The Maven plugin runs only in Maven's build-time classpath;
+(skeleton) exist, with `ibarra-arquillian`. The Maven plugin runs only in Maven's
+build-time classpath and the Arquillian adapter only on the test class path;
 application pages and the runtime remain strict named Java modules.
 
 `ibarra-core` does **not** depend on Peano: it gets its `ExpressionFactory`
@@ -220,6 +222,9 @@ the runtime's packaging goal, after I8.
 - Runner: `ibarra-tck`, in the reactor only under `-Ptck`; its modular WAR
   adapter is implemented and regression-tested. The official suite is resolved
   only under `-Ptck,tck-official`.
+- The adapter is the published `ibarra-arquillian` module (test tooling, default
+  reactor), so that Bodoni's JSTL TCK runner reuses it; three `arquillian.xml` hooks
+  configure it: `applicationLibraries`, `jdkModules` and `applicationOpens`.
 - The Pages 4.0 TCK moved from the Platform TCK into the `jakartaee/pages`
   repository and was rewritten to **Arquillian + JUnit 5**. Distribution
   (checked 2026-10-10): **not on Maven Central** — it ships as

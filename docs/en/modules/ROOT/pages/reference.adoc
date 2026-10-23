@@ -15,6 +15,7 @@ Reference data for Ibarra `{project-version}`. Entries marked _planned_ do not e
 | `io.vidocq.ibarra:ibarra-compiler` | `io.vidocq.ibarra.compiler` | I2 parser/model and initial I3 generator/compiler
 | `io.vidocq.ibarra:ibarra-maven-plugin` | — | xref:modules/maven-plugin.adoc[`precompile` goal], build time only
 | `io.vidocq.ibarra:ibarra-foy` | `io.vidocq.ibarra.foy` | xref:modules/foy-binding.adoc[Initial Foy binding]
+| `io.vidocq.ibarra:ibarra-arquillian` | — (test class path) | xref:modules/arquillian-adapter.adoc[Arquillian adapter], test tooling only
 |===
 
 == Runtime dependencies
@@ -22,6 +23,8 @@ Reference data for Ibarra `{project-version}`. Entries marked _planned_ do not e
 The core depends on the internal `ibarra-api` SPI and `jakarta.servlet.jsp:jakarta.servlet.jsp-api:4.0.0`, with `jakarta.servlet-api:6.1.0` and `jakarta.el-api:6.0.1`. The API module requires Jakarta Pages transitively because its public factories return `HttpJspPage`. At run time an Expression Language implementation (Peano) and a servlet container (Foy) complete the picture.
 
 Build-only Maven dependencies are named and justified in xref:modules/maven-plugin.adoc[the Maven plugin reference]. They do not ship in application runtime artifacts.
+
+The test tooling dependencies of `ibarra-arquillian` (Arquillian container SPI and ShrinkWrap, both Apache-2.0) are named in xref:modules/arquillian-adapter.adoc#test-tooling-dependencies[the Arquillian adapter reference]. Consumers take the adapter at `test` scope only.
 
 `ibarra-compiler` depends on the internal API for shared page-path validation. Its parser requires the
 JDK `java.xml` module; generation/compilation needs a full Java 25 JDK.

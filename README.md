@@ -102,6 +102,7 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 | `ibarra-compiler` | JSP/JSPX parser, page model, Java generator, initial tag handlers and build-time compiler | I2 implemented; I3/I6/I7 in progress |
 | `ibarra-maven-plugin` | `precompile` goal at process-classes; module service registration | Initial I4 implemented |
 | `ibarra-foy` | Optional Foy engine provider; application layer, routing and TLD listener lifecycle | Initial I5 implemented |
+| `ibarra-arquillian` | Published Arquillian adapter: precompiles WARs and runs them on modular Foy; test tooling, class path, default reactor ([README](ibarra-arquillian/README.md)) | 59 regression tests; configurable libraries, JDK modules and opened packages |
 | `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; smoke 18/18; latest `all` run reports 603/682 across 92 classes |
 
 The latest full `all` run (2026-10-15) executes all 682 methods in 92 classes:
@@ -112,7 +113,7 @@ TCK-018 passes 5/5 after IBARRA-143. The SimpleTagSupport TCK class passes 11/11
 TCK-054 passes 7/7, TCK-056 passes 8/8 after IBARRA-141, and TCK-057 passes 12/12
 after IBARRA-142. TCK-021 passes 3/3 after Foy #51 and IBARRA-147; TCK-031 passes
 12/12 after IBARRA-147. Ibarra remains uncertified while method errors remain. The
-ordinary reactor passes 367 tests, the adapter 37/37 and the independent example
+ordinary reactor passes 367 tests, the adapter 37/37 at that date (59 tests today, in `ibarra-arquillian`) and the independent example
 packages successfully. Typed forwarding uses the producer delivered in
 [Foy #47](https://codefloe.com/Vidocq/foy/pulls/47), now merged and published.
 JSP property-group prefix routing is available in
@@ -128,7 +129,8 @@ the milestone that needs them. JSTL is out of scope.
 sdk env          # Java 25 (Temurin) + Maven 3.9.16, pinned by .sdkmanrc
 ./mvnw -ntp install
 ./mvnw -ntp -f examples/precompiled-pages/pom.xml clean package
-./mvnw -Ptck -pl ibarra-tck test                 # adapter regression tests
+./mvnw -pl ibarra-arquillian test                # adapter regression tests
+./mvnw -Ptck -pl ibarra-tck test                 # runner tests
 ./run-official-tck-pages-4.0.sh smoke            # prepare official artifacts, clean install, smoke
 ./run-official-tck-pages-4.0.sh all              # diagnostic full-suite attempt; not yet green
 ```

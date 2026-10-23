@@ -43,7 +43,7 @@ Direct discovery does not add implicit URI entries for external descriptors.
 
 == Official runner descriptor components
 
-The unpublished TCK adapter now generates Foy component factories for root web.xml
+The TCK adapter now generates Foy component factories for root web.xml
 Servlet/filter/listener classes in WEB-INF/classes. Its synthetic application module
 requires `io.vidocq.foy.api` and provides those factories without exports or opens.
 This runner change does not change the production Maven plugin or add a new public
@@ -56,7 +56,7 @@ Servlet annotations and initializers still need separate adaptation.
 
 == Legacy WAR bean properties in the official runner
 
-The unpublished runner now supplies direct Peano property accessors for eligible
+The TCK adapter now supplies direct Peano property accessors for eligible
 legacy WAR bean classes, without exports/opens or reflective property access.
 Inherited JavaBeans properties and primitive conversion use generated calls and
 the current ELContext. Native containers keep their standard resolver behaviour.
@@ -92,3 +92,12 @@ Java keyword attribute names such as boolean, byte and static are accepted.
 Fragment and deferred-expression setter protocols retain their exact API types.
 See xref:modules/tag-handlers.adoc[Tag handlers] for the compatibility interpretation
 and Class-File binding rules.
+
+== Published Arquillian adapter
+
+The Arquillian adapter of the Pages TCK runner moved from the unpublished `ibarra-tck`
+into the published `io.vidocq.ibarra:ibarra-arquillian` module (package
+`io.vidocq.ibarra.arquillian`), so that other TCK runners can reuse it. Take it at
+`test` scope only. Without configuration it deploys exactly as before; the
+`applicationLibraries`, `jdkModules` and `applicationOpens` properties are described in
+xref:modules/arquillian-adapter.adoc[Arquillian adapter].

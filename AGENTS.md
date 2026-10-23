@@ -53,8 +53,10 @@ of local divergence, the brick-specific sections further down take precedence.
   (module `jakarta.servlet.jsp`, requires `jakarta.servlet` and `jakarta.el`
   transitively) — no Vidocq fork needed.
 - Official Pages TCK coordinates: `jakarta.tck:jakarta-pages-tck:4.0.0`, verified
-  from the distribution's embedded POM. The build-side Arquillian adapter
-  precompiles WARs and launches modular Foy; see `ibarra-tck/README.md`.
+  from the distribution's embedded POM. The build-side Arquillian adapter, the
+  published `ibarra-arquillian` module, precompiles WARs and launches modular Foy;
+  see `ibarra-arquillian/README.md` (adapter, configuration) and
+  `ibarra-tck/README.md` (Pages TCK runner).
   Explicit `PagePrecompiler.precompileDeployment` may retain individual translation
   failures as compiled error servlets for this harness. Production/plugin packaging
   uses `precompile` and remains fail-fast; never enable a runtime parser fallback.
@@ -67,13 +69,16 @@ of local divergence, the brick-specific sections further down take precedence.
 sdk env
 ./mvnw -ntp install                                # default reactor (no TCK)
 ./mvnw test
-./mvnw -Ptck -pl ibarra-tck test                   # adapter regression tests
+./mvnw -pl ibarra-arquillian test                  # adapter regression tests
+./mvnw -Ptck -pl ibarra-tck test                   # runner tests
 ./run-official-tck-pages-4.0.sh smoke              # bootstrap, clean install, official smoke
 ./run-official-tck-pages-4.0.sh all                # diagnostic full-suite attempt (not green)
 ```
 
-`ibarra-tck` is **in-reactor behind the `tck` Maven profile** from day one: a plain
-`./mvnw install` neither builds nor downloads anything TCK-related.
+`ibarra-tck` is **in-reactor behind the `tck` Maven profile** from day one. A plain
+`./mvnw install` builds the published `ibarra-arquillian` adapter, and so adds its
+Arquillian/ShrinkWrap test tooling, but never builds the runner nor resolves the
+official TCK.
 
 ## Architecture
 
@@ -85,6 +90,7 @@ ibarra-compiler ← I2 parser/model; I3 generation and I4 application packaging;
                   internal API + java.xml + static java.compiler
 ibarra-maven-plugin ← Build-only precompile goal, Maven classpath exception
 ibarra-foy    ← Optional Foy engine binding, application layers, routing and TLD listeners
+ibarra-arquillian ← Published Arquillian adapter (test tooling, class path), reused by bodoni-tck
 ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
 (planned)     ibarra-bench (JMH)
 ```
@@ -128,8 +134,12 @@ ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
 10. **I4 boundary** — application modules must require `io.vidocq.ibarra.api`;
     their generated packages need no exports/opens. Register page indexes with
     Java module `provides`, never classpath service files or runtime class-name
-    lookup. The Maven plugin alone uses Maven's build-time classpath as designed
-    in PLAN.md; Maven libraries must never enter application/runtime artifacts.
+    lookup. Two class-path exceptions exist, both tooling: the Maven plugin uses
+    Maven's build-time classpath as designed in PLAN.md, and the published
+    `ibarra-arquillian` adapter (test tooling, taken at `test` scope) runs on the
+    test class path with Arquillian and ShrinkWrap. What the adapter deploys stays
+    named modules (`tck.application`, `tck.host`). Maven, Arquillian and ShrinkWrap
+    libraries must never enter application/runtime artifacts.
 
 11. **TLD boundary** — discovery and class-file validation run only at build time.
     Generated listener factories call constructors directly; metadata discovery

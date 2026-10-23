@@ -4,10 +4,12 @@
 
     In-reactor module gated by the `tck` Maven profile of ibarra-parent (TCK
     harmonisation — same pattern as every other Vidocq sub-project): a plain
-    `mvn install` neither downloads nor runs anything TCK-related.
+    `mvn install` builds the ibarra-arquillian adapter (Arquillian/ShrinkWrap
+    test tooling) but never this runner nor the official TCK.
 
     Two levels:
-      -Ptck                 tests the build-side modular WAR adapter;
+      -Ptck                 runs the runner tests (the adapter itself is the
+                            published ibarra-arquillian, tested in the default build);
       -Ptck,tck-official    additionally resolves the official TCK artifact.
 
     The Pages 4.0 TCK moved from the Platform TCK into the jakartaee/pages
@@ -37,7 +39,7 @@
 
     <artifactId>ibarra-tck</artifactId>
     <name>Ibarra :: TCK</name>
-    <description>Official Jakarta Pages 4.0 TCK runner — build-side modular WAR adapter on Foy</description>
+    <description>Official Jakarta Pages 4.0 TCK runner — on the ibarra-arquillian adapter, modular Foy</description>
 
     <properties>
         <!-- Verified from the official 4.0.0 jar's embedded Maven POM. -->

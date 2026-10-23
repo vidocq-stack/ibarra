@@ -90,7 +90,8 @@
         Main reactor modules. ibarra-tck joins the reactor only under the `tck`
         Maven profile (see <profiles> below) — TCK harmonisation, same pattern
         as every other Vidocq sub-project: a regular `mvn install` neither
-        builds nor downloads the TCK harness.
+        builds nor downloads the TCK runner. The default reactor does build the
+        published ibarra-arquillian adapter (Arquillian/ShrinkWrap test tooling).
         Activation: ./mvnw -Ptck -pl ibarra-tck test
     -->
     <modules>
@@ -194,7 +195,7 @@
             TCK harmonisation: the official Jakarta Pages 4.0 TCK
             runner joins the reactor only when this profile is active.
 
-                ./mvnw -Ptck -pl ibarra-tck test                  (adapter tests only)
+                ./mvnw -Ptck -pl ibarra-tck test                  (runner tests only)
                 ./mvnw -Ptck,tck-official -pl ibarra-tck test     (pulls the official TCK)
 
             See PLAN.md, "TCK plan".

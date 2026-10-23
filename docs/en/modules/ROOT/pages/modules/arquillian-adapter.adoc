@@ -1,0 +1,299 @@
+= Arquillian adapter
+:description: Published Arquillian adapter that precompiles Jakarta Pages WARs and runs them on modular Foy — test tooling.
+
+`io.vidocq.ibarra:ibarra-arquillian` is an Arquillian `DeployableContainer`. For each
+deployed WAR it precompiles the pages on the build machine, then launches Foy and
+Chappe in a separate process on the module path. The xref:modules/official-tck-runner.adoc[Official TCK runner]
+uses it to run the Jakarta Pages 4.0 TCK; other projects (such as Bodoni for the
+Jakarta Standard Tag Library TCK) take the same adapter and configure it.
+
+[source,xml,subs="attributes+"]
+----
+<dependency>
+    <groupId>io.vidocq.ibarra</groupId>
+    <artifactId>ibarra-arquillian</artifactId>
+    <version>{project-version}</version>
+    <scope>test</scope>
+</dependency>
+----
+
+WARNING: `ibarra-arquillian` is test tooling. TCK runners and integration tests take it
+at `test` scope. It is never part of an application, and no Vidocq runtime extension
+brings it.
+
+The jar registers the container through its
+`META-INF/services/org.jboss.arquillian.core.spi.LoadableExtension` file, so
+Arquillian finds it on the test class path. The adapter declares `Servlet 3.0` as its
+default protocol. It brings neither a test framework integration nor a protocol
+implementation: the consumer's test dependencies supply them (the official Pages TCK
+POM brings `arquillian-junit5-container`).
+
+== Java Modules
+
+The jar has no `module-info` and no `Automatic-Module-Name`: Arquillian, ShrinkWrap and
+the official TCK clients are not Java modules, so the adapter runs on the test class
+path. This is the same build-tooling exception as the
+xref:modules/maven-plugin.adoc[Maven precompiler], which runs on Maven's build class
+path.
+
+What the adapter deploys stays strictly modular. The deployed application is the named
+module `tck.application`; the server is the named module `tck.host`, started with
+`--limit-modules`. The server contains no compiler: it refuses to start when
+`java.compiler`, `io.vidocq.ibarra.compiler` or `io.vidocq.peano.compiler` is in its
+boot layer, and it always runs with `-Dpeano.reflection=deny`.
+
+[#test-tooling-dependencies]
+== Test tooling dependencies
+
+These `compile` dependencies of the adapter reach the consumer's test class path only.
+The workspace rule names build and test tooling dependencies on the reference page of
+the module that takes them; this is that page.
+
+[cols="2,1,3",options="header"]
+|===
+| Artifact | Version | Use
+| `org.jboss.arquillian.container:arquillian-container-spi` | 1.8.0.Final | `DeployableContainer` SPI (Apache-2.0)
+| `org.jboss.shrinkwrap:shrinkwrap-impl-base` | 1.2.6 | WAR model of the deployed archives (Apache-2.0)
+| `io.vidocq.ibarra:ibarra-compiler` | `{project-version}` | Build-side precompilation of the WAR pages
+| `io.vidocq.foy:foy-core` | `${foy.version}` | `web.xml` parser on the build side, and the server
+| `io.vidocq.ibarra:ibarra-core`, `ibarra-foy` | `{project-version}` | Server modules: page runtime and Foy binding
+| `io.vidocq.peano:peano-core` | `${peano.version}` | Server module: Expression Language
+| `io.vidocq.chappe:chappe-core` | `${chappe.version}` | Server module: HTTP transport
+|===
+
+The adapter's own tests also use `arquillian-container-impl-base` 1.8.0.Final, at `test`
+scope only. The Arquillian and ShrinkWrap versions are managed by the Ibarra parent
+POM (`arquillian.version`, `shrinkwrap.version`).
+
+== Configuration
+
+The container reads three optional properties from `arquillian.xml`. Each takes a
+comma-separated list; blanks around names are trimmed and empty entries are dropped.
+All three default to empty. With none of them set, the adapter deploys exactly as the
+Pages TCK runner always has: the same application descriptor and the same server
+command line.
+
+[source,xml]
+----
+<arquillian xmlns="http://jboss.org/schema/arquillian">
+    <container qualifier="ibarra" default="true">
+        <configuration>
+            <property name="applicationLibraries">io.vidocq.bodoni.core,com.h2database</property>
+            <property name="jdkModules">java.sql,java.naming</property>
+            <property name="applicationOpens">com.example.resources</property>
+        </configuration>
+    </container>
+</arquillian>
+----
+
+[cols="1,3,3",options="header"]
+|===
+| Property | Meaning | Refused (with the message)
+
+| `applicationLibraries`
+| Module names, looked up on the test class path, deployed in the application layer
+next to `tck.application`. An explicit module is read by `tck.application` (`requires`)
+and put on the build-side module path, so the precompiler discovers its TLDs. An
+automatic module (a JDBC driver, for example) is runtime-only: the precompiler never
+sees it, and application code reaches it by name at run time.
+| At `setup`: not a module name (`applicationLibraries: 'x' is not a module name`);
+listed twice (`… is listed twice`); build tooling, that is `java.compiler`,
+`io.vidocq.ibarra.compiler` or `io.vidocq.peano.compiler`
+(`applicationLibraries: x is build tooling, which the server must never contain`);
+a host module, already in the server boot layer
+(`applicationLibraries: x is a host module, already in the server boot layer`);
+absent from the test class path
+(`applicationLibraries: module x not found on the test class path`).
+
+| `jdkModules`
+| JDK modules added to the server's boot layer: appended to `--limit-modules` (after
+`tck.host,io.vidocq.chappe.core`) and to `--add-modules` (after `io.vidocq.chappe.core`).
+`--limit-modules` also brings each module's `requires` closure.
+| At `setup`: not a JDK module (`jdkModules: 'x' is not a JDK module`); a module that
+is, or requires, build tooling (`jdkModules: 'jdk.compiler' (it requires java.compiler)
+is build tooling, which the server must never contain`).
+
+| `applicationOpens`
+| Packages of the deployed application that `tck.application` opens to every module
+(an unqualified `opens`). The package must directly hold a file of the WAR classes
+(`WEB-INF/classes` or an assembled `WEB-INF/lib` jar); a subpackage alone does not
+count. The `opens` survives the descriptor rewrite that adds collection method tables.
+| At `setup`: not a package name (`applicationOpens: 'x' is not a package name`).
+At deployment: a package absent from the application fails that deployment
+(`Configured package to open is absent from the application: x`), and the adapter
+stays usable for the next one.
+|===
+
+Every refusal at `setup` is an Arquillian `ConfigurationException`. A deployment
+failure is a `DeploymentException` whose cause carries the message, and which names the
+retained work directory.
+
+When libraries are configured, the server resolves every module of the application
+layer (the application classes and each library) as a root, so an automatic library
+that no descriptor reads is still in the layer.
+
+Limits:
+
+* An explicit library that `requires` an automatic library is not supported: the
+  automatic library is not on the build-side module path, so the build-side compile
+  fails with a javac diagnostic.
+* The test class path is probed one entry at a time. A directory entry is skipped as a
+  whole when any jar in it cannot be read as a module.
+
+== Using it from another project
+
+Add the test dependency shown above, and keep Surefire on the class path, because the
+Arquillian and TCK clients are not Java modules:
+
+[source,xml]
+----
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-surefire-plugin</artifactId>
+    <configuration>
+        <useModulePath>false</useModulePath>
+    </configuration>
+</plugin>
+----
+
+A JSTL TCK runner, for example, deploys its tag library modules and a JDBC driver with
+every WAR, adds the JDK modules the TCK pages use, and opens the package that holds the
+TCK resource bundles:
+
+[source,xml]
+----
+<property name="applicationLibraries">io.vidocq.bodoni.core,io.vidocq.bodoni.peano,jakarta.servlet.jsp.jstl,com.h2database</property>
+<property name="jdkModules">java.sql,java.naming,jdk.localedata</property>
+<property name="applicationOpens">com.sun.ts.tests.jstl.common.resources</property>
+----
+
+Here the Bodoni modules and `jakarta.servlet.jsp.jstl` are explicit modules, read by the
+application and visible to the precompiler; `com.h2database` is the automatic name of
+the H2 jar, deployed for run time only.
+
+Work directories are created under the `ibarra.tck.work` system property (default
+`target/pages-deployments`, relative to the Surefire working directory). Each keeps
+its `server.log`, `translation-errors.txt` and `bean-accessor-errors.txt`.
+
+== Runtime isolation
+
+The build-side adapter precompiles each WAR as a named application module,
+then launches Foy/Chappe in a separate process on the module path.
+The server rejects the presence of `java.compiler` or either compiler module;
+Peano reflection remains denied. Application packages have no added exports
+or opens unless `applicationOpens` names them. Multiple WARs have independent
+ports, lifecycles and resource roots.
+
+Root web.xml property groups are parsed at build time, with matched scalar settings,
+ordered preludes/codas and legacy EL defaults. The adapter explicitly selects
+`PagePrecompiler.precompileDeployment`: valid pages compile normally, while genuine
+parse/generation/javac failures produce direct error servlets that throw on request.
+The full diagnostic is retained in `translation-errors.txt`; error messages are
+bounded without splitting Unicode characters. Previous generated classes cannot
+satisfy new incremental dependencies. Normal packaging remains fail-fast.
+
+[source,java]
+----
+var groups = new JspConfigurationParser().parse(
+        "/WEB-INF/web.xml", Files.readAllBytes(webRoot.resolve("WEB-INF/web.xml")));
+var report = new PagePrecompiler().precompileDeployment(
+        webRoot, classes, modulePath, null, new GenerationOptions(groups, Map.of()));
+// report.pages() includes routable valid/error pages; report.failures() is immutable.
+----
+
+These APIs belong to the build-only `io.vidocq.ibarra.compiler` package.
+Global property keys, booleans, encoding and buffer capacity are validated before
+individual page recovery, even for an application with no pages. Invalid global
+settings leave previous generated output ownership intact.
+
+== Descriptor component factories
+
+Root web.xml servlets, filters and listeners whose bytecode is in WEB-INF/classes
+receive build-generated Foy `WebComponent` providers. The Class-File API emits
+direct class literals and no-arg constructor calls, without initializing component
+classes during discovery. The named application module explicitly requires
+`io.vidocq.foy.api` and declares the providers through `provides`; packages retain
+no exports or opens. Existing page provider registrations are preserved.
+
+Components must be public concrete classes with public no-arg constructors.
+Missing classes, invalid constructors and generated provider name collisions
+abort deployment before server launch.
+Generated factories preserve runtime exceptions/errors and wrap checked constructor
+failures with their cause, including constructors declared to throw Throwable.
+Foy continues to apply descriptor mappings, init parameters, startup order, filters
+and listener lifecycle. This adaptation
+belongs to the test-tooling adapter; the production Maven plugin is unchanged.
+
+== Legacy WAR libraries
+
+The adapter assembles ordinary WEB-INF/lib JAR bytecode and resources into the
+existing private application module. Legacy WARs may share packages between
+WEB-INF/classes and several libraries; assembly keeps that overlap inside one
+explicit module, without automatic modules, exports or opens. Equal duplicate
+outputs are deduplicated; incompatible class/resource collisions fail explicitly.
+
+Original JAR bytes are retained for physical TLD references. Library META-INF TLDs
+receive separate build-discovery paths, preserving URI discovery when several
+libraries use META-INF/taglib.tld. Other resources retain their module-relative
+paths. Parsing happens during the build; the server receives compiled pages only.
+
+Unsafe/noncanonical ZIP paths, explicit module descriptors, multi-release entries,
+web fragments and classpath service metadata are rejected before runtime because
+their semantics still need separate adaptation. This is a bounded test-tooling
+feature; production Maven packaging remains unchanged. Modules that a test suite
+needs next to the WAR are configured with `applicationLibraries` instead.
+
+The adapter explicitly rejects unadapted library metadata, Servlet annotation metadata and
+initializers that it cannot yet adapt. Invalid global configuration and TLD
+metadata still abort deployment. These remain visible full-suite errors.
+
+== Private bean property tables
+
+Legacy WAR bean properties receive build-generated Peano AccessorTable/AccessorProvider
+services in the existing application module. Class-File metadata supplies direct
+getter/setter calls, boxing and ELContext conversion. Inherited property lookup
+honours boolean getter precedence, covariant returns and compatible most-specific
+setter overloads. Null, read-only and write-only properties preserve resolution flags.
+
+Tables stay in the bean package. Packages containing generated tables are
+qualified-exported only to `jakarta.el` so the standard reflective Jakarta EL
+`BeanELResolver` can inspect public bean methods; no unqualified export or open is
+added. Neither metadata discovery nor provider class literals initialize bean
+classes. Map, List, ResourceBundle and Record hierarchies retain native resolver
+semantics. Runtime reflection stays denied.
+
+Lookup follows actual module reads/exports, including qualified exports; exact
+resource checks avoid unrelated package-owner masking. Unsupported hierarchy or
+signature types are reported in bean-accessor-errors.txt without registering an
+unusable target. Binary identity mismatches and class collisions fail adaptation.
+
+This adapter feature covers properties. General method invocation,
+static members, conversions/functional adapters and explicit BeanELResolver calls
+remain follow-up capabilities. Production compilation and dependency contracts
+remain unchanged; no runtime parser, compiler or new SPI is introduced.
+
+== Collection method tables
+
+After pages compile, Class-File allocation metadata selects public concrete
+java.util Collection types from java.base. Method-only tables stay in the private
+application module; their provider is appended while preserving all compiled
+PageIndex, Foy component and bean services. No WAR fixture is rewritten.
+
+Peano's existing MethodDescriptor and MethodSelection provide direct metadata and
+overload selection. Invocation converts through the supplied ELContext and retains
+primitive/void/null results and exception causes. Metadata does not invoke methods;
+argument arrays are copied. Exact runtime types are required. Unknown targets/names
+and all property operations stay unresolved, preserving native list indexing.
+
+Signature visibility is checked from the helper package using actual module
+reads/exports. Names with varargs, runtime annotations or inaccessible signature
+types are omitted with bean-accessor-errors.txt diagnostics. Inherited Object and
+static methods remain outside this capability. Discovery does not initialize
+application classes; generated-name collisions abort without overwriting originals.
+This adaptation is confined to the test-tooling adapter; production applications
+still provide their own complete Peano accessors.
+
+== Tests
+
+`./mvnw -pl ibarra-arquillian test` runs the adapter's 59 regression tests. They are
+part of the default reactor and need no TCK artifact.

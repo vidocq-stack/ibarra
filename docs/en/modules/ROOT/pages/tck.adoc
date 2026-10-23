@@ -47,7 +47,8 @@ requires `-Ptck,tck-official`. The official distribution is
 Central. Preparation preserves its embedded POM, supplies the omitted JavaTest
 5.0 dependency and checks artifact SHA-256 digests.
 
-The adapter precompiles pages before launching modular Foy/Chappe. The server
+The adapter is the published `ibarra-arquillian` module, which `ibarra-tck` takes at
+`test` scope. It precompiles pages before launching modular Foy/Chappe. The server
 contains neither the compiler nor `java.compiler`, and retains reflection denial.
 It supports isolated WARs and filesystem resources. Root JSP property groups reach
 the compiler through build-side descriptor parsing. Explicit deployment
@@ -56,7 +57,9 @@ pages and negative translation tests can coexist; normal packaging still rejects
 translation errors.
 
 See xref:modules/official-tck-runner.adoc[Official TCK runner] for dependencies,
-commands, artifact preparation, retained logs and limits.
+commands, artifact preparation and retained logs, and
+xref:modules/arquillian-adapter.adoc[Arquillian adapter] for the deployment model,
+its configuration and its limits.
 
 == Tracking
 

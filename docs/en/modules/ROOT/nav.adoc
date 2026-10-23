@@ -12,3 +12,4 @@
 ** xref:modules/tag-handlers.adoc[Tag handlers]
 ** xref:modules/compiled-el.adoc[Compiled EL]
 ** xref:modules/official-tck-runner.adoc[Official TCK runner]
+** xref:modules/arquillian-adapter.adoc[Arquillian adapter]
