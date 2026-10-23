@@ -90,7 +90,7 @@ final class ApplicationLibraries {
     private static Set<ModuleReference> modules(Path entry) {
         try {
             return ModuleFinder.of(entry).findAll();
-        } catch (FindException unreadable) {
+        } catch (FindException _) {
             return Set.of();
         }
     }

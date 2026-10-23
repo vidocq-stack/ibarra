@@ -157,8 +157,9 @@ final class CollectionAccessors {
         for (var parent : model.interfaces()) {
             collect(metadata, binaryName(parent.asSymbol()), methods, excluded, visited);
         }
-        if (model.superclass().isPresent()) {
-            collect(metadata, binaryName(model.superclass().get().asSymbol()), methods, excluded, visited);
+        var superclass = model.superclass();
+        if (superclass.isPresent()) {
+            collect(metadata, binaryName(superclass.orElseThrow().asSymbol()), methods, excluded, visited);
         }
     }
 

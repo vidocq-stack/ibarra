@@ -169,7 +169,7 @@ class ApplicationModuleOptionsTest {
     }
 
     private static String get(PagesContainer container, WebArchive war) throws Exception {
-        var http = container.deploy(war).getContext(HTTPContext.class);
+        var http = container.deploy(war).getContexts(HTTPContext.class).iterator().next();
         String context = war.getName().replaceFirst("\\.war$", "");
         try (var client = HttpClient.newHttpClient()) {
             var response = client.send(HttpRequest.newBuilder(

@@ -143,7 +143,7 @@ class PagesContainerLifecycleTest {
     }
 
     @Test
-    void anUndeployWhoseShutdownTimesOutKillsTheServerAndUnregistersIt(@TempDir Path work) throws Exception {
+    void anUndeployWhoseShutdownTimesOutKillsTheServerAndUnregistersIt(@TempDir Path work) {
         var process = new ScriptedProcess();
         var container = registered(process, work);
 

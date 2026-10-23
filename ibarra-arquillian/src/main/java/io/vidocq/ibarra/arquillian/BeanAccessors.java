@@ -304,8 +304,9 @@ final class BeanAccessors {
         for (var parent : model.interfaces()) {
             collect(binaryName(parent.asSymbol()), result, visited);
         }
-        if (model.superclass().isPresent()) {
-            collect(binaryName(model.superclass().get().asSymbol()), result, visited);
+        var superclass = model.superclass();
+        if (superclass.isPresent()) {
+            collect(binaryName(superclass.orElseThrow().asSymbol()), result, visited);
         }
     }
 
@@ -334,7 +335,8 @@ final class BeanAccessors {
                 return true;
             }
         }
-        return model.superclass().isPresent() && assignable(model.superclass().get().asSymbol(), target, visited);
+        var superclass = model.superclass();
+        return superclass.isPresent() && assignable(superclass.orElseThrow().asSymbol(), target, visited);
     }
 
     ClassModel read(String binary) throws IOException {

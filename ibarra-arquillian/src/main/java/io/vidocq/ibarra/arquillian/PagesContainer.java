@@ -100,7 +100,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
     static final Set<String> BUILD_TOOLING = Set.of("java.compiler", COMPILER_MODULE, "io.vidocq.peano.compiler");
     /** The end of every refusal of a configured module that is, or brings, build tooling. */
     static final String BUILD_TOOLING_REFUSAL = " is build tooling, which the server must never contain";
-    private static final Pattern VERSIONED_DESCRIPTOR = Pattern.compile("META-INF/versions/[0-9]+/module-info.class");
+    private static final Pattern VERSIONED_DESCRIPTOR = Pattern.compile("META-INF/versions/\\d+/module-info.class");
     private static final String DESCRIPTOR_DEPLOYMENT_UNSUPPORTED = "Descriptor-only deployment is unsupported";
 
     private record Running(Process process, Path work) { }
@@ -191,10 +191,10 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
             int port = awaitReady(process, work.resolve(SERVER_LOG));
             deployments.put(name, new Running(process, work));
             return new ProtocolMetaData().addContext(new HTTPContext("127.0.0.1", port).add(new Servlet("Pages", context)));
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw abandon(name, process, work, failure);
         } catch (Exception failure) {
-            if (failure instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
             throw abandon(name, process, work, failure);
         }
     }
@@ -570,7 +570,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
     static void closeInput(Process process) {
         try {
             process.getOutputStream().close();
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             // The server may already have closed its end of the pipe: it is being killed anyway.
         }
     }
@@ -581,7 +581,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
         while (process.isAlive() && System.nanoTime() < deadline) {
             try {
                 process.waitFor(TERMINATION_POLL_MILLIS, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException failure) {
+            } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
                 return;
             }
