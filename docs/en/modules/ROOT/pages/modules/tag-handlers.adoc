@@ -118,10 +118,12 @@ TLD `TagLibraryValidator` classes receive the standard-syntax page XML view once
 during generated servlet initialization. The view includes tag-library namespaces,
 JSP directives, scripting elements, custom actions and unique `jsp:id` values;
 request-time attribute expressions use the XML-view `%=` form. A nonempty
-validation result fails initialization. For a standard `.tag` file, validators
-declared by the libraries of its `taglib` directives receive the tag-file XML view
-once per generated class, when its handler is first invoked. The generated class
-guards that call with a static `FutureTask`, not `synchronized`: concurrent first
+validation result fails initialization. JSP documents declare these libraries
+through `xmlns` attributes as well as `taglib` directives. For a tag file, validators
+declared by the libraries of its `taglib` directives, or of its `xmlns` declarations
+in an XML `.tagx` file, receive the tag-file XML view once per generated class, when
+its handler is first invoked. The generated class guards that call with a static
+`FutureTask` over a named nested `Callable`, not `synchronized`: concurrent first
 invocations wait for the single run, and a failure is kept and reported to every
 invocation as a `JspException` caused by the original failure.
 

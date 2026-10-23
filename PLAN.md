@@ -595,7 +595,7 @@ subsequently passed 682/682; see `ibarra-tck/BASELINE.md`.
 JSP.7.4 describes `TagLibraryValidator` and `TagExtraInfo` validation as
 translation-time checks. Since IBARRA-087, Ibarra runs them from generated code:
 a page's TLD validators and `TagExtraInfo.validate` calls run once in servlet
-`init()`, before `jspInit`, and a standard tag file's validators run once per
+`init()`, before `jspInit`, and a tag file's validators run once per
 generated class on the first `doTag()`, behind a static `FutureTask` rather than
 `synchronized` (IBARRA-153). An invalid page is therefore reported when it is first
 initialized, not when the application is built. TEI `getVariableInfo` metadata is

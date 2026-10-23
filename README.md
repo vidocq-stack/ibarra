@@ -48,8 +48,8 @@ the complete set of libraries imported by page directives with their descriptor
 metadata.
 TLD `TagLibraryValidator`
 declarations receive generated PageData XML during
-standard-page servlet initialization; validators referenced by a standard tag file
-receive its XML view once, when the generated handler is first invoked, and a
+standard-page servlet initialization; validators referenced by a tag file
+(`taglib` directives, or `xmlns` declarations in `.tagx`) receive its XML view once, when the generated handler is first invoked, and a
 failure is reported to every invocation. Validation runs from generated code at
 initialization rather than at translation time (a known deviation, see PLAN.md).
 Standard `.tag` files support tag/import/attribute/variable/taglib directives,
