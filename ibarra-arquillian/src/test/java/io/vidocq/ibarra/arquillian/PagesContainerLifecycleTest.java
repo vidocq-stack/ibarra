@@ -22,11 +22,16 @@ package io.vidocq.ibarra.arquillian;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
+import org.jboss.arquillian.container.spi.client.container.DeploymentException;
 import org.jboss.arquillian.container.spi.client.container.LifecycleException;
+import org.jboss.shrinkwrap.api.ShrinkWrap;
+import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -39,6 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Server-process cleanup paths, driven by a hand-written {@link Process} double. */
 class PagesContainerLifecycleTest {
     private static final Path WORK = Path.of("/w");
+    private static final String NAME = "app.war";
 
     @AfterEach
     void clearInterruptFlag() {
@@ -117,6 +123,186 @@ class PagesContainerLifecycleTest {
         assertEquals(0, cause.getSuppressed().length);
         container.stop();
         assertFalse(Thread.currentThread().isInterrupted());
+    }
+
+    @Test
+    void theReadyLineOfTheServerLogGivesThePort(@TempDir Path work) throws Exception {
+        Path log = Files.writeString(work.resolve("server.log"), "booting\nREADY: 8123\n");
+
+        assertEquals(8123, PagesContainer.awaitReady(new ScriptedProcess(), log));
+    }
+
+    @Test
+    void aServerThatExitsBeforeReadyFailsWithItsLog(@TempDir Path work) throws IOException {
+        Path log = Files.writeString(work.resolve("server.log"), "booting\n");
+        var process = new ScriptedProcess().aliveFor(2);
+
+        var failure = assertThrows(IOException.class, () -> PagesContainer.awaitReady(process, log));
+
+        assertEquals("Server did not start: booting\n", failure.getMessage());
+    }
+
+    @Test
+    void anUndeployWhoseShutdownTimesOutKillsTheServerAndUnregistersIt(@TempDir Path work) throws Exception {
+        var process = new ScriptedProcess();
+        var container = registered(process, work);
+
+        var failure = assertThrows(DeploymentException.class, () -> container.undeploy(archive()));
+
+        assertEquals("Cannot undeploy " + NAME, failure.getMessage());
+        assertEquals("Server shutdown timed out", failure.getCause().getMessage());
+        assertEquals(1, process.kills, "the server is killed");
+        assertEquals(1, process.shutdownSignals);
+        assertDoesNotThrow(container::stop, "the killed server is no longer registered");
+    }
+
+    @Test
+    void anUndeployWhoseServerExitsWithAFailureReportsItsLog(@TempDir Path work) throws Exception {
+        Files.writeString(work.resolve("server.log"), "server log tail");
+        var process = new ScriptedProcess();
+        var container = registered(process, work);
+        process.exitsOnShutdown = true;
+        process.exitCode = 3;
+
+        var failure = assertThrows(DeploymentException.class, () -> container.undeploy(archive()));
+
+        assertEquals("Server failed: server log tail", failure.getCause().getMessage());
+        assertEquals(0, process.kills, "an exited server is not killed");
+        assertDoesNotThrow(container::stop, "the exited server is no longer registered");
+    }
+
+    @Test
+    void anUndeployWhoseServerExitsCleanlyUnregistersIt(@TempDir Path work) throws Exception {
+        var process = new ScriptedProcess();
+        var container = registered(process, work);
+        process.exitsOnShutdown = true;
+
+        container.undeploy(archive());
+
+        assertEquals(0, process.kills);
+        assertDoesNotThrow(() -> container.undeploy(archive()), "undeploying an unknown archive is a no-op");
+        assertDoesNotThrow(container::stop);
+    }
+
+    @Test
+    void anInterruptedUndeployRestoresTheFlagAndKeepsASurvivingServerRegistered(@TempDir Path work) {
+        var process = new ScriptedProcess();
+        var container = registered(process, work);
+        process.stubborn = true;
+
+        var failure = assertThrows(DeploymentException.class, () -> container.undeploy(archive()));
+
+        assertInstanceOf(InterruptedException.class, failure.getCause());
+        assertInstanceOf(LifecycleException.class, failure.getCause().getSuppressed()[0]);
+        assertTrue(Thread.interrupted(), "interrupt flag restored");
+        assertThrows(LifecycleException.class, container::stop, "the surviving server is still registered");
+    }
+
+    /** A container holding {@code process} as the server of {@link #NAME}, registered by a failed cleanup. */
+    private static PagesContainer registered(ScriptedProcess process, Path work) {
+        var container = new PagesContainer();
+        container.abandon(NAME, process, work, new IOException("deployment failed"));
+        // The stubborn waits of that cleanup interrupted this thread.
+        Thread.interrupted();
+        process.stubborn = false;
+        process.kills = 0;
+        return container;
+    }
+
+    private static WebArchive archive() {
+        return ShrinkWrap.create(WebArchive.class, NAME);
+    }
+
+    /**
+     * A scripted server process. While stubborn, kills are ignored and waits interrupted; otherwise a kill stops
+     * it, and a shutdown wait succeeds only when {@link #exitsOnShutdown} is set.
+     */
+    private static final class ScriptedProcess extends Process {
+        private int aliveAnswers = Integer.MAX_VALUE;
+        private boolean alive = true;
+        boolean stubborn = true;
+        boolean exitsOnShutdown;
+        int exitCode;
+        int kills;
+        int shutdownSignals;
+
+        /** Alive for the next {@code answers} {@link #isAlive()} calls only. */
+        ScriptedProcess aliveFor(int answers) {
+            aliveAnswers = answers;
+            return this;
+        }
+
+        @Override
+        public OutputStream getOutputStream() {
+            return new OutputStream() {
+                @Override
+                public void write(int value) {
+                    shutdownSignals++;
+                }
+            };
+        }
+
+        @Override
+        public InputStream getInputStream() {
+            return InputStream.nullInputStream();
+        }
+
+        @Override
+        public InputStream getErrorStream() {
+            return InputStream.nullInputStream();
+        }
+
+        @Override
+        public int waitFor() throws InterruptedException {
+            waitFor(0, TimeUnit.MILLISECONDS);
+            return exitCode;
+        }
+
+        @Override
+        public boolean waitFor(long timeout, TimeUnit unit) throws InterruptedException {
+            if (stubborn) {
+                throw new InterruptedException("test interrupt");
+            }
+            if (exitsOnShutdown) {
+                alive = false;
+            }
+            return !alive;
+        }
+
+        @Override
+        public int exitValue() {
+            if (alive) {
+                throw new IllegalThreadStateException("still running");
+            }
+            return exitCode;
+        }
+
+        @Override
+        public void destroy() {
+            destroyForcibly();
+        }
+
+        @Override
+        public Process destroyForcibly() {
+            kills++;
+            if (!stubborn) {
+                alive = false;
+            }
+            return this;
+        }
+
+        @Override
+        public boolean isAlive() {
+            if (alive && aliveAnswers-- <= 0) {
+                alive = false;
+            }
+            return alive;
+        }
+
+        @Override
+        public long pid() {
+            return 43;
+        }
     }
 
     /** A server process: alive forever with interrupted waits, or already exited. */

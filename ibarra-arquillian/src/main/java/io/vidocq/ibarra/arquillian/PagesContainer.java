@@ -411,7 +411,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
     }
 
     /** Waits for the {@code READY:<port>} line of the server log. */
-    private static int awaitReady(Process process, Path log) throws IOException, InterruptedException {
+    static int awaitReady(Process process, Path log) throws IOException, InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(STARTUP_TIMEOUT_SECONDS);
         while (System.nanoTime() < deadline && process.isAlive()) {
             String output = Files.readString(log);
