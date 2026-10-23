@@ -31,6 +31,8 @@ import java.util.*;
 public final class TagFileCompiler {
     private static final String TAGDIR_PREFIX = "urn:jsptagdir:";
     private static final String JSP_NAMESPACE = PageParser.JSP_NAMESPACE;
+    private static final String TAGLIB_DIRECTIVE = "taglib";
+    private static final String OUT_WRITE = "out.write(";
 
     public record Result(Map<String, TagLibraryDescriptor> libraries, List<GeneratedPage> sources) {
         public Result { libraries = Map.copyOf(libraries); sources = List.copyOf(sources); }
@@ -518,130 +520,188 @@ public final class TagFileCompiler {
     private static StandardTagFile standardTagFile(TranslationUnit.Result unit, List<PageNode> nodes,
             GenerationOptions options, BeanClasses classes, boolean emitsXmlDeclaration) {
         var referencedLibraries = TldReferences.discover(List.of(unit), options);
+        var translation = new TagFileTranslation(referencedLibraries, classes,
+                deferredSyntaxIsLiteral(unit, nodes, options), usesImmediateEl(nodes));
+        for (var node : nodes) translation.translate(node);
+        translation.validateDynamicAttributesName();
+        var libraryUses = unit.page().syntax() == Page.Syntax.XML
+                ? tagLibraryUses(unit.page().nodes(), true, referencedLibraries)
+                : tagLibraryUses(nodes, false, referencedLibraries);
+        validateNameFromAttributeVariables(translation.attributes, translation.variables,
+                new SourceLocation(unit.page().source(), 1, 1));
+        String pageXml = PageDataXmlView.serialize(unit.page().nodes(), taglibNamespaces(unit.page().nodes()));
+        return translation.result(libraryValidationDeclarations(libraryUses, pageXml), emitsXmlDeclaration);
+    }
+
+    /** The configured {@code deferredSyntaxAllowedAsLiteral}, overridden by the last tag directive that sets it. */
+    private static boolean deferredSyntaxIsLiteral(TranslationUnit.Result unit, List<PageNode> nodes,
+            GenerationOptions options) {
         boolean deferredSyntaxIsLiteral = tagFileDeferredSyntaxIsLiteral(options, unit.page().source());
         for (var node : nodes) if (node instanceof PageNode.Directive directive && directive.name().equals("tag")
                 && directive.attributes().containsKey("deferredSyntaxAllowedAsLiteral"))
             deferredSyntaxIsLiteral = booleanValue(directive.attributes().get("deferredSyntaxAllowedAsLiteral"),
                     "deferredSyntaxAllowedAsLiteral", directive.location());
-        var imports = new TreeSet<String>();
-        var variables = new ArrayList<TagVariableDescriptor>();
-        var variableNames = new HashSet<String>();
-        var variableSources = new HashSet<String>();
-        var attributes = new LinkedHashMap<String, TagAttribute>();
-        var tagDirectiveAttributes = new LinkedHashMap<String, String>();
-        var declarations = new StringBuilder();
-        var body = new StringBuilder();
-        var nestedVariables = new LinkedHashMap<String, NestedTagVariable>();
-        var bodyContent = "scriptless";
-        String dynamicAttributesName = null;
-        SourceLocation dynamicAttributesLocation = null;
-        boolean errorOnELNotFound = false;
-        int nestedActionIndex = 0;
-        int immediateElIndex = 0;
-        boolean hasImmediateEl = usesImmediateEl(nodes);
-        for (var node : nodes) {
-            if (node instanceof PageNode.Directive directive) {
-                switch (directive.name()) {
-                    case "tag" -> {
-                        for (var attribute : directive.attributes().entrySet()) {
-                            if (!attribute.getKey().equals("import"))
-                                mergeTagDirectiveAttribute(tagDirectiveAttributes, attribute.getKey(), attribute.getValue(), directive.location());
-                            switch (attribute.getKey()) {
-                                case "import" -> imports.addAll(imports(attribute.getValue(), directive.location()));
-                                case "body-content" -> {
-                                    String value = attribute.getValue();
-                                    if (!Set.of("empty", "scriptless", "tagdependent").contains(value))
-                                        throw new PageParseException(directive.location(), "Invalid tag-file body-content: " + value);
-                                    bodyContent = value;
-                                }
-                                case "language" -> validateTagLanguage(attribute.getValue(), directive.location());
-                                case "isELIgnored", "deferredSyntaxAllowedAsLiteral" ->
-                                        booleanValue(attribute.getValue(), attribute.getKey(), directive.location());
-                                case "errorOnELNotFound" -> errorOnELNotFound = booleanValue(
-                                        attribute.getValue(), attribute.getKey(), directive.location());
-                                case "example" -> { }
-                                case "dynamic-attributes" -> {
-                                    String name = attribute.getValue();
-                                    if (!javax.lang.model.SourceVersion.isIdentifier(name)
-                                            || javax.lang.model.SourceVersion.isKeyword(name))
-                                        throw new PageParseException(directive.location(),
-                                                "Tag-file dynamic-attributes must name a Java identifier");
-                                    if (dynamicAttributesName != null && !dynamicAttributesName.equals(name))
-                                        throw new PageParseException(directive.location(),
-                                                "Conflicting tag-file dynamic-attributes declarations");
-                                    dynamicAttributesName = name;
-                                    dynamicAttributesLocation = directive.location();
-                                }
-                                case "description", "display-name", "small-icon", "large-icon" -> { }
-                                default -> throw new PageParseException(directive.location(),
-                                        "Tag directive attribute is not supported: " + attribute.getKey());
-                            }
-                        }
-                    }
-                    case "variable" -> {
-                        var variable = variable(directive);
-                        String localName = tagFileVariableLocalName(directive, variable);
-                        if (localName != null && attributes.containsKey(localName))
-                            throw new PageParseException(directive.location(), "Tag-file attribute and variable names conflict: " + localName);
-                        if (localName != null && !variableNames.add(localName))
-                            throw new PageParseException(directive.location(), "Duplicate tag-file variable: " + localName);
-                        if (variable.nameFromAttribute() != null && !variableSources.add(variable.nameFromAttribute()))
-                            throw new PageParseException(directive.location(), "Duplicate tag-file name-from-attribute variable: "
-                                    + variable.nameFromAttribute());
-                        variables.add(variable);
-                    }
-                    case "attribute" -> {
-                        var attribute = attribute(directive);
-                        if (variableNames.contains(attribute.name()))
-                            throw new PageParseException(directive.location(), "Tag-file attribute and variable names conflict: " + attribute.name());
-                        if (attributes.putIfAbsent(attribute.name(), attribute) != null)
-                            throw new PageParseException(directive.location(), "Duplicate tag-file attribute: " + attribute.name());
-                    }
-                    case "taglib" -> { }
-                    default -> throw new PageParseException(directive.location(),
-                            "Directive in standard tag files is not supported: " + directive.name());
-                }
-            } else if (node instanceof PageNode.Text text) {
-                if (!text.value().isEmpty()) body.append("out.write(").append(JavaSource.quote(text.value())).append(");\n");
-            } else if (node instanceof PageNode.RawText text) {
-                if (!text.value().isEmpty()) body.append("out.write(").append(JavaSource.quote(text.value())).append(");\n");
-            } else if (node instanceof PageNode.Script script) {
-                if (script.kind() == PageNode.ScriptKind.DECLARATION) declarations.append(script.code()).append('\n');
-                else if (script.kind() == PageNode.ScriptKind.SCRIPTLET) body.append(script.code()).append('\n');
-                else body.append("out.write(String.valueOf(").append(script.code()).append("));\n");
-            } else if (node instanceof PageNode.Expression expression) {
-                if (expression.deferred())
-                    throw new PageParseException(expression.location(), "Deferred EL in standard tag files is not supported yet");
-                String result = "_jspxTagFileEl" + immediateElIndex++;
-                body.append("Object ").append(result).append(" = _jspxTagFileElFactory.createValueExpression(pageContext.getELContext(), ")
-                        .append(JavaSource.quote("${" + expression.code() + "}"))
-                        .append(", Object.class).getValue(pageContext.getELContext());\n")
-                        .append("if (").append(result).append(" != null) out.write(String.valueOf(").append(result).append("));\n");
-                hasImmediateEl = true;
-            } else if (node instanceof PageNode.Element element) {
-                if (element.namespace().equals(JSP_NAMESPACE)) body.append(standardAction(element, nestedActionIndex++, attributes));
-                else {
-                    var exportedVariables = nestedTagVariables(element, referencedLibraries);
-                    for (var variable : exportedVariables) nestedVariables.putIfAbsent(variable.name(), variable);
-                    body.append(nestedAction(element, referencedLibraries, classes, nestedActionIndex++, deferredSyntaxIsLiteral));
-                    for (var variable : exportedVariables)
-                        body.append(variable.name()).append(" = (").append(variable.className().replace('$', '.'))
-                                .append(") jspContext.getAttribute(").append(JavaSource.quote(variable.name())).append(");\n");
-                }
+        return deferredSyntaxIsLiteral;
+    }
+
+    /**
+     * Translation state of one standard or XML tag file: the directives it declares and the Java body and
+     * declarations its template nodes produce, in document order.
+     */
+    private static final class TagFileTranslation {
+        private final TldReferences.Resolved referencedLibraries;
+        private final BeanClasses classes;
+        private final boolean deferredSyntaxIsLiteral;
+        private final Set<String> imports = new TreeSet<>();
+        private final List<TagVariableDescriptor> variables = new ArrayList<>();
+        private final Set<String> variableNames = new HashSet<>();
+        private final Set<String> variableSources = new HashSet<>();
+        private final Map<String, TagAttribute> attributes = new LinkedHashMap<>();
+        private final Map<String, String> tagDirectiveAttributes = new LinkedHashMap<>();
+        private final StringBuilder declarations = new StringBuilder();
+        private final StringBuilder body = new StringBuilder();
+        private final Map<String, NestedTagVariable> nestedVariables = new LinkedHashMap<>();
+        private String bodyContent = "scriptless";
+        private String dynamicAttributesName;
+        private SourceLocation dynamicAttributesLocation;
+        private boolean errorOnELNotFound;
+        private int nestedActionIndex;
+        private int immediateElIndex;
+        private boolean hasImmediateEl;
+
+        TagFileTranslation(TldReferences.Resolved referencedLibraries, BeanClasses classes,
+                boolean deferredSyntaxIsLiteral, boolean hasImmediateEl) {
+            this.referencedLibraries = referencedLibraries;
+            this.classes = classes;
+            this.deferredSyntaxIsLiteral = deferredSyntaxIsLiteral;
+            this.hasImmediateEl = hasImmediateEl;
+        }
+
+        void translate(PageNode node) {
+            if (node instanceof PageNode.Directive directive) translateDirective(directive);
+            else if (node instanceof PageNode.Text text) writeTemplateText(text.value());
+            else if (node instanceof PageNode.RawText text) writeTemplateText(text.value());
+            else if (node instanceof PageNode.Script script) translateScript(script);
+            else if (node instanceof PageNode.Expression expression) translateExpression(expression);
+            else if (node instanceof PageNode.Element element) translateAction(element);
+        }
+
+        private void translateDirective(PageNode.Directive directive) {
+            switch (directive.name()) {
+                case "tag" -> tagDirective(directive);
+                case "variable" -> variableDirective(directive);
+                case "attribute" -> attributeDirective(directive);
+                case TAGLIB_DIRECTIVE -> { }
+                default -> throw new PageParseException(directive.location(),
+                        "Directive in standard tag files is not supported: " + directive.name());
             }
         }
-        if (dynamicAttributesName != null
-                && (attributes.containsKey(dynamicAttributesName) || variableNames.contains(dynamicAttributesName)))
-            throw new PageParseException(dynamicAttributesLocation,
-                    "Tag-file dynamic-attributes name conflicts with a declared attribute or variable: " + dynamicAttributesName);
-        var libraryUses = unit.page().syntax() == Page.Syntax.XML
-                ? tagLibraryUses(unit.page().nodes(), true, referencedLibraries)
-                : tagLibraryUses(nodes, false, referencedLibraries);
-        validateNameFromAttributeVariables(attributes, variables, new SourceLocation(unit.page().source(), 1, 1));
-        String pageXml = PageDataXmlView.serialize(unit.page().nodes(), taglibNamespaces(unit.page().nodes()));
-        return new StandardTagFile(bodyContent, List.copyOf(variables), Collections.unmodifiableMap(new LinkedHashMap<>(attributes)), List.copyOf(imports),
-                declarations.toString(), body.toString(), libraryValidationDeclarations(libraryUses, pageXml), dynamicAttributesName,
-                List.copyOf(nestedVariables.values()), hasImmediateEl, errorOnELNotFound, emitsXmlDeclaration);
+
+        private void tagDirective(PageNode.Directive directive) {
+            for (var attribute : directive.attributes().entrySet()) {
+                if (!attribute.getKey().equals("import"))
+                    mergeTagDirectiveAttribute(tagDirectiveAttributes, attribute.getKey(), attribute.getValue(), directive.location());
+                tagDirectiveAttribute(attribute.getKey(), attribute.getValue(), directive.location());
+            }
+        }
+
+        private void tagDirectiveAttribute(String name, String value, SourceLocation at) {
+            switch (name) {
+                case "import" -> imports.addAll(imports(value, at));
+                case "body-content" -> bodyContent = tagFileBodyContent(value, at);
+                case "language" -> validateTagLanguage(value, at);
+                case "isELIgnored", "deferredSyntaxAllowedAsLiteral" -> booleanValue(value, name, at);
+                case "errorOnELNotFound" -> errorOnELNotFound = booleanValue(value, name, at);
+                case "example" -> { }
+                case "dynamic-attributes" -> declareDynamicAttributes(value, at);
+                case "description", "display-name", "small-icon", "large-icon" -> { }
+                default -> throw new PageParseException(at, "Tag directive attribute is not supported: " + name);
+            }
+        }
+
+        private void declareDynamicAttributes(String name, SourceLocation at) {
+            if (!javax.lang.model.SourceVersion.isIdentifier(name) || javax.lang.model.SourceVersion.isKeyword(name))
+                throw new PageParseException(at, "Tag-file dynamic-attributes must name a Java identifier");
+            if (dynamicAttributesName != null && !dynamicAttributesName.equals(name))
+                throw new PageParseException(at, "Conflicting tag-file dynamic-attributes declarations");
+            dynamicAttributesName = name;
+            dynamicAttributesLocation = at;
+        }
+
+        private void variableDirective(PageNode.Directive directive) {
+            var variable = variable(directive);
+            String localName = tagFileVariableLocalName(directive, variable);
+            if (localName != null && attributes.containsKey(localName))
+                throw new PageParseException(directive.location(), "Tag-file attribute and variable names conflict: " + localName);
+            if (localName != null && !variableNames.add(localName))
+                throw new PageParseException(directive.location(), "Duplicate tag-file variable: " + localName);
+            if (variable.nameFromAttribute() != null && !variableSources.add(variable.nameFromAttribute()))
+                throw new PageParseException(directive.location(), "Duplicate tag-file name-from-attribute variable: "
+                        + variable.nameFromAttribute());
+            variables.add(variable);
+        }
+
+        private void attributeDirective(PageNode.Directive directive) {
+            var attribute = attribute(directive);
+            if (variableNames.contains(attribute.name()))
+                throw new PageParseException(directive.location(), "Tag-file attribute and variable names conflict: " + attribute.name());
+            if (attributes.putIfAbsent(attribute.name(), attribute) != null)
+                throw new PageParseException(directive.location(), "Duplicate tag-file attribute: " + attribute.name());
+        }
+
+        private void writeTemplateText(String value) {
+            if (!value.isEmpty()) body.append(OUT_WRITE).append(JavaSource.quote(value)).append(");\n");
+        }
+
+        private void translateScript(PageNode.Script script) {
+            if (script.kind() == PageNode.ScriptKind.DECLARATION) declarations.append(script.code()).append('\n');
+            else if (script.kind() == PageNode.ScriptKind.SCRIPTLET) body.append(script.code()).append('\n');
+            else body.append("out.write(String.valueOf(").append(script.code()).append("));\n");
+        }
+
+        private void translateExpression(PageNode.Expression expression) {
+            if (expression.deferred())
+                throw new PageParseException(expression.location(), "Deferred EL in standard tag files is not supported yet");
+            String result = "_jspxTagFileEl" + immediateElIndex++;
+            body.append("Object ").append(result).append(" = _jspxTagFileElFactory.createValueExpression(pageContext.getELContext(), ")
+                    .append(JavaSource.quote("${" + expression.code() + "}"))
+                    .append(", Object.class).getValue(pageContext.getELContext());\n")
+                    .append("if (").append(result).append(" != null) out.write(String.valueOf(").append(result).append("));\n");
+            hasImmediateEl = true;
+        }
+
+        private void translateAction(PageNode.Element element) {
+            if (element.namespace().equals(JSP_NAMESPACE)) {
+                body.append(standardAction(element, nestedActionIndex++, attributes));
+                return;
+            }
+            var exportedVariables = nestedTagVariables(element, referencedLibraries);
+            for (var variable : exportedVariables) nestedVariables.putIfAbsent(variable.name(), variable);
+            body.append(nestedAction(element, referencedLibraries, classes, nestedActionIndex++, deferredSyntaxIsLiteral));
+            for (var variable : exportedVariables)
+                body.append(variable.name()).append(" = (").append(variable.className().replace('$', '.'))
+                        .append(") jspContext.getAttribute(").append(JavaSource.quote(variable.name())).append(");\n");
+        }
+
+        void validateDynamicAttributesName() {
+            if (dynamicAttributesName != null
+                    && (attributes.containsKey(dynamicAttributesName) || variableNames.contains(dynamicAttributesName)))
+                throw new PageParseException(dynamicAttributesLocation,
+                        "Tag-file dynamic-attributes name conflicts with a declared attribute or variable: " + dynamicAttributesName);
+        }
+
+        StandardTagFile result(String libraryValidationDeclarations, boolean emitsXmlDeclaration) {
+            return new StandardTagFile(bodyContent, List.copyOf(variables), Collections.unmodifiableMap(new LinkedHashMap<>(attributes)),
+                    List.copyOf(imports), declarations.toString(), body.toString(), libraryValidationDeclarations,
+                    dynamicAttributesName, List.copyOf(nestedVariables.values()), hasImmediateEl, errorOnELNotFound,
+                    emitsXmlDeclaration);
+        }
+    }
+
+    private static String tagFileBodyContent(String value, SourceLocation at) {
+        if (!Set.of("empty", "scriptless", "tagdependent").contains(value))
+            throw new PageParseException(at, "Invalid tag-file body-content: " + value);
+        return value;
     }
 
     private static List<NestedTagVariable> nestedTagVariables(PageNode.Element action, TldReferences.Resolved libraries) {
@@ -786,8 +846,8 @@ public final class TagFileCompiler {
     private static String literalTagContent(List<PageNode> nodes, SourceLocation at) {
         var source = new StringBuilder();
         for (var node : nodes) {
-            if (node instanceof PageNode.Text text) source.append("out.write(").append(JavaSource.quote(text.value())).append(");\n");
-            else if (node instanceof PageNode.RawText text) source.append("out.write(").append(JavaSource.quote(text.value())).append(");\n");
+            if (node instanceof PageNode.Text text) source.append(OUT_WRITE).append(JavaSource.quote(text.value())).append(");\n");
+            else if (node instanceof PageNode.RawText text) source.append(OUT_WRITE).append(JavaSource.quote(text.value())).append(");\n");
             else if (node instanceof PageNode.Expression expression && !expression.deferred()) {
                 String name = "_jspxTagFileText" + Math.abs(expression.location().line() * 37 + expression.location().column());
                 source.append("Object ").append(name).append(" = _jspxTagFileElFactory.createValueExpression(pageContext.getELContext(), ")
@@ -829,8 +889,8 @@ public final class TagFileCompiler {
             String attrName = attribute.attributes().get("name");
             if (attrName == null || attrName.isBlank()) throw new PageParseException(attribute.location(), "jsp:attribute requires a name");
             String value = literalAttributeValue(attribute.children(), attribute.location());
-            source.append("out.write(").append(JavaSource.quote(" " + attrName + "=\"")).append(");\n")
-                    .append("out.write(").append(JavaSource.quote(value.replace("&", "&amp;").replace("<", "&lt;").replace("\"", "&quot;"))).append(");\n")
+            source.append(OUT_WRITE).append(JavaSource.quote(" " + attrName + "=\"")).append(");\n")
+                    .append(OUT_WRITE).append(JavaSource.quote(value.replace("&", "&amp;").replace("<", "&lt;").replace("\"", "&quot;"))).append(");\n")
                     .append("out.write(\"\\\"\");\n");
         }
         if (action.selfClosing()) return source.append("out.write(\"/ >\");\n").toString().replace("/ >", "/>");
@@ -942,7 +1002,7 @@ public final class TagFileCompiler {
 
     private static Map<String, String> taglibNamespaces(List<PageNode> nodes) {
         var namespaces = new LinkedHashMap<String, String>();
-        for (var node : nodes) if (node instanceof PageNode.Directive directive && directive.name().equals("taglib")) {
+        for (var node : nodes) if (node instanceof PageNode.Directive directive && directive.name().equals(TAGLIB_DIRECTIVE)) {
             String prefix = directive.attributes().get("prefix");
             String uri = directive.attributes().get("uri");
             if (prefix != null && uri != null) namespaces.putIfAbsent(prefix, uri);
@@ -964,7 +1024,7 @@ public final class TagFileCompiler {
     private static void collectTagLibraryUses(List<PageNode> nodes, boolean xml, TldReferences.Resolved libraries,
             Map<String, TagLibraryUse> uses) {
         for (var node : nodes) {
-            if (node instanceof PageNode.Directive directive && directive.name().equals("taglib")) {
+            if (node instanceof PageNode.Directive directive && directive.name().equals(TAGLIB_DIRECTIVE)) {
                 addTaglibUse(directive, libraries, uses);
             } else if (xml && node instanceof PageNode.Element element) {
                 addXmlnsUses(element, libraries, uses);
@@ -998,12 +1058,12 @@ public final class TagFileCompiler {
 
     private static String libraryValidationDeclarations(List<TagLibraryUse> uses, String xmlView) {
         if (uses.isEmpty()) return "";
-        // Once per class without a monitor (rule 5): the first caller runs the current FutureTask, concurrent
-        // callers park in get() until it completes, and a success or a non-Error failure is kept for every
-        // later call. Each caller receives its own JspException whose cause is the single original failure;
+        // Once per class without a monitor (rule 5). The first caller runs the current FutureTask, concurrent
+        // callers wait on the task until it completes, and a success or a non-Error failure is kept for every
+        // later call. Each caller receives its own JspException whose cause is the single original failure, and
         // the cached Throwable is never rethrown. An Error is not cached: a fresh task replaces the failed one
-        // (compare-and-set), so the next call validates again. A waiter interrupted in get() keeps its flag
-        // and caches nothing. The task is a named nested class, not a lambda: no invokedynamic.
+        // through a compare-and-set, so the next call validates again. A waiter interrupted while waiting keeps
+        // its interrupt flag and caches nothing. The task is a named nested class, not a lambda: no invokedynamic.
         var source = new StringBuilder("private static final class _jspxTagLibraryValidationTask")
                 .append(" implements java.util.concurrent.Callable<Void> {\n")
                 .append("@Override public Void call() throws jakarta.servlet.jsp.JspException {")

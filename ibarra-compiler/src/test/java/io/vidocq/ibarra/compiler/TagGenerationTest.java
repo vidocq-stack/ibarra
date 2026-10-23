@@ -705,7 +705,7 @@ class TagGenerationTest {
                 + "<jsp:scriptlet>out.print(fixture.Tags.RecordingValidator.seen);</jsp:scriptlet></jsp:root>", false, options));
     }
 
-    @Test void uncompiledTldTagFilesFailTranslationWithTheirPath() throws Exception {
+    @Test void uncompiledTldTagFilesFailTranslationWithTheirPath() {
         var library = new TldParser().parse("/WEB-INF/missing.tld", """
                 <taglib><uri>urn:missing</uri>
                   <tag-file><name>absent</name><path>/WEB-INF/tags/absent.tag</path></tag-file>
@@ -717,8 +717,9 @@ class TagGenerationTest {
         var compiled = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of());
         var libraries = new LinkedHashMap<>(options.tagLibraries()); libraries.putAll(compiled.libraries());
         var configured = options.withTagLibraries(libraries);
+        var generator = generator();
         var failure = assertThrows(PageParseException.class,
-                () -> generator().generate("/missing.jsp", source, "fixture.GeneratedPage", configured));
+                () -> generator.generate("/missing.jsp", source, "fixture.GeneratedPage", configured));
         assertTrue(failure.getMessage().contains("TLD tag file /WEB-INF/tags/absent.tag has no build-time compiled handler"),
                 failure.getMessage());
     }
