@@ -50,7 +50,7 @@ TLD `TagLibraryValidator`
 declarations receive generated PageData XML during
 standard-page servlet initialization; validators referenced by a tag file
 (`taglib` directives, or `xmlns` declarations in `.tagx`) receive its XML view once, when the generated handler is first invoked, and a
-failure is reported to every invocation. Validation runs from generated code at
+non-`Error` failure is reported to every invocation. Validation runs from generated code at
 initialization rather than at translation time (a known deviation, see PLAN.md).
 Standard `.tag` files support tag/import/attribute/variable/taglib directives,
 scriptlets, scripting expressions, declared variables and scalar attribute setters.

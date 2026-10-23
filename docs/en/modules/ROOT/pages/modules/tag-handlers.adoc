@@ -122,15 +122,20 @@ validation result fails initialization. JSP documents declare these libraries
 through `xmlns` attributes as well as `taglib` directives. For a tag file, validators
 declared by the libraries of its `taglib` directives, or of its `xmlns` declarations
 in an XML `.tagx` file, receive the tag-file XML view once per generated class, when
-its handler is first invoked. The generated class guards that call with a static
-`FutureTask` over a named nested `Callable`, not `synchronized`: concurrent first
-invocations wait for the single run, and a failure is kept and reported to every
-invocation as a `JspException` caused by the original failure.
+its handler is first invoked. The generated class holds that call as a `FutureTask`
+over a named nested `Callable`, in a static `AtomicReference`, and uses no
+`synchronized`: concurrent first invocations wait for the single run. A success or
+a non-`Error` failure is kept: every later invocation receives its own
+`JspException` caused by the original failure. An `Error` is rethrown and not kept,
+so the next invocation validates again. A waiter interrupted while it waits gets a
+`JspException`, keeps its interrupt flag, and changes nothing.
 
 NOTE: JSP.7.4 describes `TagLibraryValidator` and `TagExtraInfo` validation as
-translation-time checks. Ibarra runs them from generated code at servlet or
-tag-file initialization instead, so an invalid page is reported when it is first
-initialized, not when it is built. Moving validation to the build is deferred until
+translation-time checks. Ibarra runs them from generated code instead: page
+validators and `TagExtraInfo` validation at servlet `init()`, tag-file
+`TagLibraryValidator` validation on the tag file's first invocation. An invalid page
+is therefore reported when it is first initialized or invoked, not when it is
+built. Moving validation to the build is deferred until
 the Bodoni Tags TCK shows a need for it.
 
 == Standard tag files

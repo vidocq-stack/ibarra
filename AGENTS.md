@@ -158,8 +158,9 @@ ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
     tags (the API default delegates to `isValid`) run once in servlet `init()`,
     before `jspInit`, and any message fails initialization. A tag file's validators
     (libraries of its `taglib` directives or, in `.tagx`, `xmlns` declarations,
-    IBARRA-154) run once per generated class on the first `doTag()`, lock-free and
-    without a lambda (IBARRA-153); the failure is kept and reported to every call.
+    IBARRA-154) run once per generated class on the first `doTag()`, monitor-free
+    (no `synchronized`) and without a lambda (IBARRA-153). A non-`Error` failure is
+    kept and reported to every call as a fresh `JspException`; an `Error` is not kept.
     TEI `getVariableInfo` is read from class files at build time when it is a static
     contract; other TEI variable metadata fails translation. TLD and tag-file
     variables, unqualified dynamic attributes and `.tag`/`.tagx` files are supported.
