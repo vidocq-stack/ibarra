@@ -47,6 +47,15 @@ public final class TldReferences {
     }
     private TldReferences() { }
 
+    /**
+     * The namespace prefix an XML attribute declares: {@code p} for {@code xmlns:p}, the empty prefix for
+     * {@code xmlns}, or {@code null} when the attribute declares no namespace.
+     */
+    public static String xmlnsPrefix(String attributeName) {
+        if (attributeName.startsWith("xmlns:")) return attributeName.substring(6);
+        return attributeName.equals("xmlns") ? "" : null;
+    }
+
     /** Reads only references captured before source normalization, from immutable bytes. */
     public static Resolved discover(Collection<TranslationUnit.Result> units, GenerationOptions options) {
         return discover(units, options, options.tagLibraries());

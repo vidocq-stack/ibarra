@@ -965,17 +965,26 @@ public final class TagFileCompiler {
             Map<String, TagLibraryUse> uses) {
         for (var node : nodes) {
             if (node instanceof PageNode.Directive directive && directive.name().equals("taglib")) {
-                String prefix = directive.attributes().get("prefix");
-                String uri = directive.attributes().get("uri");
-                if (prefix != null && uri != null) addTagLibraryUse(prefix, uri, directive.location(), true, libraries, uses);
+                addTaglibUse(directive, libraries, uses);
             } else if (xml && node instanceof PageNode.Element element) {
-                for (var attribute : element.attributes().entrySet()) {
-                    String prefix = attribute.getKey().startsWith("xmlns:") ? attribute.getKey().substring(6)
-                            : attribute.getKey().equals("xmlns") ? "" : null;
-                    if (prefix != null) addTagLibraryUse(prefix, attribute.getValue(), element.location(), false, libraries, uses);
-                }
+                addXmlnsUses(element, libraries, uses);
                 collectTagLibraryUses(element.children(), true, libraries, uses);
             }
+        }
+    }
+
+    private static void addTaglibUse(PageNode.Directive directive, TldReferences.Resolved libraries,
+            Map<String, TagLibraryUse> uses) {
+        String prefix = directive.attributes().get("prefix");
+        String uri = directive.attributes().get("uri");
+        if (prefix != null && uri != null) addTagLibraryUse(prefix, uri, directive.location(), true, libraries, uses);
+    }
+
+    private static void addXmlnsUses(PageNode.Element element, TldReferences.Resolved libraries,
+            Map<String, TagLibraryUse> uses) {
+        for (var attribute : element.attributes().entrySet()) {
+            String prefix = TldReferences.xmlnsPrefix(attribute.getKey());
+            if (prefix != null) addTagLibraryUse(prefix, attribute.getValue(), element.location(), false, libraries, uses);
         }
     }
 

@@ -709,8 +709,7 @@ public final class PageGenerator {
                     }
                 } else if (node instanceof PageNode.Element element) {
                     for (var attribute : element.attributes().entrySet()) {
-                        String prefix = attribute.getKey().startsWith("xmlns:") ? attribute.getKey().substring(6)
-                                : attribute.getKey().equals("xmlns") ? "" : null;
+                        String prefix = TldReferences.xmlnsPrefix(attribute.getKey());
                         if (prefix != null) {
                             namespaces.putIfAbsent(prefix, attribute.getValue());
                             addTagLibraryUse(prefix, attribute.getValue(), element.location(), false, uses);
