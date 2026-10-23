@@ -487,7 +487,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
     }
 
     private static boolean isRuntimeModule(String name, boolean compiler) {
-        return RUNTIME_MODULES.contains(name) || name.startsWith(CHAPPE_PREFIX) || compiler && name.equals(COMPILER_MODULE);
+        return RUNTIME_MODULES.contains(name) || name.startsWith(CHAPPE_PREFIX) || (compiler && name.equals(COMPILER_MODULE));
     }
 
     @Override

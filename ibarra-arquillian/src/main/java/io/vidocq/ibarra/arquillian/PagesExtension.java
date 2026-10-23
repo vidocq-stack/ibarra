@@ -22,6 +22,10 @@ package io.vidocq.ibarra.arquillian;
 import org.jboss.arquillian.core.spi.LoadableExtension;
 import org.jboss.arquillian.container.spi.client.container.DeployableContainer;
 
+/** The Arquillian extension, loaded from {@code META-INF/services}: it registers {@link PagesContainer}. */
 public final class PagesExtension implements LoadableExtension {
-    public void register(ExtensionBuilder builder) { builder.service(DeployableContainer.class, PagesContainer.class); }
+    @Override
+    public void register(ExtensionBuilder builder) {
+        builder.service(DeployableContainer.class, PagesContainer.class);
+    }
 }

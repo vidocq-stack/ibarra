@@ -23,49 +23,85 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.Locale;
+import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
 /** Build-only adaptation of legacy WAR libraries into the private application module. */
 final class WarLibraries {
+    private static final String META_INF = "META-INF/";
+
     private WarLibraries() { }
 
     static void assemble(Path web, Path classes) throws IOException {
         Path libraries = web.resolve("WEB-INF/lib");
-        if (!Files.isDirectory(libraries)) return;
+        if (!Files.isDirectory(libraries)) {
+            return;
+        }
         try (var paths = Files.list(libraries)) {
             int index = 0;
             for (Path path : paths.sorted().toList()) {
-                if (!Files.isRegularFile(path) || !path.getFileName().toString().endsWith(".jar"))
+                if (!Files.isRegularFile(path) || !path.getFileName().toString().endsWith(".jar")) {
                     throw new IOException("Unsupported WAR library entry: " + path.getFileName());
-                try (var jar = new JarFile(path.toFile())) {
-                    var entries = jar.stream().sorted(java.util.Comparator.comparing(java.util.jar.JarEntry::getName)).toList();
-                    for (var entry : entries) {
-                        String name = entry.getName();
-                        Path original = classes.resolve(name).normalize();
-                        if (!original.startsWith(classes) || name.startsWith("/") || name.indexOf('\\') >= 0
-                                || Arrays.asList(name.split("/")).stream().anyMatch(part -> part.isEmpty() || part.equals(".") || part.equals("..")))
-                            throw new IOException("Unsafe WAR library path: " + name);
-                        if (entry.isDirectory()) continue;
-                        if (name.equals("module-info.class") || name.startsWith("META-INF/versions/")
-                                || name.equals("META-INF/web-fragment.xml") || name.startsWith("META-INF/services/"))
-                            throw new IOException("WAR library metadata needs explicit adaptation: " + path.getFileName() + "!/" + name);
-                        // Retain each library's TLD identity without overwriting another library's META-INF/taglib.tld.
-                        String targetName = name.startsWith("META-INF/") && name.endsWith(".tld")
-                                ? "META-INF/ibarra-war-libraries/" + String.format(java.util.Locale.ROOT, "%04d", index) + "/" + name
-                                : name;
-                        Path target = classes.resolve(targetName);
-                        byte[] bytes;
-                        try (var input = jar.getInputStream(entry)) { bytes = input.readAllBytes(); }
-                        if (Files.exists(target)) {
-                            if (!Files.isRegularFile(target) || !Arrays.equals(bytes, Files.readAllBytes(target)))
-                                throw new IOException("Conflicting WAR library output: " + path.getFileName() + "!/" + name);
-                        } else {
-                            Files.createDirectories(target.getParent()); Files.write(target, bytes);
-                        }
-                    }
                 }
+                expand(path, index, classes);
                 index++;
             }
+        }
+    }
+
+    /** Copies the entries of library {@code index} into the application classes, in name order. */
+    private static void expand(Path library, int index, Path classes) throws IOException {
+        try (var jar = new JarFile(library.toFile())) {
+            var entries = jar.stream().sorted(Comparator.comparing(JarEntry::getName)).toList();
+            for (var entry : entries) {
+                String name = entry.getName();
+                checkSafe(name, classes);
+                if (!entry.isDirectory()) {
+                    checkAdapted(library, name);
+                    byte[] bytes;
+                    try (var input = jar.getInputStream(entry)) {
+                        bytes = input.readAllBytes();
+                    }
+                    writeOrCompare(classes.resolve(targetName(name, index)), bytes, library, name);
+                }
+            }
+        }
+    }
+
+    /** Refuses an entry name that is absolute, uses a backslash, has an empty, {@code .} or {@code ..} segment, or leaves the classes. */
+    private static void checkSafe(String name, Path classes) throws IOException {
+        Path original = classes.resolve(name).normalize();
+        if (!original.startsWith(classes) || name.startsWith("/") || name.indexOf('\\') >= 0
+                || Arrays.stream(name.split("/")).anyMatch(part -> part.isEmpty() || part.equals(".") || part.equals(".."))) {
+            throw new IOException("Unsafe WAR library path: " + name);
+        }
+    }
+
+    private static void checkAdapted(Path library, String name) throws IOException {
+        if (name.equals("module-info.class") || name.startsWith(META_INF + "versions/")
+                || name.equals(META_INF + "web-fragment.xml") || name.startsWith(META_INF + "services/")) {
+            throw new IOException("WAR library metadata needs explicit adaptation: " + library.getFileName() + "!/" + name);
+        }
+    }
+
+    /** Retains each library's TLD identity without overwriting another library's {@code META-INF/taglib.tld}. */
+    private static String targetName(String name, int index) {
+        return name.startsWith(META_INF) && name.endsWith(".tld")
+                ? META_INF + "ibarra-war-libraries/" + String.format(Locale.ROOT, "%04d", index) + "/" + name
+                : name;
+    }
+
+    /** Writes a new output; an existing one must already hold the same bytes. */
+    private static void writeOrCompare(Path target, byte[] bytes, Path library, String name) throws IOException {
+        if (Files.exists(target)) {
+            if (!Files.isRegularFile(target) || !Arrays.equals(bytes, Files.readAllBytes(target))) {
+                throw new IOException("Conflicting WAR library output: " + library.getFileName() + "!/" + name);
+            }
+        } else {
+            Files.createDirectories(target.getParent());
+            Files.write(target, bytes);
         }
     }
 }
