@@ -110,6 +110,13 @@ class ApplicationLibrariesTest {
         assertTrue(host.getMessage().contains("io.vidocq.foy.core"), host.getMessage());
         assertTrue(host.getMessage().contains("host module"), host.getMessage());
 
+        for (String tooling : List.of("io.vidocq.peano.compiler", "io.vidocq.ibarra.compiler", "java.compiler")) {
+            var buildTooling = configuration(tooling);
+            var refused = assertThrows(ConfigurationException.class, () -> container.setup(buildTooling));
+            assertTrue(refused.getMessage().contains(tooling), refused.getMessage());
+            assertTrue(refused.getMessage().contains("build tooling"), refused.getMessage());
+        }
+
         var invalid = configuration("bad name!");
         var failure = assertThrows(ConfigurationException.class, invalid::validate);
         assertTrue(failure.getMessage().contains("bad name!"), failure.getMessage());
@@ -136,11 +143,21 @@ class ApplicationLibrariesTest {
     @Test
     void arquillianPropertiesPopulateTheConfiguration() throws Exception {
         var configuration = new PagesConfiguration();
-        MapObject.populate(configuration, Map.of("applicationLibraries", "a.b, c.d"));
+        MapObject.populate(configuration, Map.of("applicationLibraries", "a.b, c.d",
+                "jdkModules", "java.sql, java.naming", "applicationOpens", "p.q"));
         assertEquals(List.of("a.b", "c.d"), configuration.applicationLibraries());
         assertEquals("a.b, c.d", configuration.getApplicationLibraries());
-        assertEquals(List.of(), new PagesConfiguration().applicationLibraries());
-        assertEquals("", new PagesConfiguration().getApplicationLibraries());
+        assertEquals(List.of("java.sql", "java.naming"), configuration.jdkModules());
+        assertEquals("java.sql, java.naming", configuration.getJdkModules());
+        assertEquals(List.of("p.q"), configuration.applicationOpens());
+        assertEquals("p.q", configuration.getApplicationOpens());
+        var defaults = new PagesConfiguration();
+        assertEquals(List.of(), defaults.applicationLibraries());
+        assertEquals("", defaults.getApplicationLibraries());
+        assertEquals(List.of(), defaults.jdkModules());
+        assertEquals("", defaults.getJdkModules());
+        assertEquals(List.of(), defaults.applicationOpens());
+        assertEquals("", defaults.getApplicationOpens());
     }
 
     private static PagesConfiguration configuration(String applicationLibraries) {

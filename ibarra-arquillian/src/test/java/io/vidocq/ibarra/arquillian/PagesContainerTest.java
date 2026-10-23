@@ -46,6 +46,15 @@ class PagesContainerTest {
     }
 
     @Test
+    void hostCommandAppendsJdkModules() {
+        var command = PagesContainer.hostCommand(Path.of("/jdk/bin/java"), List.of(Path.of("/r1")),
+                List.of("java.naming", "jdk.localedata"), List.of(Path.of("/w/application")), Path.of("/w/web"), "/ctx");
+        assertEquals("tck.host,io.vidocq.chappe.core,java.naming,jdk.localedata",
+                command.get(command.indexOf("--limit-modules") + 1));
+        assertEquals("io.vidocq.chappe.core,java.naming,jdk.localedata", command.get(command.indexOf("--add-modules") + 1));
+    }
+
+    @Test
     void xmlTagFileDeclarationKeepsItsUtf8EncodingWithoutChangingTheResponseCharset() throws Exception {
         String jsp = "<%@ page contentType='text/plain' %><%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:declaration/>";
         String utf8Jsp = "<%@ page contentType='text/plain;charset=UTF-8' %>"

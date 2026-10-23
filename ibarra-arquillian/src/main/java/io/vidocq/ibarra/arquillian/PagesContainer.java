@@ -105,6 +105,8 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
     /** Where the runtime modules and the configured libraries are looked up. */
     private final List<Path> lookupPath;
     private List<ApplicationLibraries.Library> libraries = List.of();
+    private List<String> jdkModules = List.of();
+    private List<String> applicationOpens = List.of();
 
     /** An adapter that looks up its modules on the test class path: {@code jdk.module.path} plus the class path. */
     public PagesContainer() {
@@ -135,6 +137,8 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
     public void setup(PagesConfiguration configuration) {
         configuration.validate();
         libraries = ApplicationLibraries.resolve(configuration.applicationLibraries(), lookupPath);
+        jdkModules = configuration.jdkModules();
+        applicationOpens = configuration.applicationOpens();
     }
 
     @Override
@@ -167,6 +171,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
             var groups = jspPropertyGroups(web);
             var descriptor = generateComponents(web, classes);
             explicitLibraries().forEach(library -> descriptor.requires(library.name()));
+            openPackages(classes, descriptor);
             var layout = new Layout(work, web, classes, buildModulePath());
             compileDescriptor(layout, descriptor);
             var accessorDiagnostics = new ArrayList<String>();
@@ -184,6 +189,26 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
                 Thread.currentThread().interrupt();
             }
             throw abandon(name, process, work, failure);
+        }
+    }
+
+    /** Opens each configured package, which the application classes must hold directly (a subpackage alone does not count). */
+    private void openPackages(Path classes, ApplicationDescriptor descriptor) throws IOException {
+        for (String packageName : applicationOpens) {
+            Path directory = classes.resolve(packageName.replace('.', File.separatorChar));
+            if (!holdsFile(directory)) {
+                throw new IOException("Configured package to open is absent from the application: " + packageName);
+            }
+            descriptor.opens(packageName);
+        }
+    }
+
+    private static boolean holdsFile(Path directory) throws IOException {
+        if (!Files.isDirectory(directory)) {
+            return false;
+        }
+        try (var files = Files.list(directory)) {
+            return files.anyMatch(Files::isRegularFile);
         }
     }
 
@@ -353,7 +378,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
         var runtime = new ArrayList<>(modulePaths(lookupPath, false));
         runtime.add(host);
         Path java = Path.of(System.getProperty("java.home"), "bin/java");
-        var command = hostCommand(java, runtime, List.of(), applicationPath, layout.web(), context);
+        var command = hostCommand(java, runtime, jdkModules, applicationPath, layout.web(), context);
         return new ProcessBuilder(command)
                 .redirectErrorStream(true)
                 .redirectOutput(layout.work().resolve(SERVER_LOG).toFile())

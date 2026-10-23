@@ -19,6 +19,7 @@
  */
 package io.vidocq.ibarra.arquillian;
 
+import java.lang.module.ModuleFinder;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -32,6 +33,8 @@ import org.jboss.arquillian.container.spi.client.container.ContainerConfiguratio
  */
 public final class PagesConfiguration implements ContainerConfiguration {
     private String applicationLibraries = "";
+    private String jdkModules = "";
+    private String applicationOpens = "";
 
     /** The {@code applicationLibraries} property: comma-separated names of the library modules deployed with every application. */
     public String getApplicationLibraries() {
@@ -44,12 +47,62 @@ public final class PagesConfiguration implements ContainerConfiguration {
 
     /** The configured library module names, trimmed, blanks dropped, in their configured order. */
     List<String> applicationLibraries() {
-        return Arrays.stream(applicationLibraries.split(",")).map(String::trim).filter(name -> !name.isEmpty()).toList();
+        return names(applicationLibraries);
     }
 
-    /** Refuses a library name that is not a module name, and a library listed twice. */
+    /** The {@code jdkModules} property: comma-separated names of the JDK modules added to the server boot layer. */
+    public String getJdkModules() {
+        return jdkModules;
+    }
+
+    public void setJdkModules(String moduleNames) {
+        this.jdkModules = moduleNames == null ? "" : moduleNames;
+    }
+
+    /** The configured JDK module names, trimmed, blanks dropped, in their configured order. */
+    List<String> jdkModules() {
+        return names(jdkModules);
+    }
+
+    /** The {@code applicationOpens} property: comma-separated names of the application packages opened to every module. */
+    public String getApplicationOpens() {
+        return applicationOpens;
+    }
+
+    public void setApplicationOpens(String packageNames) {
+        this.applicationOpens = packageNames == null ? "" : packageNames;
+    }
+
+    /** The configured package names to open, trimmed, blanks dropped, in their configured order. */
+    List<String> applicationOpens() {
+        return names(applicationOpens);
+    }
+
+    private static List<String> names(String list) {
+        return Arrays.stream(list.split(",")).map(String::trim).filter(name -> !name.isEmpty()).toList();
+    }
+
+    /**
+     * Refuses a library name that is not a module name or is listed twice, a {@code jdkModules} entry
+     * that is not a JDK module, and an {@code applicationOpens} entry that is not a package name.
+     */
     @Override
     public void validate() {
+        validateLibraries();
+        var jdk = ModuleFinder.ofSystem();
+        for (String name : jdkModules()) {
+            if (jdk.find(name).isEmpty()) {
+                throw new ConfigurationException("jdkModules: '" + name + "' is not a JDK module");
+            }
+        }
+        for (String name : applicationOpens()) {
+            if (!SourceVersion.isName(name)) {
+                throw new ConfigurationException("applicationOpens: '" + name + "' is not a package name");
+            }
+        }
+    }
+
+    private void validateLibraries() {
         var seen = new HashSet<String>();
         for (String name : applicationLibraries()) {
             if (!SourceVersion.isName(name)) {

@@ -38,15 +38,22 @@ final class ApplicationLibraries {
     /** One library module: its name, its jar or directory, and whether it is an automatic module. */
     record Library(String name, Path location, boolean automatic) { }
 
+    /** The build-side compilers: the server refuses them, so no library may bring them into the application layer. */
+    private static final Set<String> BUILD_TOOLING = Set.of("java.compiler", "io.vidocq.ibarra.compiler", "io.vidocq.peano.compiler");
+
     private ApplicationLibraries() { }
 
     /**
      * Finds every library on {@code searchPath}, in the configured order.
      *
-     * @throws ConfigurationException when a name is a host module or is not on the search path
+     * @throws ConfigurationException when a name is build tooling, a host module, or is not on the search path
      */
     static List<Library> resolve(List<String> names, List<Path> searchPath) {
         for (String name : names) {
+            if (BUILD_TOOLING.contains(name)) {
+                throw new ConfigurationException("applicationLibraries: " + name
+                        + " is build tooling, which the server must never contain");
+            }
             if (PagesContainer.isHostModule(name)) {
                 throw new ConfigurationException("applicationLibraries: " + name
                         + " is a host module, already in the server boot layer");
@@ -62,7 +69,10 @@ final class ApplicationLibraries {
         return names.stream().map(found::get).toList();
     }
 
-    /** Probes each entry alone, so that one unreadable entry does not hide the others; the first entry of a name wins. */
+    /**
+     * Probes each entry alone, so that one unreadable entry does not hide the others; the first entry of a name wins.
+     * A search-path directory entry is skipped as a whole when any jar in it cannot be read as a module.
+     */
     private static Map<String, Library> find(Set<String> names, List<Path> searchPath) {
         var found = new HashMap<String, Library>();
         for (Path entry : searchPath) {
