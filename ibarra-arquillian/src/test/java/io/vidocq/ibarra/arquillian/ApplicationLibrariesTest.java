@@ -145,18 +145,18 @@ class ApplicationLibrariesTest {
         var configuration = new PagesConfiguration();
         MapObject.populate(configuration, Map.of("applicationLibraries", "a.b, c.d",
                 "jdkModules", "java.sql, java.naming", "applicationOpens", "p.q"));
-        assertEquals(List.of("a.b", "c.d"), configuration.applicationLibraries());
+        assertEquals(List.of("a.b", "c.d"), configuration.libraryNames());
         assertEquals("a.b, c.d", configuration.getApplicationLibraries());
-        assertEquals(List.of("java.sql", "java.naming"), configuration.jdkModules());
+        assertEquals(List.of("java.sql", "java.naming"), configuration.jdkModuleNames());
         assertEquals("java.sql, java.naming", configuration.getJdkModules());
-        assertEquals(List.of("p.q"), configuration.applicationOpens());
+        assertEquals(List.of("p.q"), configuration.openedPackageNames());
         assertEquals("p.q", configuration.getApplicationOpens());
         var defaults = new PagesConfiguration();
-        assertEquals(List.of(), defaults.applicationLibraries());
+        assertEquals(List.of(), defaults.libraryNames());
         assertEquals("", defaults.getApplicationLibraries());
-        assertEquals(List.of(), defaults.jdkModules());
+        assertEquals(List.of(), defaults.jdkModuleNames());
         assertEquals("", defaults.getJdkModules());
-        assertEquals(List.of(), defaults.applicationOpens());
+        assertEquals(List.of(), defaults.openedPackageNames());
         assertEquals("", defaults.getApplicationOpens());
     }
 

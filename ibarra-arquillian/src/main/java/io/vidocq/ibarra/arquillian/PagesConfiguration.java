@@ -49,7 +49,7 @@ public final class PagesConfiguration implements ContainerConfiguration {
     }
 
     /** The configured library module names, trimmed, blanks dropped, in their configured order. */
-    List<String> applicationLibraries() {
+    List<String> libraryNames() {
         return names(applicationLibraries);
     }
 
@@ -63,7 +63,7 @@ public final class PagesConfiguration implements ContainerConfiguration {
     }
 
     /** The configured JDK module names, trimmed, blanks dropped, in their configured order. */
-    List<String> jdkModules() {
+    List<String> jdkModuleNames() {
         return names(jdkModules);
     }
 
@@ -77,7 +77,7 @@ public final class PagesConfiguration implements ContainerConfiguration {
     }
 
     /** The configured package names to open, trimmed, blanks dropped, in their configured order. */
-    List<String> applicationOpens() {
+    List<String> openedPackageNames() {
         return names(applicationOpens);
     }
 
@@ -93,13 +93,13 @@ public final class PagesConfiguration implements ContainerConfiguration {
     public void validate() {
         validateLibraries();
         var jdk = ModuleFinder.ofSystem();
-        for (String name : jdkModules()) {
+        for (String name : jdkModuleNames()) {
             if (jdk.find(name).isEmpty()) {
                 throw new ConfigurationException("jdkModules: '" + name + "' is not a JDK module");
             }
             rejectBuildTooling(jdk, name);
         }
-        for (String name : applicationOpens()) {
+        for (String name : openedPackageNames()) {
             if (!SourceVersion.isName(name)) {
                 throw new ConfigurationException("applicationOpens: '" + name + "' is not a package name");
             }
@@ -121,7 +121,7 @@ public final class PagesConfiguration implements ContainerConfiguration {
 
     private void validateLibraries() {
         var seen = new HashSet<String>();
-        for (String name : applicationLibraries()) {
+        for (String name : libraryNames()) {
             if (!SourceVersion.isName(name)) {
                 throw new ConfigurationException("applicationLibraries: '" + name + "' is not a module name");
             }

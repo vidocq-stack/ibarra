@@ -143,9 +143,9 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
     @Override
     public void setup(PagesConfiguration configuration) {
         configuration.validate();
-        libraries = ApplicationLibraries.resolve(configuration.applicationLibraries(), lookupPath);
-        jdkModules = configuration.jdkModules();
-        applicationOpens = configuration.applicationOpens();
+        libraries = ApplicationLibraries.resolve(configuration.libraryNames(), lookupPath);
+        jdkModules = configuration.jdkModuleNames();
+        applicationOpens = configuration.openedPackageNames();
     }
 
     @Override
