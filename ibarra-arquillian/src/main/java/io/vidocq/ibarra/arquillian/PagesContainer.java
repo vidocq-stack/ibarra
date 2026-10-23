@@ -19,240 +19,497 @@
  */
 package io.vidocq.ibarra.arquillian;
 
+import io.vidocq.foy.internal.webxml.WebAppDescriptor;
+import io.vidocq.foy.internal.webxml.WebXmlParser;
 import io.vidocq.ibarra.compiler.GenerationOptions;
-import io.vidocq.ibarra.compiler.PagePrecompiler;
 import io.vidocq.ibarra.compiler.JspConfigurationParser;
 import io.vidocq.ibarra.compiler.JspPropertyGroup;
-import java.io.*;
-import java.lang.module.ModuleFinder;
-import java.lang.classfile.ClassFile;
+import io.vidocq.ibarra.compiler.PagePrecompiler;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
 import java.lang.classfile.Attributes;
-import java.nio.file.*;
-import java.util.*;
+import java.lang.classfile.ClassFile;
+import java.lang.module.ModuleFinder;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
 import java.util.jar.JarFile;
 import java.util.regex.Pattern;
 import javax.tools.ToolProvider;
-import io.vidocq.foy.internal.webxml.WebXmlParser;
-import org.jboss.arquillian.container.spi.client.container.*;
+import org.jboss.arquillian.container.spi.client.container.DeployableContainer;
+import org.jboss.arquillian.container.spi.client.container.DeploymentException;
+import org.jboss.arquillian.container.spi.client.container.LifecycleException;
 import org.jboss.arquillian.container.spi.client.protocol.ProtocolDescription;
-import org.jboss.arquillian.container.spi.client.protocol.metadata.*;
+import org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext;
+import org.jboss.arquillian.container.spi.client.protocol.metadata.ProtocolMetaData;
+import org.jboss.arquillian.container.spi.client.protocol.metadata.Servlet;
 import org.jboss.shrinkwrap.api.Archive;
+import org.jboss.shrinkwrap.api.asset.Asset;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.jboss.shrinkwrap.descriptor.api.Descriptor;
 
 /** Build-side Arquillian adapter. The server process contains only named runtime modules. */
 public final class PagesContainer implements DeployableContainer<PagesConfiguration> {
-    private record Running(Process process, Path work) { }
-    private final Map<String, Running> deployments = new LinkedHashMap<>();
-    public Class<PagesConfiguration> getConfigurationClass() { return PagesConfiguration.class; }
-    public void setup(PagesConfiguration configuration) { configuration.validate(); }
-    public void start() { }
-    public ProtocolDescription getDefaultProtocol() { return new ProtocolDescription("Servlet 3.0"); }
+    private static final String WORK_PROPERTY = "ibarra.tck.work";
+    private static final String DEFAULT_WORK = "target/pages-deployments";
+    private static final String WEB_INF_CLASSES = "WEB-INF/classes/";
+    private static final String WEB_XML = "WEB-INF/web.xml";
+    private static final String SERVLET_CONTAINER_INITIALIZERS = "META-INF/services/jakarta.servlet.ServletContainerInitializer";
+    private static final Set<String> SERVLET_ANNOTATIONS = Set.of("Ljakarta/servlet/annotation/WebServlet;",
+            "Ljakarta/servlet/annotation/WebFilter;", "Ljakarta/servlet/annotation/WebListener;");
+    private static final String MODULE_INFO_SOURCE = "module-info.java";
+    private static final String MODULE_INFO_CLASS = "module-info.class";
+    private static final String BEAN_ACCESSOR_ERRORS = "bean-accessor-errors.txt";
+    private static final String TRANSLATION_ERRORS = "translation-errors.txt";
+    private static final String SERVER_LOG = "server.log";
+    private static final String WEB_COMPONENT = "io.vidocq.foy.spi.gen.WebComponent";
+    private static final String ACCESSOR_PROVIDER = "io.vidocq.peano.spi.AccessorProvider";
+    private static final String EL_MODULE = "jakarta.el";
+    private static final List<String> HOST_SOURCES = List.of(MODULE_INFO_SOURCE, "host/Main.java");
+    private static final String HOST_MODULE = "tck.host";
+    private static final String HOST_MAIN = HOST_MODULE + "/host.Main";
+    private static final String CHAPPE_CORE = "io.vidocq.chappe.core";
+    private static final String MODULE_PATH = "--module-path";
+    private static final String OUTPUT_DIRECTORY = "-d";
+    private static final String READY = "READY:";
+    private static final long STARTUP_TIMEOUT_SECONDS = 20;
+    private static final long STARTUP_POLL_MILLIS = 20;
+    private static final long SHUTDOWN_TIMEOUT_SECONDS = 15;
+    private static final long TERMINATION_TIMEOUT_SECONDS = 10;
+    private static final long TERMINATION_POLL_MILLIS = 100;
+    private static final Set<String> RUNTIME_MODULES = Set.of("io.vidocq.ibarra.api", "io.vidocq.ibarra.core",
+            "io.vidocq.ibarra.foy", "io.vidocq.foy.api", "io.vidocq.foy.core", "io.vidocq.peano.api", "io.vidocq.peano.core",
+            "jakarta.servlet", "jakarta.servlet.jsp", EL_MODULE);
+    private static final String CHAPPE_PREFIX = "io.vidocq.chappe.";
+    private static final String COMPILER_MODULE = "io.vidocq.ibarra.compiler";
+    private static final Pattern VERSIONED_DESCRIPTOR = Pattern.compile("META-INF/versions/[0-9]+/module-info.class");
+    private static final String DESCRIPTOR_DEPLOYMENT_UNSUPPORTED = "Descriptor-only deployment is unsupported";
 
+    private record Running(Process process, Path work) { }
+
+    /** Directories and build-side module path of one deployment. */
+    private record Layout(Path work, Path web, Path classes, List<Path> modules) { }
+
+    private final Map<String, Running> deployments = new LinkedHashMap<>();
+
+    @Override
+    public Class<PagesConfiguration> getConfigurationClass() {
+        return PagesConfiguration.class;
+    }
+
+    @Override
+    public void setup(PagesConfiguration configuration) {
+        configuration.validate();
+    }
+
+    @Override
+    public void start() {
+        // Nothing to start: every deployment launches its own server process.
+    }
+
+    @Override
+    public ProtocolDescription getDefaultProtocol() {
+        return new ProtocolDescription("Servlet 3.0");
+    }
+
+    @Override
     public ProtocolMetaData deploy(Archive<?> archive) throws DeploymentException {
-        if (!(archive instanceof WebArchive)) throw new IllegalArgumentException("Pages TCK requires a WebArchive");
-        if (deployments.containsKey(archive.getName())) throw new DeploymentException("Archive is already deployed: " + archive.getName());
+        if (!(archive instanceof WebArchive)) {
+            throw new IllegalArgumentException("Pages TCK requires a WebArchive");
+        }
+        String name = archive.getName();
+        if (deployments.containsKey(name)) {
+            throw new DeploymentException("Archive is already deployed: " + name);
+        }
         Process process = null;
         Path work = null;
         try {
-            Path base = Path.of(System.getProperty("ibarra.tck.work", "target/pages-deployments")).toAbsolutePath();
-            Files.createDirectories(base);
-            work = Files.createTempDirectory(base, "war-");
+            work = createWorkDirectory();
             Path web = Files.createDirectories(work.resolve("web"));
             Path classes = Files.createDirectories(work.resolve("application"));
-            for (var entry : archive.getContent().entrySet()) {
-                var asset = entry.getValue().getAsset();
-                if (asset == null) continue;
-                String name = entry.getKey().get().replaceFirst("^/", "");
-                Path root = name.startsWith("WEB-INF/classes/") ? classes : web;
-                String relative = root == classes ? name.substring("WEB-INF/classes/".length()) : name;
-                Path file = root.resolve(relative).normalize();
-                if (!file.startsWith(root)) throw new IOException("Unsafe archive path: " + name);
-                Files.createDirectories(file.getParent());
-                try (var input = asset.openStream()) { Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING); }
+            extract(archive, web, classes);
+            rejectUnadaptedMetadata(classes);
+            var groups = jspPropertyGroups(web);
+            var descriptor = generateComponents(web, classes);
+            var layout = new Layout(work, web, classes, modulePaths(true));
+            compileDescriptor(layout, descriptor);
+            var accessorDiagnostics = new ArrayList<String>();
+            generateBeanAccessors(layout, descriptor, accessorDiagnostics);
+            precompilePages(layout, groups);
+            generateCollectionAccessors(layout, accessorDiagnostics);
+            Path host = buildHost(layout);
+            String context = "/" + name.replaceFirst("\\.war$", "");
+            process = launch(layout, host, context);
+            int port = awaitReady(process, work.resolve(SERVER_LOG));
+            deployments.put(name, new Running(process, work));
+            return new ProtocolMetaData().addContext(new HTTPContext("127.0.0.1", port).add(new Servlet("Pages", context)));
+        } catch (Exception failure) {
+            if (failure instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
             }
-            WarLibraries.assemble(web, classes);
-            if (Files.exists(classes.resolve("META-INF/services/jakarta.servlet.ServletContainerInitializer")))
-                throw new IOException("WAR ServletContainerInitializer factories are not yet adapted by this runner");
-            try (var files = Files.walk(classes)) {
-                for (Path file : files.filter(f -> f.toString().endsWith(".class")).toList()) {
-                    var annotations = ClassFile.of().parse(Files.readAllBytes(file)).findAttribute(Attributes.runtimeVisibleAnnotations());
-                    if (annotations.isPresent() && annotations.get().annotations().stream().anyMatch(a ->
-                            Set.of("Ljakarta/servlet/annotation/WebServlet;", "Ljakarta/servlet/annotation/WebFilter;",
-                                    "Ljakarta/servlet/annotation/WebListener;").contains(a.className().stringValue())))
-                        throw new IOException("WAR Servlet annotations need build-generated factories: " + file);
+            throw abandon(name, process, work, failure);
+        }
+    }
+
+    private static Path createWorkDirectory() throws IOException {
+        Path base = Path.of(System.getProperty(WORK_PROPERTY, DEFAULT_WORK)).toAbsolutePath();
+        Files.createDirectories(base);
+        return Files.createTempDirectory(base, "war-");
+    }
+
+    /** Copies the WAR: {@code WEB-INF/classes} into the application directory, everything else into the web root. */
+    private static void extract(Archive<?> archive, Path web, Path classes) throws IOException {
+        for (var entry : archive.getContent().entrySet()) {
+            var asset = entry.getValue().getAsset();
+            if (asset != null) {
+                copy(asset, entry.getKey().get().replaceFirst("^/", ""), web, classes);
+            }
+        }
+        WarLibraries.assemble(web, classes);
+    }
+
+    private static void copy(Asset asset, String name, Path web, Path classes) throws IOException {
+        boolean application = name.startsWith(WEB_INF_CLASSES);
+        Path root = application ? classes : web;
+        String relative = application ? name.substring(WEB_INF_CLASSES.length()) : name;
+        Path file = root.resolve(relative).normalize();
+        if (!file.startsWith(root)) {
+            throw new IOException("Unsafe archive path: " + name);
+        }
+        Files.createDirectories(file.getParent());
+        try (var input = asset.openStream()) {
+            Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    /** Refuses the WAR metadata that would need runtime discovery: container initializers and Servlet annotations. */
+    private static void rejectUnadaptedMetadata(Path classes) throws IOException {
+        if (Files.exists(classes.resolve(SERVLET_CONTAINER_INITIALIZERS))) {
+            throw new IOException("WAR ServletContainerInitializer factories are not yet adapted by this runner");
+        }
+        try (var files = Files.walk(classes)) {
+            for (Path file : files.filter(f -> f.toString().endsWith(".class")).toList()) {
+                if (hasServletAnnotation(file)) {
+                    throw new IOException("WAR Servlet annotations need build-generated factories: " + file);
                 }
             }
-            Path webXml = web.resolve("WEB-INF/web.xml");
-            var groups = Files.exists(webXml) ? new JspConfigurationParser().parse("/WEB-INF/web.xml", Files.readAllBytes(webXml)) : List.<JspPropertyGroup>of();
-            var components = new TreeSet<String>();
-            if (Files.exists(webXml)) try (var input = Files.newInputStream(webXml)) {
+        }
+    }
+
+    private static boolean hasServletAnnotation(Path file) throws IOException {
+        var annotations = ClassFile.of().parse(Files.readAllBytes(file)).findAttribute(Attributes.runtimeVisibleAnnotations());
+        return annotations.isPresent() && annotations.get().annotations().stream()
+                .anyMatch(annotation -> SERVLET_ANNOTATIONS.contains(annotation.className().stringValue()));
+    }
+
+    private static List<JspPropertyGroup> jspPropertyGroups(Path web) throws IOException {
+        Path webXml = web.resolve(WEB_XML);
+        if (!Files.exists(webXml)) {
+            return List.of();
+        }
+        return new JspConfigurationParser().parse("/" + WEB_XML, Files.readAllBytes(webXml));
+    }
+
+    /** Generates direct factories for the web.xml servlets, filters and listeners, and the descriptor that provides them. */
+    private static ApplicationDescriptor generateComponents(Path web, Path classes) throws IOException {
+        Path webXml = web.resolve(WEB_XML);
+        var components = new TreeSet<String>();
+        if (Files.exists(webXml)) {
+            try (var input = Files.newInputStream(webXml)) {
                 var model = WebXmlParser.parse(input);
-                model.servlets().stream().map(s -> s.className()).filter(Objects::nonNull).forEach(components::add);
-                model.filters().stream().map(f -> f.className()).forEach(components::add);
+                model.servlets().stream().map(WebAppDescriptor.ServletDef::className).filter(Objects::nonNull).forEach(components::add);
+                model.filters().stream().map(WebAppDescriptor.FilterDef::className).forEach(components::add);
                 components.addAll(model.listenerClasses());
             }
-            var providers = ComponentFactories.generate(classes, components);
-            List<Path> modules = modulePaths(true);
-            Path descriptor = work.resolve("module-info.java");
-            String service = providers.isEmpty() ? "" : "provides io.vidocq.foy.spi.gen.WebComponent with " + String.join(",", providers) + ";";
-            Files.writeString(descriptor, "module tck.application { requires java.desktop; requires jakarta.el; requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; requires io.vidocq.foy.api; " + service + " }");
-            compile("--module-path", join(modules), "--patch-module", "tck.application=" + classes,
-                    "-d", classes.toString(), descriptor.toString());
-            var beanAccessors = BeanAccessors.generate(classes, modules);
-            var beanProviders = beanAccessors.providers();
-            var beanDiagnostics = new ArrayList<String>();
-            new TreeMap<>(beanAccessors.unsupported()).forEach((type, reason) -> beanDiagnostics.add(type+"\n"+reason+"\n"));
-            Files.write(work.resolve("bean-accessor-errors.txt"),beanDiagnostics);
-            if (!beanProviders.isEmpty()) {
-                String beanExports=beanAccessors.beanPackages().stream().map(beanPackage -> "exports "+beanPackage+" to jakarta.el;").collect(java.util.stream.Collectors.joining(" "));
-                Files.writeString(descriptor, "module tck.application { requires java.desktop; requires jakarta.el; requires io.vidocq.ibarra.api; requires io.vidocq.peano.api; requires io.vidocq.foy.api; " + service + beanExports + " "
-                        + "provides io.vidocq.peano.spi.AccessorProvider with " + String.join(",", beanProviders) + "; }");
-                compile("--module-path", join(modules), "--patch-module", "tck.application=" + classes,
-                        "-d", classes.toString(), descriptor.toString());
-            }
-            var result = new PagePrecompiler().precompileDeployment(web, classes, modules, null, new GenerationOptions(groups, Map.of()));
-            var diagnostics = new ArrayList<String>();
-            new TreeMap<>(result.failures()).forEach((page, failure) -> diagnostics.add(page + "\n" + failure + "\n"));
-            Files.write(work.resolve("translation-errors.txt"), diagnostics);
-            var collections=CollectionAccessors.generate(classes,modules);
-            new TreeMap<>(collections.unsupported()).forEach((type,reason)->beanDiagnostics.add(type+"\n"+reason+"\n"));
-            Files.write(work.resolve("bean-accessor-errors.txt"),beanDiagnostics);
-            if(!collections.providers().isEmpty()) {
-                java.lang.module.ModuleDescriptor compiled;
-                try(var input=Files.newInputStream(classes.resolve("module-info.class"))) { compiled=java.lang.module.ModuleDescriptor.read(input); }
-                var services=new TreeMap<String,List<String>>();
-                compiled.provides().forEach(p->services.put(p.service(),new ArrayList<>(p.providers())));
-                services.computeIfAbsent("io.vidocq.peano.spi.AccessorProvider",ignored->new ArrayList<>()).addAll(collections.providers());
-                var text=new StringBuilder("module tck.application { ");
-                compiled.requires().stream().sorted(java.util.Comparator.comparing(java.lang.module.ModuleDescriptor.Requires::name))
-                        .filter(read -> !read.modifiers().contains(java.lang.module.ModuleDescriptor.Requires.Modifier.MANDATED))
-                        .forEach(read -> {
-                            text.append("requires ");
-                            if (read.modifiers().contains(java.lang.module.ModuleDescriptor.Requires.Modifier.STATIC)) text.append("static ");
-                            if (read.modifiers().contains(java.lang.module.ModuleDescriptor.Requires.Modifier.TRANSITIVE)) text.append("transitive ");
-                            text.append(read.name()).append(";");
-                        });
-                compiled.exports().stream().sorted(java.util.Comparator.comparing(java.lang.module.ModuleDescriptor.Exports::source))
-                        .forEach(export -> {
-                            text.append("exports ").append(export.source());
-                            if (export.isQualified()) text.append(" to ").append(String.join(",",new TreeSet<>(export.targets())));
-                            text.append(";");
-                        });
-                services.forEach((type,implementations)->text.append("provides ").append(type).append(" with ").append(String.join(",",implementations)).append(";"));
-                Files.writeString(descriptor,text.append(" }").toString());
-                compile("--module-path",join(modules),"--patch-module","tck.application="+classes,"-d",classes.toString(),descriptor.toString());
-            }
-            Path hostSource = Files.createDirectories(work.resolve("host-source"));
-            for (String file : List.of("module-info.java", "host/Main.java")) {
-                Path target = hostSource.resolve(file); Files.createDirectories(target.getParent());
-                try (var input = PagesContainer.class.getResourceAsStream("host/" + file)) {
-                    if (input == null) throw new IOException("Missing host source: " + file);
-                    Files.copy(input, target);
-                }
-            }
-            Path host = Files.createDirectories(work.resolve("host"));
-            compile("--module-path", join(modules), "-d", host.toString(), hostSource.resolve("module-info.java").toString(), hostSource.resolve("host/Main.java").toString());
-            Path log = work.resolve("server.log");
-            String context = "/" + archive.getName().replaceFirst("\\.war$", "");
-            var runtime = new ArrayList<>(modulePaths(false)); runtime.add(host);
-            process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin/java").toString(),
-                    "-Dpeano.reflection=deny", "--module-path", join(runtime),
-                    "--limit-modules", "tck.host,io.vidocq.chappe.core", "--add-modules", "io.vidocq.chappe.core",
-                    "-m", "tck.host/host.Main", classes.toString(), web.toString(), context)
-                    .redirectErrorStream(true).redirectOutput(log.toFile()).start();
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
-            while (System.nanoTime() < deadline && process.isAlive()) {
-                String output = Files.readString(log);
-                int start = output.indexOf("READY:");
-                int end = start < 0 ? -1 : output.indexOf('\n', start);
-                if (end >= 0) {
-                    int port = Integer.parseInt(output.substring(start + 6, end).trim());
-                    deployments.put(archive.getName(), new Running(process, work));
-                    return new ProtocolMetaData().addContext(new HTTPContext("127.0.0.1", port).add(new Servlet("Pages", context)));
-                }
-                Thread.sleep(20);
-            }
-            throw new IOException("Server did not start: " + Files.readString(log));
-        } catch (Exception failure) {
-            if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
-            if (process != null) try { terminate(process); } catch (LifecycleException cleanup) {
-                deployments.put(archive.getName(), new Running(process, work)); failure.addSuppressed(cleanup);
-            }
-            throw new DeploymentException("Cannot precompile/deploy " + archive.getName() + " (diagnostics: " + work + ")", failure);
         }
+        return ApplicationDescriptor.base().provides(WEB_COMPONENT, ComponentFactories.generate(classes, components));
+    }
+
+    private static void compileDescriptor(Layout layout, ApplicationDescriptor descriptor) throws IOException {
+        Path source = layout.work().resolve(MODULE_INFO_SOURCE);
+        Files.writeString(source, descriptor.source());
+        compile(MODULE_PATH, join(layout.modules()), "--patch-module", ApplicationDescriptor.MODULE + "=" + layout.classes(),
+                OUTPUT_DIRECTORY, layout.classes().toString(), source.toString());
+    }
+
+    /** Generates the bean accessors; when there are any, exports their packages to EL and provides them. */
+    private static void generateBeanAccessors(Layout layout, ApplicationDescriptor descriptor, List<String> diagnostics)
+            throws IOException {
+        var accessors = BeanAccessors.generate(layout.classes(), layout.modules());
+        addDiagnostics(diagnostics, accessors.unsupported());
+        Files.write(layout.work().resolve(BEAN_ACCESSOR_ERRORS), diagnostics);
+        if (accessors.providers().isEmpty()) {
+            return;
+        }
+        accessors.beanPackages().forEach(beanPackage -> descriptor.exportsTo(beanPackage, EL_MODULE));
+        descriptor.provides(ACCESSOR_PROVIDER, accessors.providers());
+        compileDescriptor(layout, descriptor);
+    }
+
+    private static void precompilePages(Layout layout, List<JspPropertyGroup> groups) throws IOException {
+        var result = new PagePrecompiler().precompileDeployment(layout.web(), layout.classes(), layout.modules(), null,
+                new GenerationOptions(groups, Map.of()));
+        var diagnostics = new ArrayList<String>();
+        addDiagnostics(diagnostics, result.failures());
+        Files.write(layout.work().resolve(TRANSLATION_ERRORS), diagnostics);
+    }
+
+    /**
+     * Generates the collection accessors once the pages are compiled; when there are any, they join the
+     * providers the compiled descriptor already has.
+     */
+    private static void generateCollectionAccessors(Layout layout, List<String> diagnostics) throws IOException {
+        var collections = CollectionAccessors.generate(layout.classes(), layout.modules());
+        addDiagnostics(diagnostics, collections.unsupported());
+        Files.write(layout.work().resolve(BEAN_ACCESSOR_ERRORS), diagnostics);
+        if (collections.providers().isEmpty()) {
+            return;
+        }
+        var descriptor = ApplicationDescriptor.read(layout.classes().resolve(MODULE_INFO_CLASS))
+                .provides(ACCESSOR_PROVIDER, collections.providers());
+        compileDescriptor(layout, descriptor);
+    }
+
+    private static void addDiagnostics(List<String> diagnostics, Map<String, String> failures) {
+        new TreeMap<>(failures).forEach((subject, failure) -> diagnostics.add(subject + "\n" + failure + "\n"));
+    }
+
+    /** Compiles the {@code tck.host} launcher module against the build-side module path. */
+    private static Path buildHost(Layout layout) throws IOException {
+        Path hostSource = Files.createDirectories(layout.work().resolve("host-source"));
+        for (String file : HOST_SOURCES) {
+            Path target = hostSource.resolve(file);
+            Files.createDirectories(target.getParent());
+            try (var input = PagesContainer.class.getResourceAsStream("host/" + file)) {
+                if (input == null) {
+                    throw new IOException("Missing host source: " + file);
+                }
+                Files.copy(input, target);
+            }
+        }
+        Path host = Files.createDirectories(layout.work().resolve("host"));
+        var arguments = new ArrayList<>(List.of(MODULE_PATH, join(layout.modules()), OUTPUT_DIRECTORY, host.toString()));
+        HOST_SOURCES.forEach(file -> arguments.add(hostSource.resolve(file).toString()));
+        compile(arguments.toArray(String[]::new));
+        return host;
+    }
+
+    private static Process launch(Layout layout, Path host, String context) throws IOException {
+        var runtime = new ArrayList<>(modulePaths(false));
+        runtime.add(host);
+        Path java = Path.of(System.getProperty("java.home"), "bin/java");
+        var command = hostCommand(java, runtime, List.of(), List.of(layout.classes()), layout.web(), context);
+        return new ProcessBuilder(command)
+                .redirectErrorStream(true)
+                .redirectOutput(layout.work().resolve(SERVER_LOG).toFile())
+                .start();
+    }
+
+    /**
+     * The server command line: the runtime modules and the host on the module path, the boot layer limited
+     * to the host and Chappe plus {@code jdkModules}, then the host arguments (application path, web root, context).
+     */
+    static List<String> hostCommand(Path java, List<Path> runtime, List<String> jdkModules, List<Path> applicationPath,
+            Path web, String context) {
+        return List.of(java.toString(), "-Dpeano.reflection=deny", MODULE_PATH, join(runtime),
+                "--limit-modules", moduleList(List.of(HOST_MODULE, CHAPPE_CORE), jdkModules),
+                "--add-modules", moduleList(List.of(CHAPPE_CORE), jdkModules),
+                "-m", HOST_MAIN, join(applicationPath), web.toString(), context);
+    }
+
+    private static String moduleList(List<String> modules, List<String> jdkModules) {
+        var names = new ArrayList<>(modules);
+        names.addAll(jdkModules);
+        return String.join(",", names);
+    }
+
+    /** Waits for the {@code READY:<port>} line of the server log. */
+    private static int awaitReady(Process process, Path log) throws IOException, InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(STARTUP_TIMEOUT_SECONDS);
+        while (System.nanoTime() < deadline && process.isAlive()) {
+            String output = Files.readString(log);
+            int start = output.indexOf(READY);
+            int end = start < 0 ? -1 : output.indexOf('\n', start);
+            if (end >= 0) {
+                return Integer.parseInt(output.substring(start + READY.length(), end).trim());
+            }
+            Thread.sleep(STARTUP_POLL_MILLIS);
+        }
+        throw new IOException("Server did not start: " + Files.readString(log));
+    }
+
+    /** Stops a failed deployment's server; a server that survives stays registered so that {@link #stop()} retries. */
+    private DeploymentException abandon(String name, Process process, Path work, Exception failure) {
+        if (process != null) {
+            try {
+                terminate(process);
+            } catch (LifecycleException cleanup) {
+                deployments.put(name, new Running(process, work));
+                failure.addSuppressed(cleanup);
+            }
+        }
+        return new DeploymentException("Cannot precompile/deploy " + name + " (diagnostics: " + work + ")", failure);
     }
 
     private static void compile(String... arguments) throws IOException {
         var compiler = ToolProvider.getSystemJavaCompiler();
-        if (compiler == null) throw new IOException("TCK deployment requires a Java 25 JDK on the build machine");
+        if (compiler == null) {
+            throw new IOException("TCK deployment requires a Java 25 JDK on the build machine");
+        }
         var diagnostics = new ByteArrayOutputStream();
-        if (compiler.run(null, diagnostics, diagnostics, arguments) != 0)
+        if (compiler.run(null, diagnostics, diagnostics, arguments) != 0) {
             throw new IOException("Build-side Java compilation failed: " + diagnostics);
+        }
     }
 
-    private static String join(List<Path> paths) { return String.join(File.pathSeparator, paths.stream().map(Path::toString).toList()); }
+    private static String join(List<Path> paths) {
+        return String.join(File.pathSeparator, paths.stream().map(Path::toString).toList());
+    }
 
     static List<Path> modulePaths(boolean compiler) throws IOException {
-        String available = System.getProperty("jdk.module.path", "") + File.pathSeparator + System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
+        String available = System.getProperty("jdk.module.path", "") + File.pathSeparator
+                + System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
         var paths = new ArrayList<Path>();
         for (String item : available.split(Pattern.quote(File.pathSeparator))) {
-            if (item.isEmpty()) continue;
-            Path path = Path.of(item);
-            boolean modular = Files.isRegularFile(path.resolve("module-info.class"));
-            if (Files.isRegularFile(path) && item.endsWith(".jar")) {
-                try (var jar = new JarFile(path.toFile())) {
-                    modular = jar.getJarEntry("module-info.class") != null || jar.stream().anyMatch(e -> e.getName().matches("META-INF/versions/[0-9]+/module-info.class"));
-                }
+            if (!item.isEmpty() && isModular(Path.of(item))) {
+                paths.add(Path.of(item));
             }
-            if (modular) paths.add(path);
         }
-        Set<String> names = Set.of("io.vidocq.ibarra.api", "io.vidocq.ibarra.core", "io.vidocq.ibarra.foy", "io.vidocq.foy.api", "io.vidocq.foy.core",
-                "io.vidocq.peano.api", "io.vidocq.peano.core", "jakarta.servlet", "jakarta.servlet.jsp", "jakarta.el");
         return ModuleFinder.of(paths.toArray(Path[]::new)).findAll().stream()
-                .filter(r -> names.contains(r.descriptor().name()) || r.descriptor().name().startsWith("io.vidocq.chappe.")
-                        || compiler && r.descriptor().name().equals("io.vidocq.ibarra.compiler"))
-                .map(r -> Path.of(r.location().orElseThrow())).toList();
+                .filter(module -> isRuntimeModule(module.descriptor().name(), compiler))
+                .map(module -> Path.of(module.location().orElseThrow()))
+                .toList();
     }
 
+    private static boolean isModular(Path path) throws IOException {
+        if (Files.isRegularFile(path) && path.toString().endsWith(".jar")) {
+            try (var jar = new JarFile(path.toFile())) {
+                return jar.getJarEntry(MODULE_INFO_CLASS) != null
+                        || jar.stream().anyMatch(entry -> VERSIONED_DESCRIPTOR.matcher(entry.getName()).matches());
+            }
+        }
+        return Files.isRegularFile(path.resolve(MODULE_INFO_CLASS));
+    }
+
+    private static boolean isRuntimeModule(String name, boolean compiler) {
+        return RUNTIME_MODULES.contains(name) || name.startsWith(CHAPPE_PREFIX) || compiler && name.equals(COMPILER_MODULE);
+    }
+
+    @Override
     public void undeploy(Archive<?> archive) throws DeploymentException {
-        Running running = deployments.get(archive.getName());
-        if (running == null) return;
+        String name = archive.getName();
+        Running running = deployments.get(name);
+        if (running == null) {
+            return;
+        }
         Process process = running.process();
         try {
-            process.getOutputStream().write(1); process.getOutputStream().flush();
-            if (!process.waitFor(15, TimeUnit.SECONDS)) throw new IOException("Server shutdown timed out");
-            if (process.exitValue() != 0) throw new IOException("Server failed: " + Files.readString(running.work().resolve("server.log")));
+            process.getOutputStream().write(1);
+            process.getOutputStream().flush();
+            if (!process.waitFor(SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                throw new IOException("Server shutdown timed out");
+            }
+            if (process.exitValue() != 0) {
+                throw new IOException("Server failed: " + Files.readString(running.work().resolve(SERVER_LOG)));
+            }
         } catch (Exception failure) {
-            if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
-            try { terminate(process); deployments.remove(archive.getName()); } catch (LifecycleException cleanup) { failure.addSuppressed(cleanup); }
-            throw new DeploymentException("Cannot undeploy " + archive.getName(), failure);
+            if (failure instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            release(name, process, failure);
+            throw new DeploymentException("Cannot undeploy " + name, failure);
         }
-        deployments.remove(archive.getName());
+        deployments.remove(name);
     }
+
+    /** Forces a server down after a failed shutdown; it stays registered only if it survives. */
+    private void release(String name, Process process, Exception failure) {
+        try {
+            terminate(process);
+            deployments.remove(name);
+        } catch (LifecycleException cleanup) {
+            failure.addSuppressed(cleanup);
+        }
+    }
+
+    @Override
     public void stop() throws LifecycleException {
         LifecycleException failure = null;
         var iterator = deployments.values().iterator();
         while (iterator.hasNext()) {
-            try { terminate(iterator.next().process()); iterator.remove(); }
-            catch (LifecycleException cleanup) { if (failure == null) failure = cleanup; else failure.addSuppressed(cleanup); }
+            try {
+                terminate(iterator.next().process());
+                iterator.remove();
+            } catch (LifecycleException cleanup) {
+                if (failure == null) {
+                    failure = cleanup;
+                } else {
+                    failure.addSuppressed(cleanup);
+                }
+            }
         }
-        if (failure != null) throw failure;
+        if (failure != null) {
+            throw failure;
+        }
     }
+
+    /** Kills a server process; the caller's interrupt status is kept across the wait. */
     private static void terminate(Process process) throws LifecycleException {
         boolean interrupted = Thread.interrupted();
         try {
-            try { process.getOutputStream().close(); } catch (IOException ignored) { }
-            if (process.isAlive()) process.destroyForcibly();
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-            while (process.isAlive() && System.nanoTime() < deadline) {
-                try { process.waitFor(100, TimeUnit.MILLISECONDS); }
-                catch (InterruptedException failure) { interrupted = true; }
+            closeInput(process);
+            if (process.isAlive()) {
+                process.destroyForcibly();
             }
-            if (process.isAlive()) throw new LifecycleException("Cannot terminate server process " + process.pid());
-        } finally { if (interrupted) Thread.currentThread().interrupt(); }
+            awaitExit(process);
+            if (process.isAlive()) {
+                throw new LifecycleException("Cannot terminate server process " + process.pid());
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
     }
-    public void deploy(Descriptor descriptor) { throw new UnsupportedOperationException("Descriptor-only deployment is unsupported"); }
-    public void undeploy(Descriptor descriptor) { throw new UnsupportedOperationException("Descriptor-only deployment is unsupported"); }
+
+    private static void closeInput(Process process) {
+        try {
+            process.getOutputStream().close();
+        } catch (IOException ignored) {
+            // The server may already have closed its end of the pipe: it is being killed anyway.
+        }
+    }
+
+    /** Waits for a killed process to exit; an interrupt stops the wait and is kept for the caller. */
+    private static void awaitExit(Process process) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TERMINATION_TIMEOUT_SECONDS);
+        while (process.isAlive() && System.nanoTime() < deadline) {
+            try {
+                process.waitFor(TERMINATION_POLL_MILLIS, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException failure) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    @Override
+    public void deploy(Descriptor descriptor) {
+        throw new UnsupportedOperationException(DESCRIPTOR_DEPLOYMENT_UNSUPPORTED);
+    }
+
+    @Override
+    public void undeploy(Descriptor descriptor) {
+        throw new UnsupportedOperationException(DESCRIPTOR_DEPLOYMENT_UNSUPPORTED);
+    }
 }

@@ -22,10 +22,12 @@ package io.vidocq.ibarra.arquillian;
 import io.vidocq.ibarra.arquillian.fixtures.LibraryHelper;
 import io.vidocq.ibarra.arquillian.fixtures.LibraryTag;
 
+import java.io.File;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Path;
 import java.util.List;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
@@ -34,6 +36,15 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PagesContainerTest {
+    @Test
+    void hostCommandWithoutConfigurationIsTheHistoricalOne() {
+        assertEquals(List.of("/jdk/bin/java", "-Dpeano.reflection=deny", "--module-path", "/r1" + File.pathSeparator + "/r2",
+                "--limit-modules", "tck.host,io.vidocq.chappe.core", "--add-modules", "io.vidocq.chappe.core",
+                "-m", "tck.host/host.Main", "/w/application", "/w/web", "/ctx"),
+            PagesContainer.hostCommand(Path.of("/jdk/bin/java"), List.of(Path.of("/r1"), Path.of("/r2")), List.of(),
+                List.of(Path.of("/w/application")), Path.of("/w/web"), "/ctx"));
+    }
+
     @Test
     void xmlTagFileDeclarationKeepsItsUtf8EncodingWithoutChangingTheResponseCharset() throws Exception {
         String jsp = "<%@ page contentType='text/plain' %><%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:declaration/>";
