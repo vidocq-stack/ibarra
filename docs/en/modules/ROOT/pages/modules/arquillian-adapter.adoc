@@ -55,15 +55,17 @@ the module that takes them; this is that page.
 | `org.jboss.arquillian.container:arquillian-container-spi` | 1.8.0.Final | `DeployableContainer` SPI (Apache-2.0)
 | `org.jboss.shrinkwrap:shrinkwrap-impl-base` | 1.2.6 | WAR model of the deployed archives (Apache-2.0)
 | `io.vidocq.ibarra:ibarra-compiler` | `{project-version}` | Build-side precompilation of the WAR pages
-| `io.vidocq.foy:foy-core` | `${foy.version}` | `web.xml` parser on the build side, and the server
+| `io.vidocq.foy:foy-core` | managed by `ibarra-parent` | `web.xml` parser on the build side, and the server
 | `io.vidocq.ibarra:ibarra-core`, `ibarra-foy` | `{project-version}` | Server modules: page runtime and Foy binding
-| `io.vidocq.peano:peano-core` | `${peano.version}` | Server module: Expression Language
-| `io.vidocq.chappe:chappe-core` | `${chappe.version}` | Server module: HTTP transport
+| `io.vidocq.peano:peano-core` | managed by `ibarra-parent` | Server module: Expression Language
+| `io.vidocq.chappe:chappe-core` | managed by `ibarra-parent` | Server module: HTTP transport
 |===
 
 The adapter's own tests also use `arquillian-container-impl-base` 1.8.0.Final, at `test`
 scope only. The Arquillian and ShrinkWrap versions are managed by the Ibarra parent
-POM (`arquillian.version`, `shrinkwrap.version`).
+POM (`arquillian.version`, `shrinkwrap.version`), and so are the Foy, Peano and Chappe
+versions (`foy.version`, `peano.version`, `chappe.version`), which a cross-repository
+pull request can override.
 
 == Configuration
 
@@ -155,6 +157,32 @@ Arquillian and TCK clients are not Java modules:
     </configuration>
 </plugin>
 ----
+
+The adapter needs only `arquillian-container-spi` from Arquillian, and that SPI is
+binary-compatible from 1.8 to 1.10: 1.9 only adds a default `getConfigurationMapper()`
+method. A consumer whose test suite uses a newer Arquillian, such as the Tags TCK on
+1.9.4.Final, imports `org.jboss.arquillian:arquillian-bom` at that version in its
+`dependencyManagement`, so that every Arquillian artifact resolves to one version:
+
+[source,xml]
+----
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>org.jboss.arquillian</groupId>
+            <artifactId>arquillian-bom</artifactId>
+            <version>1.9.4.Final</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+----
+
+Keep Foy, Peano and Chappe on the versions Ibarra uses: the host compiles against Foy
+internals. Run the tests on the class path (`useModulePath` at `false`, above) and
+without parallel JUnit execution: the adapter keeps its deployments in one unsynchronised
+map.
 
 A JSTL TCK runner, for example, deploys its tag library modules and a JDBC driver with
 every WAR, adds the JDK modules the TCK pages use, and opens the package that holds the
@@ -295,5 +323,5 @@ still provide their own complete Peano accessors.
 
 == Tests
 
-`./mvnw -pl ibarra-arquillian test` runs the adapter's 59 regression tests. They are
+`./mvnw -pl ibarra-arquillian test` runs the adapter's 67 regression tests. They are
 part of the default reactor and need no TCK artifact.

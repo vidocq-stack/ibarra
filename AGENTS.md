@@ -72,7 +72,7 @@ sdk env
 ./mvnw -pl ibarra-arquillian test                  # adapter regression tests
 ./mvnw -Ptck -pl ibarra-tck test                   # runner tests
 ./run-official-tck-pages-4.0.sh smoke              # bootstrap, clean install, official smoke
-./run-official-tck-pages-4.0.sh all                # diagnostic full-suite attempt (not green)
+./run-official-tck-pages-4.0.sh all                # full official suite (682/682 at the BASELINE.md date)
 ```
 
 `ibarra-tck` is **in-reactor behind the `tck` Maven profile** from day one. A plain
@@ -174,10 +174,13 @@ directives").
 
 ## TCK — Technology Compatibility Kit
 
-Initial official smoke runs pass; the full-suite diagnostic baseline is incomplete
-and failing (see `ibarra-tck/BASELINE.md`). Do not treat class-level deployment
-errors as executed test methods or claim certification. Once green, 100 % PASS is a merge gate; any challenge goes
-in a `TCK.md` with spec citation — created only if one is actually filed.
+The official smoke subset passes, and the recorded full-suite run passes all 682
+methods of the 92 official classes, with no class-level deployment error (see
+`ibarra-tck/BASELINE.md`). That is a measured compatibility result, not a
+certification: formal Jakarta certification is a separate process, so never claim it.
+Do not treat class-level deployment errors as executed test methods. 100 % PASS is a
+merge gate; any challenge goes in a `TCK.md` with spec citation — created only if one
+is actually filed.
 
 ## AI Principles — Collaboration on This Repository
 

@@ -27,6 +27,28 @@ with `-Dpeano.reflection=deny`. Its Arquillian container SPI (1.8.0.Final) and
 ShrinkWrap (1.2.6) dependencies, both Apache-2.0, are named in the
 [reference page](../docs/en/modules/ROOT/pages/modules/arquillian-adapter.adoc).
 
+## Arquillian alignment
+
+The adapter needs only `arquillian-container-spi`, binary-compatible from 1.8 to 1.10
+(1.9 only adds a default `getConfigurationMapper()`). A consumer whose test suite uses a
+newer Arquillian, such as the Tags TCK on 1.9.4.Final, imports
+`org.jboss.arquillian:arquillian-bom` at that version in its `dependencyManagement`, so
+that every Arquillian artifact resolves to one version:
+
+```xml
+<dependency>
+    <groupId>org.jboss.arquillian</groupId>
+    <artifactId>arquillian-bom</artifactId>
+    <version>1.9.4.Final</version>
+    <type>pom</type>
+    <scope>import</scope>
+</dependency>
+```
+
+Keep Foy, Peano and Chappe on the versions Ibarra uses (the host compiles against Foy
+internals), keep Surefire's `useModulePath` at `false`, and do not run JUnit tests in
+parallel: the adapter keeps its deployments in one unsynchronised map.
+
 ## Configuration
 
 Three optional `arquillian.xml` container properties. Each is a comma-separated list,
@@ -61,7 +83,7 @@ module.
 ## Tests
 
 ```bash
-./mvnw -pl ibarra-arquillian test    # 59 adapter regression tests, default reactor
+./mvnw -pl ibarra-arquillian test    # 67 adapter regression tests, default reactor
 ```
 
 ## Deployment model and limits
