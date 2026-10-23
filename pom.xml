@@ -74,6 +74,10 @@
         <foy.version>0.4.0-SNAPSHOT</foy.version>
         <chappe.version>0.4.0-SNAPSHOT</chappe.version>
 
+        <!-- Test tooling of ibarra-arquillian (never shipped in an application). -->
+        <arquillian.version>1.8.0.Final</arquillian.version>
+        <shrinkwrap.version>1.2.6</shrinkwrap.version>
+
         <!--
             SonarQube (Vidocq/vidocq#284): every module reads the aggregated JaCoCo report of
             ibarra-coverage (quality profile), so the tests of one module count for the code they
@@ -164,6 +168,18 @@
                 <groupId>io.vidocq.ibarra</groupId>
                 <artifactId>ibarra-arquillian</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <!-- Arquillian adapter tooling (ibarra-arquillian) -->
+            <dependency>
+                <groupId>org.jboss.arquillian.container</groupId>
+                <artifactId>arquillian-container-spi</artifactId>
+                <version>${arquillian.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jboss.shrinkwrap</groupId>
+                <artifactId>shrinkwrap-impl-base</artifactId>
+                <version>${shrinkwrap.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

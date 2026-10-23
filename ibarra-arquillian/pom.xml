@@ -11,6 +11,9 @@
     the class path too, without any surefire override. What the adapter deploys stays
     strictly modular: a named tck.application module and a named tck.host module,
     launched with limited modules and Peano reflection denied.
+    The Ibarra, Foy, Peano and Chappe compile dependencies are intentional (the
+    adapter precompiles each WAR and deploys it on Foy); consumers take this
+    artifact at test scope only.
 
     Reference page: docs/en/modules/ROOT/pages/modules/arquillian-adapter.adoc.
 -->
@@ -59,12 +62,10 @@
         <dependency>
             <groupId>org.jboss.arquillian.container</groupId>
             <artifactId>arquillian-container-spi</artifactId>
-            <version>1.8.0.Final</version>
         </dependency>
         <dependency>
             <groupId>org.jboss.shrinkwrap</groupId>
             <artifactId>shrinkwrap-impl-base</artifactId>
-            <version>1.2.6</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
