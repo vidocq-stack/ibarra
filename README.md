@@ -112,7 +112,7 @@ TCK-014 passes 14/14 after IBARRA-145, and TCK-015 passes 13/13 after IBARRA-146
 TCK-018 passes 5/5 after IBARRA-143. The SimpleTagSupport TCK class passes 11/11,
 TCK-054 passes 7/7, TCK-056 passes 8/8 after IBARRA-141, and TCK-057 passes 12/12
 after IBARRA-142. TCK-021 passes 3/3 after Foy #51 and IBARRA-147; TCK-031 passes
-12/12 after IBARRA-147. Ibarra remains uncertified while method errors remain. The
+12/12 after IBARRA-147. All 682 methods now pass in this local run, which is not a certification. The
 ordinary reactor passes 367 tests, the adapter 37/37 at that date (67 tests today, in `ibarra-arquillian`) and the independent example
 packages successfully. Typed forwarding uses the producer delivered in
 [Foy #47](https://codefloe.com/Vidocq/foy/pulls/47), now merged and published.

@@ -55,8 +55,8 @@ final class BeanAccessors {
     private static final String IS_READ_ONLY = "isReadOnly";
     private static final String SET_VALUE = "setValue";
     private static final List<String> OPERATIONS = List.of(GET_VALUE, GET_TYPE, IS_READ_ONLY, SET_VALUE);
-    /** The bean types EL resolves without a property table: maps, lists, resource bundles and records. */
     private static final ClassDesc LIST = ClassDesc.of("java.util.List");
+    /** The bean types EL resolves without a property table: maps, lists, resource bundles and records. */
     private static final List<ClassDesc> RESOLVED_ELSEWHERE = List.of(ClassDesc.of("java.util.Map"),
             LIST, ClassDesc.of("java.util.ResourceBundle"), ClassDesc.of("java.lang.Record"));
     private static final ClassDesc CONTEXT = ClassDesc.of("jakarta.el.ELContext");
