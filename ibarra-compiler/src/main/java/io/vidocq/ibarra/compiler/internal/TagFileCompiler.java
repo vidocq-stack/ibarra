@@ -634,7 +634,9 @@ public final class TagFileCompiler {
                 && (attributes.containsKey(dynamicAttributesName) || variableNames.contains(dynamicAttributesName)))
             throw new PageParseException(dynamicAttributesLocation,
                     "Tag-file dynamic-attributes name conflicts with a declared attribute or variable: " + dynamicAttributesName);
-        var libraryUses = tagLibraryUses(nodes, referencedLibraries);
+        var libraryUses = unit.page().syntax() == Page.Syntax.XML
+                ? tagLibraryUses(unit.page().nodes(), true, referencedLibraries)
+                : tagLibraryUses(nodes, false, referencedLibraries);
         validateNameFromAttributeVariables(attributes, variables, new SourceLocation(unit.page().source(), 1, 1));
         String pageXml = PageDataXmlView.serialize(unit.page().nodes(), taglibNamespaces(unit.page().nodes()));
         return new StandardTagFile(bodyContent, List.copyOf(variables), Collections.unmodifiableMap(new LinkedHashMap<>(attributes)), List.copyOf(imports),
@@ -948,17 +950,41 @@ public final class TagFileCompiler {
         return namespaces;
     }
 
-    private static List<TagLibraryUse> tagLibraryUses(List<PageNode> nodes, TldReferences.Resolved libraries) {
+    /**
+     * Libraries whose validators the tag file runs: those of its {@code taglib} directives and, in an XML
+     * tag file, those its elements declare through {@code xmlns} attributes (read before normalization,
+     * which drops the {@code jsp:root} wrapper and its attributes), as for JSP documents.
+     */
+    private static List<TagLibraryUse> tagLibraryUses(List<PageNode> nodes, boolean xml, TldReferences.Resolved libraries) {
         var uses = new LinkedHashMap<String, TagLibraryUse>();
-        for (var node : nodes) if (node instanceof PageNode.Directive directive && directive.name().equals("taglib")) {
-            String prefix = directive.attributes().get("prefix");
-            String uri = directive.attributes().get("uri");
-            if (prefix == null || uri == null) continue;
-            var library = libraries.resolve(uri, directive.location(), true);
-            if (library != null && library.validator() != null)
-                uses.putIfAbsent(uri, new TagLibraryUse(prefix, uri, library.validator()));
-        }
+        collectTagLibraryUses(nodes, xml, libraries, uses);
         return List.copyOf(uses.values());
+    }
+
+    private static void collectTagLibraryUses(List<PageNode> nodes, boolean xml, TldReferences.Resolved libraries,
+            Map<String, TagLibraryUse> uses) {
+        for (var node : nodes) {
+            if (node instanceof PageNode.Directive directive && directive.name().equals("taglib")) {
+                String prefix = directive.attributes().get("prefix");
+                String uri = directive.attributes().get("uri");
+                if (prefix != null && uri != null) addTagLibraryUse(prefix, uri, directive.location(), true, libraries, uses);
+            } else if (xml && node instanceof PageNode.Element element) {
+                for (var attribute : element.attributes().entrySet()) {
+                    String prefix = attribute.getKey().startsWith("xmlns:") ? attribute.getKey().substring(6)
+                            : attribute.getKey().equals("xmlns") ? "" : null;
+                    if (prefix != null) addTagLibraryUse(prefix, attribute.getValue(), element.location(), false, libraries, uses);
+                }
+                collectTagLibraryUses(element.children(), true, libraries, uses);
+            }
+        }
+    }
+
+    private static void addTagLibraryUse(String prefix, String uri, SourceLocation at, boolean standard,
+            TldReferences.Resolved libraries, Map<String, TagLibraryUse> uses) {
+        if (uri.isBlank() || uri.equals(JSP_NAMESPACE)) return;
+        var library = libraries.resolve(uri, at, standard);
+        if (library != null && library.validator() != null)
+            uses.putIfAbsent(uri, new TagLibraryUse(prefix, uri, library.validator()));
     }
 
     private static String libraryValidationDeclarations(List<TagLibraryUse> uses, String xmlView) {
@@ -966,8 +992,13 @@ public final class TagFileCompiler {
         // Once per class without a monitor (rule 5): the first caller runs the FutureTask, concurrent
         // callers park in get() until it completes, and its outcome, failure included, is kept for every
         // later call. Each caller receives its own JspException whose cause is the single original failure.
-        var source = new StringBuilder("private static final java.util.concurrent.FutureTask<Void> _jspxTagLibraryValidation =\n")
-                .append("new java.util.concurrent.FutureTask<>(() -> { _jspxRunTagLibraryValidators(); return null; });\n")
+        // The task is a named nested class, not a lambda: no invokedynamic or runtime class spinning.
+        var source = new StringBuilder("private static final class _jspxTagLibraryValidationTask")
+                .append(" implements java.util.concurrent.Callable<Void> {\n")
+                .append("@Override public Void call() throws jakarta.servlet.jsp.JspException {")
+                .append(" _jspxRunTagLibraryValidators(); return null; }\n}\n")
+                .append("private static final java.util.concurrent.FutureTask<Void> _jspxTagLibraryValidation =\n")
+                .append("new java.util.concurrent.FutureTask<>(new _jspxTagLibraryValidationTask());\n")
                 .append("private static void _jspxValidateTagLibraries() throws jakarta.servlet.jsp.JspException {\n")
                 .append("_jspxTagLibraryValidation.run();\n")
                 .append("try {\n_jspxTagLibraryValidation.get();\n")

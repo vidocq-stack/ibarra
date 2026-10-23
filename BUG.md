@@ -1,5 +1,21 @@
 # BUG.md — Ibarra
 
+## IBARRA-154 · 2026-10-23 · XML tag files skip validators of libraries declared through `xmlns`
+
+- Symptom: a `.tagx` tag file that imports a library with a TLD `<validator>` only
+  through an `xmlns:` attribute (for example on `jsp:root`) never runs that
+  validator. A `taglib` directive in a `.tag` file does run it.
+- Minimal repro: `TagGenerationTest.xmlTagFileLibrariesDeclaredOnlyThroughXmlnsAreValidated`
+  (no `_jspxValidateTagLibraries` was generated).
+- Cause: `TagFileCompiler.tagLibraryUses` read only `taglib` directives, and only
+  after XML normalization had dropped the `jsp:root` wrapper and its attributes.
+- Status: FIXED on `fix/tlv-docs-and-lock`. XML tag files now collect `xmlns`
+  declarations from the un-normalized document, like JSP documents do. JSP
+  documents (`.jspx`) had no gap: `PageGenerator` already collects `xmlns`
+  declarations, and
+  `TagGenerationTest.xmlPageLibrariesDeclaredOnlyThroughXmlnsAreValidatedAtInitialization`
+  now covers it.
+
 ## IBARRA-153 · 2026-10-23 · Generated tag-file validation uses `static synchronized`
 
 - Symptom: a standard tag file whose `taglib` directives import a library with a
@@ -13,8 +29,9 @@
   validator: the old code ran the validator 9 times).
 - Cause: IBARRA-087 emitted the once-only guard as a monitor plus a static boolean.
 - Status: FIXED on `fix/tlv-docs-and-lock`. The generated class holds a static final
-  `FutureTask`: the first caller runs it, concurrent callers park in `get()` (no
-  monitor, no carrier pinning), and the outcome is kept. The validators run once
+  `FutureTask` over a named nested `Callable` (no lambda): the first caller runs it,
+  concurrent callers park in `get()` (no monitor, no carrier pinning), and the
+  outcome is kept. The validators run once
   per class; every caller receives its own `JspException` with the same message,
   caused by the single original failure.
 

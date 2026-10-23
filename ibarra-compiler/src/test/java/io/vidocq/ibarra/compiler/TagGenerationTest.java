@@ -683,15 +683,37 @@ class TagGenerationTest {
         assertEquals("ok", render(page, false, configured));
     }
     @Test void tagFileLibraryValidationRunsOnceWithoutSynchronizedAndReportsItsFailureToEveryCaller() throws Exception {
+        assertTagFileValidationRunsOnce("/WEB-INF/tags/sample.tag",
+                "<%@ taglib prefix='v' uri='urn:validated' %><v:check/>body");
+    }
+
+    @Test void xmlTagFileLibrariesDeclaredOnlyThroughXmlnsAreValidated() throws Exception {
+        assertTagFileValidationRunsOnce("/WEB-INF/tags/sample.tagx",
+                "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:v='urn:validated' version='2.0'>body</jsp:root>");
+    }
+
+    @Test void xmlPageLibrariesDeclaredOnlyThroughXmlnsAreValidatedAtInitialization() throws Exception {
+        var recorded = new TldParser().parse("/WEB-INF/recorded.tld", """
+                <taglib><uri>urn:recorded</uri>
+                  <validator><validator-class>fixture.Tags$RecordingValidator</validator-class></validator>
+                  <tag><name>check</name><tag-class>jakarta.servlet.jsp.tagext.SimpleTagSupport</tag-class><body-content>empty</body-content></tag>
+                </taglib>
+                """.getBytes(StandardCharsets.UTF_8));
+        var options = options().withTagLibraries(Map.of("urn:recorded", recorded));
+        assertEquals("r=urn:recorded;", render("<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:r='urn:recorded'"
+                + " version='4.0'><jsp:directive.page session='false'/>"
+                + "<jsp:scriptlet>out.print(fixture.Tags.RecordingValidator.seen);</jsp:scriptlet></jsp:root>", false, options));
+    }
+
+    private void assertTagFileValidationRunsOnce(String tagPath, String tagSource) throws Exception {
         var validated = new TldParser().parse("/WEB-INF/validated.tld", """
                 <taglib><uri>urn:validated</uri>
                   <validator><validator-class>fixture.Tags$RejectingValidator</validator-class></validator>
                   <tag><name>check</name><tag-class>jakarta.servlet.jsp.tagext.SimpleTagSupport</tag-class><body-content>empty</body-content></tag>
                 </taglib>
                 """.getBytes(StandardCharsets.UTF_8));
-        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of("/WEB-INF/tags/sample.tag",
-                "<%@ taglib prefix='v' uri='urn:validated' %><v:check/>body".getBytes(StandardCharsets.UTF_8)),
-                Map.of("urn:validated", validated));
+        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of(tagPath,
+                tagSource.getBytes(StandardCharsets.UTF_8)), Map.of("urn:validated", validated));
         prepare();
         var page = new TranslationUnit(options).read("/index.jsp",
                 "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>");
@@ -699,8 +721,10 @@ class TagGenerationTest {
         for (String path : modulePath().split(java.util.regex.Pattern.quote(File.pathSeparator))) paths.add(Path.of(path));
         var compiled = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", paths);
         var tag = compiled.sources().stream().filter(source -> source.source().contains("_jspxValidateTagLibraries"))
-                .findFirst().orElseThrow();
+                .findFirst().orElseThrow(() -> new AssertionError("No tag-file library validation generated: "
+                        + compiled.sources().stream().map(GeneratedPage::source).toList()));
         assertFalse(tag.source().contains("synchronized"), tag.source());
+        assertFalse(tag.source().contains("->") || tag.source().contains("::"), tag.source());
 
         String main = """
                 package io.vidocq.ibarra.core.internal;
@@ -1718,6 +1742,13 @@ class TagGenerationTest {
                             } catch (java.io.IOException failure) {
                                 return new ValidationMessage[]{new ValidationMessage(null, failure.toString())};
                             }
+                        }
+                    }
+                    public static class RecordingValidator extends TagLibraryValidator {
+                        public static String seen = "";
+                        public ValidationMessage[] validate(String prefix, String uri, PageData page) {
+                            seen += prefix + "=" + uri + ";";
+                            return null;
                         }
                     }
                     public static class RejectingValidator extends TagLibraryValidator {
