@@ -103,7 +103,7 @@ Ibarra follows the transverse Vidocq philosophy (see the workspace
 | `ibarra-maven-plugin` | `precompile` goal at process-classes; module service registration | Initial I4 implemented |
 | `ibarra-foy` | Optional Foy engine provider; application layer, routing and TLD listener lifecycle | Initial I5 implemented |
 | `ibarra-arquillian` | Published Arquillian adapter: precompiles WARs and runs them on modular Foy; test tooling, class path, default reactor ([README](ibarra-arquillian/README.md)) | 59 regression tests; configurable libraries, JDK modules and opened packages |
-| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; smoke 18/18; latest `all` run reports 603/682 across 92 classes |
+| `ibarra-tck` | Official Pages 4.0 TCK runner (`-Ptck` profile only) | modular WAR adapter; smoke 18/18; latest `all` run reports 682/682 across 92 classes |
 
 The latest full `all` run (2026-10-15) executes all 682 methods in 92 classes:
 603 pass, 79 report method-level errors, and there are no setup errors, assertion

@@ -128,7 +128,7 @@ Every refusal at `setup` is an Arquillian `ConfigurationException`. A deployment
 failure is a `DeploymentException` whose cause carries the message, and which names the
 retained work directory.
 
-When libraries are configured, the server resolves every module of the application
+The server resolves every module of the application
 layer (the application classes and each library) as a root, so an automatic library
 that no descriptor reads is still in the layer.
 
