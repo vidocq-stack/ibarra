@@ -723,41 +723,54 @@ class TagGenerationTest {
                 failure.getMessage());
     }
 
-    private void assertTagFileValidationRunsOnce(String tagPath, String tagSource) throws Exception {
-        var validated = new TldParser().parse("/WEB-INF/validated.tld", """
-                <taglib><uri>urn:validated</uri>
-                  <validator><validator-class>fixture.Tags$RejectingValidator</validator-class></validator>
-                  <tag><name>check</name><tag-class>jakarta.servlet.jsp.tagext.SimpleTagSupport</tag-class><body-content>empty</body-content></tag>
-                </taglib>
-                """.getBytes(StandardCharsets.UTF_8));
-        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of(tagPath,
-                tagSource.getBytes(StandardCharsets.UTF_8)), Map.of("urn:validated", validated));
-        prepare();
-        var page = new TranslationUnit(options).read("/index.jsp",
-                "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>");
-        var paths = new ArrayList<Path>(); paths.add(directory);
-        for (String path : modulePath().split(java.util.regex.Pattern.quote(File.pathSeparator))) paths.add(Path.of(path));
-        var compiled = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", paths);
-        var tag = compiled.sources().stream().filter(source -> source.source().contains("_jspxValidateTagLibraries"))
-                .findFirst().orElseThrow(() -> new AssertionError("No tag-file library validation generated: "
-                        + compiled.sources().stream().map(GeneratedPage::source).toList()));
-        assertFalse(tag.source().contains("synchronized"), tag.source());
-        assertFalse(tag.source().contains("->") || tag.source().contains("::"), tag.source());
+    @Test void tagFileValidationWrapsEachNonErrorFailureInAFreshJspExceptionWithTheSameCause() throws Exception {
+        assertEquals("jakarta.servlet.jsp.JspException|true|true|java.lang.IllegalStateException:constructor failure|1",
+                runTagFileValidationScenario("/WEB-INF/tags/sample.tag", "<%@ taglib prefix='v' uri='urn:validated' %>body",
+                        "fixture.Tags$ConstructorFailingValidator", """
+                        var first = invoke(servlet); var second = invoke(servlet);
+                        result = first.getClass().getName() + "|" + (first != second) + "|" + (first.getCause() == second.getCause())
+                                + "|" + first.getCause().getClass().getName() + ":" + first.getMessage()
+                                + "|" + fixture.Tags.ConstructorFailingValidator.constructions.get();
+                        """));
+    }
 
-        String main = """
-                package io.vidocq.ibarra.core.internal;
-                import jakarta.servlet.*; import jakarta.servlet.jsp.*;
-                public class TagFileValidationMain {
-                    public static void main(String[] args) throws Throwable {
-                        JspFactory.setDefaultFactory(new IbarraJspFactory());
-                        var context = new ServletDoubles.Context();
-                        var servlet = new jakarta.servlet.http.HttpServlet() { };
-                        servlet.init(new ServletConfig() {
-                            public String getServletName() { return "tags"; }
-                            public ServletContext getServletContext() { return context; }
-                            public String getInitParameter(String name) { return null; }
-                            public java.util.Enumeration<String> getInitParameterNames() { return java.util.Collections.emptyEnumeration(); }
-                        });
+    @Test void tagFileValidationErrorsAreNotCachedSoTheNextCallValidatesAgain() throws Exception {
+        assertEquals("java.lang.StackOverflowError:first run|null|2",
+                runTagFileValidationScenario("/WEB-INF/tags/sample.tag", "<%@ taglib prefix='v' uri='urn:validated' %>body",
+                        "fixture.Tags$ErrorOnceValidator", """
+                        var first = invoke(servlet); var second = invoke(servlet);
+                        result = first.getClass().getName() + ":" + first.getMessage() + "|" + second
+                                + "|" + fixture.Tags.ErrorOnceValidator.calls.get();
+                        """));
+    }
+
+    @Test void interruptedTagFileValidationWaitersRestoreTheirFlagAndCacheNothing() throws Exception {
+        assertEquals("jakarta.servlet.jsp.JspException:java.lang.InterruptedException|true|null|null|1",
+                runTagFileValidationScenario("/WEB-INF/tags/sample.tag", "<%@ taglib prefix='v' uri='urn:validated' %>body",
+                        "fixture.Tags$BlockingValidator", """
+                        var runnerResult = new Throwable[1]; var waiterResult = new Throwable[1]; var waiterFlag = new boolean[1];
+                        var runner = Thread.ofVirtual().start(() -> {
+                            try { runnerResult[0] = invoke(servlet); } catch (Exception failure) { runnerResult[0] = failure; } });
+                        fixture.Tags.BlockingValidator.entered.await();
+                        var waiter = Thread.ofVirtual().start(() -> {
+                            try { waiterResult[0] = invoke(servlet); } catch (Exception failure) { waiterResult[0] = failure; }
+                            waiterFlag[0] = Thread.currentThread().isInterrupted(); });
+                        long deadline = System.nanoTime() + 10_000_000_000L;
+                        while (waiter.getState() != Thread.State.WAITING && System.nanoTime() < deadline) Thread.onSpinWait();
+                        waiter.interrupt(); waiter.join();
+                        fixture.Tags.BlockingValidator.release.countDown(); runner.join();
+                        var later = invoke(servlet);
+                        result = waiterResult[0].getClass().getName() + ":" + waiterResult[0].getCause().getClass().getName()
+                                + "|" + waiterFlag[0] + "|" + runnerResult[0] + "|" + later
+                                + "|" + fixture.Tags.BlockingValidator.calls.get();
+                        """));
+    }
+
+    private void assertTagFileValidationRunsOnce(String tagPath, String tagSource) throws Exception {
+        assertEquals("1|1|9|[jakarta.servlet.jsp.JspException]"
+                + "|[TagLibraryValidator validation failed for urn:validated: rejected]|1"
+                + "|[jakarta.servlet.jsp.JspException:TagLibraryValidator validation failed for urn:validated: rejected]",
+                runTagFileValidationScenario(tagPath, tagSource, "fixture.Tags$RejectingValidator", """
                         var failures = new java.util.concurrent.ConcurrentLinkedQueue<Throwable>();
                         var start = new java.util.concurrent.CountDownLatch(1);
                         try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
@@ -774,19 +787,67 @@ class TagGenerationTest {
                             causeTypes.add(failure.getCause() == null ? "none" : failure.getCause().getClass().getName()
                                     + ":" + failure.getCause().getMessage());
                         }
-                        System.out.print("RESULT=" + concurrentCalls + "|" + fixture.Tags.RejectingValidator.calls.get() + "|" + failures.size()
-                                + "|" + types + "|" + messages + "|" + causes.size() + "|" + causeTypes);
+                        result = concurrentCalls + "|" + fixture.Tags.RejectingValidator.calls.get() + "|" + failures.size()
+                                + "|" + types + "|" + messages + "|" + causes.size() + "|" + causeTypes;
+                        """));
+    }
+
+    /** Compiles a tag file whose library has the given validator, then runs {@code scenario} against its handler. */
+    private String runTagFileValidationScenario(String tagPath, String tagSource, String validatorClass, String scenario)
+            throws Exception {
+        var validated = new TldParser().parse("/WEB-INF/validated.tld", """
+                <taglib><uri>urn:validated</uri>
+                  <validator><validator-class>VALIDATOR</validator-class></validator>
+                  <tag><name>check</name><tag-class>jakarta.servlet.jsp.tagext.SimpleTagSupport</tag-class><body-content>empty</body-content></tag>
+                </taglib>
+                """.replace("VALIDATOR", validatorClass).getBytes(StandardCharsets.UTF_8));
+        var options = new GenerationOptions(List.of(), Map.of(), false, Map.of(tagPath,
+                tagSource.getBytes(StandardCharsets.UTF_8)), Map.of("urn:validated", validated));
+        prepare();
+        var page = new TranslationUnit(options).read("/index.jsp",
+                "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>");
+        var paths = new ArrayList<Path>(); paths.add(directory);
+        for (String path : modulePath().split(java.util.regex.Pattern.quote(File.pathSeparator))) paths.add(Path.of(path));
+        var compiled = TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", paths);
+        var tag = compiled.sources().stream().filter(source -> source.source().contains("_jspxValidateTagLibraries"))
+                .findFirst().orElseThrow(() -> new AssertionError("No tag-file library validation generated: "
+                        + compiled.sources().stream().map(GeneratedPage::source).toList()));
+        assertFalse(tag.source().contains("synchronized"), tag.source());
+        int start = tag.source().indexOf("_jspxTagLibraryValidationTask");
+        int end = tag.source().indexOf("private static void _jspxRunTagLibraryValidators");
+        assertTrue(start >= 0 && end > start, tag.source());
+        String guard = tag.source().substring(start, end);
+        assertFalse(guard.contains("->") || guard.contains("::"), guard);
+
+        String main = """
+                package io.vidocq.ibarra.core.internal;
+                import jakarta.servlet.*; import jakarta.servlet.jsp.*;
+                public class TagFileValidationMain {
+                    public static void main(String[] args) throws Throwable {
+                        JspFactory.setDefaultFactory(new IbarraJspFactory());
+                        var context = new ServletDoubles.Context();
+                        var servlet = new jakarta.servlet.http.HttpServlet() { };
+                        servlet.init(new ServletConfig() {
+                            public String getServletName() { return "tags"; }
+                            public ServletContext getServletContext() { return context; }
+                            public String getInitParameter(String name) { return null; }
+                            public java.util.Enumeration<String> getInitParameterNames() { return java.util.Collections.emptyEnumeration(); }
+                        });
+                        String result;
+                        SCENARIO
+                        System.out.print("RESULT=" + result);
                     }
+                    /** Returns the handler's failure, or null when doTag succeeds. */
                     private static Throwable invoke(Servlet servlet) throws Exception {
                         var pageContext = JspFactory.getDefaultFactory().getPageContext(servlet, new ServletDoubles.Request(),
                                 new ServletDoubles.Response(), null, false, 8192, true);
                         var handler = new TAG_CLASS();
                         handler.setJspContext(pageContext);
-                        try { handler.doTag(); return new AssertionError("Validation did not fail"); }
-                        catch (JspException expected) { return expected; }
+                        try { handler.doTag(); return null; }
+                        catch (JspException | RuntimeException | Error failure) { return failure; }
                     }
                 }
-                """.replace("TAG_CLASS", tag.className());
+                """.replace("TAG_CLASS", tag.className()).replace("SCENARIO", scenario);
         Path root = Path.of(System.getProperty("user.dir")).toAbsolutePath(); if (!Files.isDirectory(root.resolve("ibarra-core"))) root = root.getParent();
         String doubles = Files.readString(root.resolve("ibarra-core/src/test/java/io/vidocq/ibarra/core/internal/ServletDoubles.java"));
         var sources = new ArrayList<>(compiled.sources());
@@ -803,10 +864,7 @@ class TagGenerationTest {
         String output = Files.readString(directory.resolve("tag-file-validation.log"));
         assertEquals(0, process.exitValue(), output);
         assertTrue(output.startsWith("RESULT="), output);
-        assertEquals("1|1|9|[jakarta.servlet.jsp.JspException]"
-                + "|[TagLibraryValidator validation failed for urn:validated: rejected]|1"
-                + "|[jakarta.servlet.jsp.JspException:TagLibraryValidator validation failed for urn:validated: rejected]",
-                output.substring(7));
+        return output.substring(7);
     }
 
     @Test void exposesTldTagFileMetadataToTagExtraInfoValidation() throws Exception {
@@ -1766,6 +1824,27 @@ class TagGenerationTest {
                         public static String seen = "";
                         public ValidationMessage[] validate(String prefix, String uri, PageData page) {
                             seen += prefix + "=" + uri + ";";
+                            return null;
+                        }
+                    }
+                    public static class ConstructorFailingValidator extends TagLibraryValidator {
+                        public static final java.util.concurrent.atomic.AtomicInteger constructions = new java.util.concurrent.atomic.AtomicInteger();
+                        public ConstructorFailingValidator() { constructions.incrementAndGet(); throw new IllegalStateException("constructor failure"); }
+                    }
+                    public static class ErrorOnceValidator extends TagLibraryValidator {
+                        public static final java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+                        public ValidationMessage[] validate(String prefix, String uri, PageData page) {
+                            if (calls.incrementAndGet() == 1) throw new StackOverflowError("first run");
+                            return null;
+                        }
+                    }
+                    public static class BlockingValidator extends TagLibraryValidator {
+                        public static final java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+                        public static final java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+                        public static final java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+                        public ValidationMessage[] validate(String prefix, String uri, PageData page) {
+                            calls.incrementAndGet(); entered.countDown();
+                            try { release.await(); } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
                             return null;
                         }
                     }

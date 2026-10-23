@@ -44,12 +44,17 @@
   (8 concurrent virtual-thread invocations + 1 later call against a rejecting
   validator: the old code ran the validator 9 times).
 - Cause: IBARRA-087 emitted the once-only guard as a monitor plus a static boolean.
-- Status: FIXED on `fix/tlv-docs-and-lock`. The generated class holds a static final
-  `FutureTask` over a named nested `Callable` (no lambda): the first caller runs it,
-  concurrent callers park in `get()` (no monitor, no carrier pinning), and the
-  outcome is kept. The validators run once
-  per class; every caller receives its own `JspException` with the same message,
-  caused by the single original failure.
+- Status: FIXED on `fix/tlv-docs-and-lock`. The generated class holds a `FutureTask`
+  over a named nested `Callable` (no lambda) in a static `AtomicReference`. The
+  first caller runs it, and concurrent callers park in `get()` (no monitor, no
+  carrier pinning). A success or a non-`Error` failure is kept, so the validators
+  run once per class. Every caller receives a fresh `JspException` with the same
+  message, caused by the single original failure; the cached `Throwable` itself is
+  never rethrown. An `Error` is rethrown and replaced by a fresh task
+  (compare-and-set), so the next call validates again. An interrupted waiter gets
+  a `JspException`, keeps its interrupt flag, and caches nothing. Covered by the
+  `tagFileValidation*` and `interruptedTagFileValidation*` tests in
+  `TagGenerationTest`.
 
 ## IBARRA-152 · 2026-10-17 · Tag-file directives and standard actions fail TCK cases
 

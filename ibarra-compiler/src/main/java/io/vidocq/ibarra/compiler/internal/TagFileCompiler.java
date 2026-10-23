@@ -989,27 +989,28 @@ public final class TagFileCompiler {
 
     private static String libraryValidationDeclarations(List<TagLibraryUse> uses, String xmlView) {
         if (uses.isEmpty()) return "";
-        // Once per class without a monitor (rule 5): the first caller runs the FutureTask, concurrent
-        // callers park in get() until it completes, and its outcome, failure included, is kept for every
-        // later call. Each caller receives its own JspException whose cause is the single original failure.
-        // The task is a named nested class, not a lambda: no invokedynamic or runtime class spinning.
+        // Once per class without a monitor (rule 5): the first caller runs the current FutureTask, concurrent
+        // callers park in get() until it completes, and a success or a non-Error failure is kept for every
+        // later call. Each caller receives its own JspException whose cause is the single original failure;
+        // the cached Throwable is never rethrown. An Error is not cached: a fresh task replaces the failed one
+        // (compare-and-set), so the next call validates again. A waiter interrupted in get() keeps its flag
+        // and caches nothing. The task is a named nested class, not a lambda: no invokedynamic.
         var source = new StringBuilder("private static final class _jspxTagLibraryValidationTask")
                 .append(" implements java.util.concurrent.Callable<Void> {\n")
                 .append("@Override public Void call() throws jakarta.servlet.jsp.JspException {")
                 .append(" _jspxRunTagLibraryValidators(); return null; }\n}\n")
-                .append("private static final java.util.concurrent.FutureTask<Void> _jspxTagLibraryValidation =\n")
-                .append("new java.util.concurrent.FutureTask<>(new _jspxTagLibraryValidationTask());\n")
+                .append("private static final java.util.concurrent.atomic.AtomicReference<java.util.concurrent.FutureTask<Void>>")
+                .append(" _jspxTagLibraryValidation = new java.util.concurrent.atomic.AtomicReference<>(")
+                .append("new java.util.concurrent.FutureTask<>(new _jspxTagLibraryValidationTask()));\n")
                 .append("private static void _jspxValidateTagLibraries() throws jakarta.servlet.jsp.JspException {\n")
-                .append("_jspxTagLibraryValidation.run();\n")
-                .append("try {\n_jspxTagLibraryValidation.get();\n")
+                .append("var task = _jspxTagLibraryValidation.get();\ntask.run();\n")
+                .append("try {\ntask.get();\n")
                 .append("} catch (InterruptedException interrupted) {\nThread.currentThread().interrupt();\n")
                 .append("throw new jakarta.servlet.jsp.JspException(\"Interrupted while validating tag libraries\", interrupted);\n")
                 .append("} catch (java.util.concurrent.ExecutionException failed) {\nvar cause = failed.getCause();\n")
-                .append("if (cause instanceof jakarta.servlet.jsp.JspException failure)")
-                .append(" throw new jakarta.servlet.jsp.JspException(failure.getMessage(), failure);\n")
-                .append("if (cause instanceof RuntimeException failure) throw failure;\n")
-                .append("if (cause instanceof Error failure) throw failure;\n")
-                .append("throw new jakarta.servlet.jsp.JspException(cause);\n}\n}\n")
+                .append("if (cause instanceof Error error) {\n_jspxTagLibraryValidation.compareAndSet(task,")
+                .append(" new java.util.concurrent.FutureTask<>(new _jspxTagLibraryValidationTask()));\nthrow error;\n}\n")
+                .append("throw new jakarta.servlet.jsp.JspException(cause.getMessage(), cause);\n}\n}\n")
                 .append("private static void _jspxRunTagLibraryValidators() throws jakarta.servlet.jsp.JspException {\n");
         int serial = 0;
         for (var use : uses) {
