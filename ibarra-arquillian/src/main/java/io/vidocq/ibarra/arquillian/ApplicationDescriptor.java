@@ -44,13 +44,13 @@ final class ApplicationDescriptor {
             List.of("java.desktop", "jakarta.el", "io.vidocq.ibarra.api", "io.vidocq.peano.api", "io.vidocq.foy.api");
 
     /** Module name to its {@code static }/{@code transitive } prefix (empty for a plain read). */
-    private final Map<String, String> requires = new TreeMap<>();
+    private final Map<String, String> reads = new TreeMap<>();
     /** Package to its sorted targets; an empty set is an unqualified export. */
-    private final Map<String, SortedSet<String>> exports = new TreeMap<>();
+    private final Map<String, SortedSet<String>> exported = new TreeMap<>();
     /** Package to its sorted targets; an empty set is an unqualified opening. */
-    private final Map<String, SortedSet<String>> opens = new TreeMap<>();
+    private final Map<String, SortedSet<String>> opened = new TreeMap<>();
     /** Service to its providers, in insertion order. */
-    private final Map<String, List<String>> provides = new TreeMap<>();
+    private final Map<String, List<String>> services = new TreeMap<>();
 
     private ApplicationDescriptor() { }
 
@@ -71,11 +71,11 @@ final class ApplicationDescriptor {
         for (var read : compiled.requires()) {
             Set<ModuleDescriptor.Requires.Modifier> modifiers = read.modifiers();
             if (!modifiers.contains(ModuleDescriptor.Requires.Modifier.MANDATED)) {
-                descriptor.requires.put(read.name(), prefix(modifiers));
+                descriptor.reads.put(read.name(), prefix(modifiers));
             }
         }
-        compiled.exports().forEach(export -> descriptor.exports.put(export.source(), new TreeSet<>(export.targets())));
-        compiled.opens().forEach(opening -> descriptor.opens.put(opening.source(), new TreeSet<>(opening.targets())));
+        compiled.exports().forEach(export -> descriptor.exported.put(export.source(), new TreeSet<>(export.targets())));
+        compiled.opens().forEach(opening -> descriptor.opened.put(opening.source(), new TreeSet<>(opening.targets())));
         compiled.provides().forEach(service -> descriptor.provides(service.service(), service.providers()));
         return descriptor;
     }
@@ -87,26 +87,26 @@ final class ApplicationDescriptor {
 
     /** Adds a plain read of {@code module}; an existing read keeps its modifiers. */
     ApplicationDescriptor requires(String module) {
-        requires.putIfAbsent(module, "");
+        reads.putIfAbsent(module, "");
         return this;
     }
 
     /** Exports {@code packageName} to {@code target}; an unqualified export stays unqualified. */
     ApplicationDescriptor exportsTo(String packageName, String target) {
-        qualify(exports, packageName, target);
+        qualify(exported, packageName, target);
         return this;
     }
 
     /** Opens {@code packageName} to every module. */
     ApplicationDescriptor opens(String packageName) {
-        opens.put(packageName, new TreeSet<>());
+        opened.put(packageName, new TreeSet<>());
         return this;
     }
 
     /** Appends {@code providers} after the providers {@code service} already has; no providers adds nothing. */
     ApplicationDescriptor provides(String service, List<String> providers) {
         if (!providers.isEmpty()) {
-            provides.computeIfAbsent(service, ignored -> new ArrayList<>()).addAll(providers);
+            services.computeIfAbsent(service, ignored -> new ArrayList<>()).addAll(providers);
         }
         return this;
     }
@@ -114,10 +114,10 @@ final class ApplicationDescriptor {
     /** The {@code module-info.java} source of this descriptor. */
     String source() {
         var text = new StringBuilder("module ").append(MODULE).append(" { ");
-        requires.forEach((module, prefix) -> text.append("requires ").append(prefix).append(module).append("; "));
-        exports.forEach((packageName, targets) -> statement(text, "exports", packageName, targets));
-        opens.forEach((packageName, targets) -> statement(text, "opens", packageName, targets));
-        provides.forEach((service, providers) ->
+        reads.forEach((module, prefix) -> text.append("requires ").append(prefix).append(module).append("; "));
+        exported.forEach((packageName, targets) -> statement(text, "exports", packageName, targets));
+        opened.forEach((packageName, targets) -> statement(text, "opens", packageName, targets));
+        services.forEach((service, providers) ->
                 text.append("provides ").append(service).append(" with ").append(String.join(",", providers)).append("; "));
         return text.append('}').toString();
     }

@@ -349,7 +349,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
     }
 
     /** Stops a failed deployment's server; a server that survives stays registered so that {@link #stop()} retries. */
-    private DeploymentException abandon(String name, Process process, Path work, Exception failure) {
+    DeploymentException abandon(String name, Process process, Path work, Exception failure) {
         if (process != null) {
             try {
                 terminate(process);
@@ -433,7 +433,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
     }
 
     /** Forces a server down after a failed shutdown; it stays registered only if it survives. */
-    private void release(String name, Process process, Exception failure) {
+    void release(String name, Process process, Exception failure) {
         try {
             terminate(process);
             deployments.remove(name);
@@ -464,7 +464,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
     }
 
     /** Kills a server process; the caller's interrupt status is kept across the wait. */
-    private static void terminate(Process process) throws LifecycleException {
+    static void terminate(Process process) throws LifecycleException {
         boolean interrupted = Thread.interrupted();
         try {
             closeInput(process);
@@ -482,7 +482,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
         }
     }
 
-    private static void closeInput(Process process) {
+    static void closeInput(Process process) {
         try {
             process.getOutputStream().close();
         } catch (IOException ignored) {
@@ -491,7 +491,7 @@ public final class PagesContainer implements DeployableContainer<PagesConfigurat
     }
 
     /** Waits for a killed process to exit; an interrupt stops the wait and is kept for the caller. */
-    private static void awaitExit(Process process) {
+    static void awaitExit(Process process) {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TERMINATION_TIMEOUT_SECONDS);
         while (process.isAlive() && System.nanoTime() < deadline) {
             try {
