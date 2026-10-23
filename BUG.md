@@ -1,5 +1,23 @@
 # BUG.md — Ibarra
 
+## IBARRA-153 · 2026-10-23 · Generated tag-file validation uses `static synchronized`
+
+- Symptom: a standard tag file whose `taglib` directives import a library with a
+  TLD `<validator>` generates `private static synchronized void
+  _jspxValidateTagLibraries()`, breaking AGENTS.md rule 5 (no `synchronized`). The
+  "validated" flag was set only on success, so a failing validator ran again on
+  every invocation, and concurrent first calls queued on the class monitor.
+- Minimal repro:
+  `TagGenerationTest.tagFileLibraryValidationRunsOnceWithoutSynchronizedAndReportsItsFailureToEveryCaller`
+  (8 concurrent virtual-thread invocations + 1 later call against a rejecting
+  validator: the old code ran the validator 9 times).
+- Cause: IBARRA-087 emitted the once-only guard as a monitor plus a static boolean.
+- Status: FIXED on `fix/tlv-docs-and-lock`. The generated class holds a static final
+  `FutureTask`: the first caller runs it, concurrent callers park in `get()` (no
+  monitor, no carrier pinning), and the outcome is kept. The validators run once
+  per class; every caller receives its own `JspException` with the same message,
+  caused by the single original failure.
+
 ## IBARRA-152 · 2026-10-17 · Tag-file directives and standard actions fail TCK cases
 
 - Symptom: valid tag-file directives, EL, deferred attributes, nested variables,

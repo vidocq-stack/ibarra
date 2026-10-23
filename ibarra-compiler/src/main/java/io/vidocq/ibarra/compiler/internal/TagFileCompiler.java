@@ -963,9 +963,23 @@ public final class TagFileCompiler {
 
     private static String libraryValidationDeclarations(List<TagLibraryUse> uses, String xmlView) {
         if (uses.isEmpty()) return "";
-        var source = new StringBuilder("private static boolean _jspxTagLibrariesValidated;\n")
-                .append("private static synchronized void _jspxValidateTagLibraries() throws jakarta.servlet.jsp.JspException {\n")
-                .append("if (_jspxTagLibrariesValidated) return;\n");
+        // Once per class without a monitor (rule 5): the first caller runs the FutureTask, concurrent
+        // callers park in get() until it completes, and its outcome, failure included, is kept for every
+        // later call. Each caller receives its own JspException whose cause is the single original failure.
+        var source = new StringBuilder("private static final java.util.concurrent.FutureTask<Void> _jspxTagLibraryValidation =\n")
+                .append("new java.util.concurrent.FutureTask<>(() -> { _jspxRunTagLibraryValidators(); return null; });\n")
+                .append("private static void _jspxValidateTagLibraries() throws jakarta.servlet.jsp.JspException {\n")
+                .append("_jspxTagLibraryValidation.run();\n")
+                .append("try {\n_jspxTagLibraryValidation.get();\n")
+                .append("} catch (InterruptedException interrupted) {\nThread.currentThread().interrupt();\n")
+                .append("throw new jakarta.servlet.jsp.JspException(\"Interrupted while validating tag libraries\", interrupted);\n")
+                .append("} catch (java.util.concurrent.ExecutionException failed) {\nvar cause = failed.getCause();\n")
+                .append("if (cause instanceof jakarta.servlet.jsp.JspException failure)")
+                .append(" throw new jakarta.servlet.jsp.JspException(failure.getMessage(), failure);\n")
+                .append("if (cause instanceof RuntimeException failure) throw failure;\n")
+                .append("if (cause instanceof Error failure) throw failure;\n")
+                .append("throw new jakarta.servlet.jsp.JspException(cause);\n}\n}\n")
+                .append("private static void _jspxRunTagLibraryValidators() throws jakarta.servlet.jsp.JspException {\n");
         int serial = 0;
         for (var use : uses) {
             String suffix = String.valueOf(serial++);
@@ -994,7 +1008,7 @@ public final class TagFileCompiler {
                     .append(" + ").append(messages).append("[0].getMessage());\n")
                     .append("} finally { ").append(validator).append(".release(); }\n");
         }
-        return source.append("_jspxTagLibrariesValidated = true;\n}\n").toString();
+        return source.append("}\n").toString();
     }
 
     private static String nestedAction(PageNode.Element action, TldReferences.Resolved libraries, BeanClasses classes,
