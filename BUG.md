@@ -1,5 +1,21 @@
 # BUG.md — Ibarra
 
+## IBARRA-155 · 2026-10-23 · Uncompiled TLD tag files report a stale validator diagnostic
+
+- Symptom: invoking a TLD `<tag-file>` entry whose resource was not compiled (for
+  instance a missing `/WEB-INF/tags/absent.tag`) fails translation with "Tag
+  validators, scripting variables or tag metadata are not supported yet" in pages,
+  or "Tag metadata in standard tag files are not supported yet" in tag files. Both
+  name features that are supported, and neither names the missing tag file.
+- Minimal repro: `TagGenerationTest.uncompiledTldTagFilesFailTranslationWithTheirPath`.
+- Cause: the default text dates from before validators, variables and tag-file
+  metadata were implemented. `TldParser` marks every `<tag-file>` entry unsupported
+  until `TagFileCompiler` replaces it, so that entry is the only descriptor that
+  still reaches the default text.
+- Status: FIXED on `fix/tlv-docs-and-lock`. The guard stays, because such a tag has
+  no handler. `TagDescriptor.unsupportedDiagnostic()` now reports "TLD tag file
+  <path> has no build-time compiled handler" at both call sites.
+
 ## IBARRA-154 · 2026-10-23 · XML tag files skip validators of libraries declared through `xmlns`
 
 - Symptom: a `.tagx` tag file that imports a library with a TLD `<validator>` only

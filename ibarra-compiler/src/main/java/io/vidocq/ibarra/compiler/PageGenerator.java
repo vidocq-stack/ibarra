@@ -410,8 +410,7 @@ public final class PageGenerator {
             var tag = library.tags().get(local);
             if (tag == null) throw error(node.location(), "Unknown tag " + local + " in " + library.resourcePath());
             if (tag.unsupportedMetadata())
-                throw error(node.location(), tag.unsupportedReason() == null
-                        ? "Tag validators, scripting variables or tag metadata are not supported yet" : tag.unsupportedReason());
+                throw error(node.location(), tag.unsupportedDiagnostic());
             var invocation = tagInvocation(node);
             var scriptingVariables = new ArrayList<ScriptingVariable>();
             if (tag.teiClass() != null) for (var variable : classes.tagVariables(tag.teiClass(), node.location()))

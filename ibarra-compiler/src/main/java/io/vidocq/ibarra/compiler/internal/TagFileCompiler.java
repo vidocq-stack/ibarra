@@ -1050,8 +1050,7 @@ public final class TagFileCompiler {
         var tag = library.tags().get(local);
         if (tag == null) throw new PageParseException(action.location(), "Unknown tag " + local + " in " + library.resourcePath());
         if (tag.unsupportedMetadata())
-            throw new PageParseException(action.location(), tag.unsupportedReason() == null
-                    ? "Tag metadata in standard tag files are not supported yet" : tag.unsupportedReason());
+            throw new PageParseException(action.location(), tag.unsupportedDiagnostic());
         if (tag.tagFile()) return nestedTagFile(action, tag, index, deferredSyntaxIsLiteral);
         if (!action.children().isEmpty())
             throw new PageParseException(action.location(), "Bodies on nested tags in standard tag files are not supported yet");

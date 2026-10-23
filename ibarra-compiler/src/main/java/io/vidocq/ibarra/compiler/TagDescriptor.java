@@ -27,6 +27,15 @@ public record TagDescriptor(String name, String handlerClass, String bodyContent
         boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile, String unsupportedReason,
         boolean emitsXmlDeclaration, String teiClass, List<TagVariableDescriptor> variables, String tagFilePath,
         String infoString, String displayName, String smallIcon, String largeIcon) {
+    /**
+     * Translation diagnostic for an invocation of this tag when {@link #unsupportedMetadata()} is set. Without
+     * an explicit reason, the only such descriptor is a TLD {@code <tag-file>} entry that no tag-file compilation
+     * replaced (for instance, its resource is missing), so the diagnostic names that path.
+     */
+    public String unsupportedDiagnostic() {
+        if (unsupportedReason != null) return unsupportedReason;
+        return "TLD tag file " + (tagFilePath == null ? name : tagFilePath) + " has no build-time compiled handler";
+    }
     public TagDescriptor(String name, String handlerClass, String bodyContent, Map<String, TagAttribute> attributes,
             boolean dynamicAttributes, boolean unsupportedMetadata, boolean tagFile, String unsupportedReason,
             boolean emitsXmlDeclaration, String teiClass, List<TagVariableDescriptor> variables, String tagFilePath) {
