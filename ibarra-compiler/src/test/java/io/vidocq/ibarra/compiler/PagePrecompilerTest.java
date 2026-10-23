@@ -281,6 +281,25 @@ class PagePrecompilerTest {
     }
 
     @Test
+    void deferredAttributesAcceptConstantExpressions() throws Exception {
+        prepareDeferredTags();
+        var factory = jakarta.el.ExpressionFactory.newInstance();
+        var context = new jakarta.el.StandardELContext(factory);
+        var one = factory.createValueExpression(context, "#{1}", Integer.class);
+        var text = factory.createValueExpression(context, "#{\"a\"}", Object.class);
+        String expectedValue = "V:" + one.getExpectedType().getName() + ":" + one.isLiteralText() + ":" + one.getValue(context);
+        String expectedCapture = "V:" + text.getExpectedType().getName() + ":" + text.isLiteralText() + ":" + text.getValue(context);
+        Files.writeString(web.resolve("index.jsp"), deferredPrefix()
+                + "<d:mixed value='${1}'/>|<d:mixed value='a${1}'/>|<d:mixed value='${true}'/>|<d:mixed value='${null}'/>"
+                + "|<d:value value='#{1}'/>|<d:capture value='#{\"a\"}'/>"
+                + "|<d:value><jsp:attribute name='value'>#{1}</jsp:attribute></d:value>");
+        precompile(); Path jar = directory.resolve("deferred-constants.jar"); jar(classes, jar);
+        Object immediate = factory.createValueExpression(context, "${1}", Object.class).getValue(context);
+        assertEquals("O:" + immediate.getClass().getName() + ":" + immediate + "|O:java.lang.String:a1|O:java.lang.Boolean:true||" + expectedValue + "|" + expectedCapture
+                + "|" + expectedValue, render(jar, true));
+    }
+
+    @Test
     void deferredTranslationRejectsWrongSyntaxVoidLiteralsAndInvalidCoercion() throws Exception {
         prepareDeferredTags();
         for (String tag : List.of("<d:value value='${1}'/>", "<d:method action='${callback}'/>",

@@ -1,5 +1,20 @@
 # BUG.md — Ibarra
 
+## IBARRA-156 · 2026-10-24 · Constant EL expression on a deferred attribute fails page compilation
+
+- Symptom: a constant expression on a deferred-value attribute (for example
+  `<c:set var='idNum' value='${1}'/>`, found by Bodoni's official Tags TCK) fails
+  translation with "constructor …$ExpressionN … cannot be applied to given types".
+- Minimal repro: `PagePrecompilerTest.deferredAttributesAcceptConstantExpressions`
+  (`d:mixed` with `${1}`, `a${1}`, `${true}`, `${null}`; `d:value` `#{1}`; `d:capture`
+  `#{"a"}`; a named `<jsp:attribute>`).
+- Cause: Peano COMP-010. `PageGenerator` emits `new …$ExpressionN(ELContext, Class)`
+  for every deferred expression, but Peano generated only `(Class)` for constants.
+  Ibarra's code is correct.
+- Status: FIXED by the Peano companion branch `fix/deferred-constant-ctor`. This
+  branch adds the regression test, red against Peano `main`, green with the fix.
+  Dynamic attributes are not covered: they take no deferred expression.
+
 ## IBARRA-155 · 2026-10-23 · Uncompiled TLD tag files report a stale validator diagnostic
 
 - Symptom: invoking a TLD `<tag-file>` entry whose resource was not compiled (for
