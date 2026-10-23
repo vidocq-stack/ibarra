@@ -46,6 +46,23 @@ class PagesContainerTest {
     }
 
     @Test
+    void hostGuardRefusesExactlyTheBuildTooling() throws Exception {
+        String main;
+        try (var input = PagesContainer.class.getResourceAsStream("host/host/Main.java")) {
+            assertNotNull(input, "packaged host Main.java");
+            main = new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        }
+        var guard = java.util.regex.Pattern.compile("for \\(String forbidden : List\\.of\\(([^)]*)\\)\\)").matcher(main);
+        assertTrue(guard.find(), "host Main guard");
+        var refused = new java.util.HashSet<String>();
+        var names = java.util.regex.Pattern.compile("\"([^\"]+)\"").matcher(guard.group(1));
+        while (names.find()) {
+            refused.add(names.group(1));
+        }
+        assertEquals(PagesContainer.BUILD_TOOLING, refused);
+    }
+
+    @Test
     void hostCommandAppendsJdkModules() {
         var command = PagesContainer.hostCommand(Path.of("/jdk/bin/java"), List.of(Path.of("/r1")),
                 List.of("java.naming", "jdk.localedata"), List.of(Path.of("/w/application")), Path.of("/w/web"), "/ctx");
