@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ibarra-arquillian — Arquillian adapter that precompiles Jakarta Pages WARs and
+    deploys them on modular Foy. Test tooling: a test-scope dependency of a TCK runner
+    or an integration test, never shipped in an application.
+
+    Class-path decision: this module has no module-info.java (and no
+    Automatic-Module-Name). Arquillian, ShrinkWrap and the official TCK clients are
+    not Java modules, so the adapter runs on the test class path, like
+    ibarra-maven-plugin runs on Maven's build class path. Its tests therefore run on
+    the class path too, without any surefire override. What the adapter deploys stays
+    strictly modular: a named tck.application module and a named tck.host module,
+    launched with limited modules and Peano reflection denied.
+
+    Reference page: docs/en/modules/ROOT/pages/modules/arquillian-adapter.adoc.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.vidocq.ibarra</groupId>
+        <artifactId>ibarra-parent</artifactId>
+        <version>0.4.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>ibarra-arquillian</artifactId>
+    <name>Ibarra :: Arquillian adapter</name>
+    <description>Arquillian adapter that precompiles Jakarta Pages WARs and deploys them on modular Foy — test tooling, never shipped in an application</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.vidocq.ibarra</groupId>
+            <artifactId>ibarra-compiler</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.vidocq.ibarra</groupId>
+            <artifactId>ibarra-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.vidocq.ibarra</groupId>
+            <artifactId>ibarra-foy</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.vidocq.foy</groupId>
+            <artifactId>foy-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.vidocq.peano</groupId>
+            <artifactId>peano-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.vidocq.chappe</groupId>
+            <artifactId>chappe-core</artifactId>
+            <version>${chappe.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jboss.arquillian.container</groupId>
+            <artifactId>arquillian-container-spi</artifactId>
+            <version>1.8.0.Final</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jboss.shrinkwrap</groupId>
+            <artifactId>shrinkwrap-impl-base</artifactId>
+            <version>1.2.6</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

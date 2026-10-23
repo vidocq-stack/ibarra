@@ -53,16 +53,10 @@
     </properties>
 
     <dependencies>
-        <dependency><groupId>io.vidocq.ibarra</groupId><artifactId>ibarra-compiler</artifactId><scope>test</scope></dependency>
-        <dependency><groupId>io.vidocq.ibarra</groupId><artifactId>ibarra-foy</artifactId><version>${project.version}</version><scope>test</scope></dependency>
-        <dependency><groupId>io.vidocq.foy</groupId><artifactId>foy-core</artifactId><scope>test</scope></dependency>
-        <dependency><groupId>io.vidocq.peano</groupId><artifactId>peano-core</artifactId><scope>test</scope></dependency>
-        <dependency><groupId>io.vidocq.chappe</groupId><artifactId>chappe-core</artifactId><version>${chappe.version}</version><scope>test</scope></dependency>
-        <dependency><groupId>org.jboss.arquillian.container</groupId><artifactId>arquillian-container-spi</artifactId><version>1.8.0.Final</version><scope>test</scope></dependency>
-        <dependency><groupId>org.jboss.shrinkwrap</groupId><artifactId>shrinkwrap-impl-base</artifactId><version>1.2.6</version><scope>test</scope></dependency>
+        <!-- The Arquillian adapter (precompiles each WAR, deploys it on modular Foy). -->
         <dependency>
             <groupId>io.vidocq.ibarra</groupId>
-            <artifactId>ibarra-core</artifactId>
+            <artifactId>ibarra-arquillian</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

@@ -61,6 +61,11 @@
             <artifactId>ibarra-foy</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.vidocq.ibarra</groupId>
+            <artifactId>ibarra-arquillian</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

@@ -95,6 +95,7 @@
         <module>ibarra-compiler</module>
         <module>ibarra-maven-plugin</module>
         <module>ibarra-foy</module>
+        <module>ibarra-arquillian</module>
     </modules>
 
     <dependencyManagement>
@@ -157,6 +158,11 @@
             <dependency>
                 <groupId>io.vidocq.ibarra</groupId>
                 <artifactId>ibarra-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.vidocq.ibarra</groupId>
+                <artifactId>ibarra-arquillian</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

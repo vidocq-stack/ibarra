@@ -171,6 +171,25 @@ javap -v -p -classpath jakarta-pages-tck-4.0.0.jar <all 92 names ending in IT.cl
 Count only annotation display lines containing exactly
 `org.junit.jupiter.api.Test`, not constant-pool references or comments in sources.
 
+## Adapter extraction check (2026-10-23)
+
+The Arquillian adapter moves from `ibarra-tck/src/test` into the published module
+`ibarra-arquillian`, with no behaviour change. The official suite runs once before the
+move, on base commit `53f9414` (the working tree held only the plan commit `3e366f1`,
+which changes no code), and once after the whole change. Both runs use:
+
+```bash
+./run-official-tck-pages-4.0.sh --no-prepare all
+```
+
+Temurin Java 25, Maven 3.9.16, macOS. Classes are the official `*IT` classes that report
+a Surefire result; the other columns are the final Surefire totals of the official
+invocation.
+
+| Run | Commit | Classes | Tests | Failures | Errors | Skipped |
+|---|---|---:|---:|---:|---:|---:|
+| before | `53f9414` | 92 | 682 | 0 | 0 | 0 |
+
 ## Passing coverage
 
 Thirty-nine classes pass completely, including JspFactory (3), JspEngineInfo (1),
