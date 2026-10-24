@@ -75,6 +75,14 @@ The final not-found resolver reads the immutable page policy before listeners
 run. Strict pages reject unresolved EL lookups; explicitly resolved nulls remain
 valid. Two pages in the same application can use different policies.
 
+Every expression evaluation ends in `ELContext.convertToType`, which asks the
+resolver chain before the factory coercion. A `CompositeELResolver` would ask all
+of its resolvers. The page chain asks only the resolvers that can convert: the
+application resolvers, the provider resolver and `OptionalELResolver`, in chain
+order. The others keep `ELResolver`'s default `convertToType`, which resolves
+nothing, so the result does not change. A test checks that default on every
+resolver the chain skips.
+
 Scope, parameter, header, cookie and initialization-parameter implicit objects
 are implemented and exercised with Peano. Headers use case-insensitive lookup.
 Page type/package imports and fixed-arity TLD function bindings are generated at

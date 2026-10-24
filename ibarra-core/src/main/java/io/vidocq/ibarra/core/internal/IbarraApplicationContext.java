@@ -111,25 +111,25 @@ final class IbarraApplicationContext implements JspApplicationContext {
 
     private ELContext createContext(PageContext page) {
         var current = registration.getAndUpdate(value -> new Registration(value.resolvers(), value.listeners(), true));
-        var resolvers = new CompositeELResolver();
-        resolvers.add(new PagesImplicitObjectResolver(page));
+        var resolvers = new PageResolverChain();
+        resolvers.addLookup(new PagesImplicitObjectResolver(page));
         for (var resolver : current.resolvers()) resolvers.add(resolver);
-        resolvers.add(new JspPropertyELResolver());
-        resolvers.add(new ServletStaticFieldELResolver());
+        resolvers.addLookup(new JspPropertyELResolver());
+        resolvers.addLookup(new ServletStaticFieldELResolver());
         var providerResolver = getExpressionFactory().getStreamELResolver();
         if (providerResolver != null) resolvers.add(providerResolver);
-        resolvers.add(new StaticFieldELResolver());
-        resolvers.add(new MapELResolver());
-        resolvers.add(new ResourceBundleELResolver());
-        resolvers.add(new ListELResolver());
-        resolvers.add(new ArrayELResolver());
-        resolvers.add(new RecordELResolver());
+        resolvers.addLookup(new StaticFieldELResolver());
+        resolvers.addLookup(new MapELResolver());
+        resolvers.addLookup(new ResourceBundleELResolver());
+        resolvers.addLookup(new ListELResolver());
+        resolvers.addLookup(new ArrayELResolver());
+        resolvers.addLookup(new RecordELResolver());
         resolvers.add(new OptionalELResolver());
-        resolvers.add(new BeanELResolver());
-        resolvers.add(new ScopedAttributeResolver(page));
-        resolvers.add(new jakarta.servlet.jsp.el.ImportELResolver());
+        resolvers.addLookup(new BeanELResolver());
+        resolvers.addLookup(new ScopedAttributeResolver(page));
+        resolvers.addLookup(new jakarta.servlet.jsp.el.ImportELResolver());
         boolean strict = page.getPage() instanceof io.vidocq.ibarra.spi.PageOptions options && options.errorOnELNotFound();
-        resolvers.add(new NotFoundELResolver(strict));
+        resolvers.addLookup(new NotFoundELResolver(strict));
         var imports = page.getPage() instanceof io.vidocq.ibarra.spi.PageOptions options && options.usesStaticELImports()
                 ? new StaticImports(options) : null;
         var context = new StandardELContext(getExpressionFactory()) {
