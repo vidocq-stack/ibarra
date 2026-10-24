@@ -114,7 +114,9 @@ class PageResolverChainTest {
             return name;
         }
         @Override public Class<?> getType(ELContext context, Object base, Object property) { return null; }
-        @Override public void setValue(ELContext context, Object base, Object property, Object value) { }
+        @Override public void setValue(ELContext context, Object base, Object property, Object value) {
+            // Read-only double: a write is left unresolved for the rest of the chain.
+        }
         @Override public boolean isReadOnly(ELContext context, Object base, Object property) { return true; }
         @Override public Class<?> getCommonPropertyType(ELContext context, Object base) { return null; }
         @Override @SuppressWarnings("unchecked") public <T> T convertToType(ELContext context, Object value, Class<T> type) {
