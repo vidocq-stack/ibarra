@@ -8,7 +8,7 @@ on:
 
 jobs:
   official-pages-tck-smoke:
-    runs-on: ubuntu-latest
+    runs-on: vidocq-runner
     steps:
       - uses: actions/checkout@v4
       - uses: https://codefloe.com/Vidocq/ci/setup-maven@main

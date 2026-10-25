@@ -60,7 +60,7 @@ jobs:
   # What the pull request is now (ready, WIP, train member), and which jobs run. No checkout: API reads only,
   # anonymous on a fork pull request (public repositories).
   pr-state:
-    runs-on: ubuntu-latest
+    runs-on: vidocq-runner
     outputs:
       state: ${{ steps.state.outputs.state }}
       run-producer: ${{ steps.state.outputs.run-producer }}
@@ -77,7 +77,7 @@ jobs:
   # cross-repo reusable workflows, so the shared logic ships as a step-level action.
   # fetch-depth: 0 is required so the action can read the BASE_REF..HEAD commit range.
   governance-checks:
-    runs-on: ubuntu-latest
+    runs-on: vidocq-runner
     steps:
       - uses: actions/checkout@v4
         with:
@@ -94,7 +94,7 @@ jobs:
   producer:
     needs: [governance-checks, pr-state]
     if: needs.pr-state.outputs.run-producer == 'true'
-    runs-on: ubuntu-latest
+    runs-on: vidocq-runner
     outputs:
       docs-only: ${{ steps.changes.outputs.docs-only }}
       test-only: ${{ steps.changes.outputs.test-only }}
@@ -299,7 +299,7 @@ jobs:
   impacted:
     needs: [governance-checks, pr-state]
     if: needs.pr-state.outputs.run-downstream == 'true'
-    runs-on: ubuntu-latest
+    runs-on: vidocq-runner
     outputs:
       matrix: ${{ steps.resolve.outputs.matrix }}
       count: ${{ steps.resolve.outputs.count }}
@@ -318,7 +318,7 @@ jobs:
   downstream:
     needs: [pr-state, producer, impacted]
     if: needs.pr-state.outputs.run-downstream == 'true' && needs.producer.outputs.docs-only != 'true' && needs.producer.outputs.test-only != 'true' && needs.producer.outputs.reused != 'true' && needs.impacted.outputs.count != '0'
-    runs-on: ubuntu-latest
+    runs-on: vidocq-runner
     strategy:
       fail-fast: false          # report every broken consumer at once
       max-parallel: 6           # 6 of the org's ~20 slots
@@ -344,7 +344,7 @@ jobs:
   pr-validate:
     needs: [governance-checks, pr-state, producer, impacted, downstream]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: vidocq-runner
     steps:
       # The shared producer artifacts are only needed during the run. Never fails; independent of the
       # verdict below, which reads `needs` only.
