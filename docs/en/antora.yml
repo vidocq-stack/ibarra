@@ -1,13 +1,14 @@
 name: ibarra
 title: Ibarra
-version: dev
+version: '0.4.0-RC1'
 prerelease: true
 nav:
   - modules/ROOT/nav.adoc
 asciidoc:
   attributes:
     lang: en
-    project-version: 0.4.0-SNAPSHOT
+    project-version: 0.4.0-RC1
+    release-version: 0.4.0-RC1
     # Not defined by the vidocq-docs playbook yet: declared here so the links render.
     repo-ibarra: https://codefloe.com/Vidocq/ibarra
     spec-pages-4-0: https://jakarta.ee/specifications/pages/4.0/
