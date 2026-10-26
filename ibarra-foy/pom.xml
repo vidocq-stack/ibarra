@@ -3,7 +3,7 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <parent><groupId>io.vidocq.ibarra</groupId><artifactId>ibarra-parent</artifactId><version>0.4.0-SNAPSHOT</version></parent>
+    <parent><groupId>io.vidocq.ibarra</groupId><artifactId>ibarra-parent</artifactId><version>0.4.0-RC1</version></parent>
     <artifactId>ibarra-foy</artifactId>
     <name>Ibarra :: Foy binding</name>
     <description>Precompiled page engine provider for Foy's application lifecycle</description>
