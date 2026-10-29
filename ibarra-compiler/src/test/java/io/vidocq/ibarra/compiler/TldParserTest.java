@@ -143,6 +143,12 @@ class TldParserTest {
                 "<validator><validator-class>example.A</validator-class><validator-class>example.B</validator-class></validator>",
                 "<validator><validator-class>example.A</validator-class><init-param><param-name>x</param-name><param-value>1</param-value></init-param><init-param><param-name>x</param-name><param-value>2</param-value></init-param></validator>",
                 "<validator><validator-class>not a class</validator-class></validator>",
+                "<validator><validator-class>example.A</validator-class><init-param><param-name>x</param-name><param-name>y</param-name><param-value>1</param-value></init-param></validator>",
+                "<validator><validator-class>example.A</validator-class><init-param><param-name>x</param-name><param-value>1</param-value><param-value>2</param-value></init-param></validator>",
+                "<validator><validator-class>example.A</validator-class><init-param><param-name>x</param-name></init-param></validator>",
+                "<validator><validator-class>example.A</validator-class><init-param><param-value>1</param-value></init-param></validator>",
+                "<tag><name>x</name><tag-class>example.Handler</tag-class><icon><small-icon>/a.png</small-icon><small-icon>/b.png</small-icon></icon></tag>",
+                "<tag><name>x</name><tag-class>example.Handler</tag-class><icon><large-icon>/a.png</large-icon><large-icon>/b.png</large-icon></icon></tag>",
                 "<uri>urn:a</uri><uri>urn:b</uri>",
                 "<tag><name>x</name><tag-class>example.Handler</tag-class><variable><name-given>v</name-given><scope>BAD</scope></variable></tag>",
                 "<tag><name>x</name><tag-class>example.Handler</tag-class><variable><name-given>v</name-given></variable><variable><name-given>v</name-given></variable></tag>")) {

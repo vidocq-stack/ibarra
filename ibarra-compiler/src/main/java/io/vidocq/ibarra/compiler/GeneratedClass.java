@@ -38,8 +38,12 @@ public record GeneratedClass(String className, byte[] bytes) {
     }
     @Override public byte[] bytes() { return bytes.clone(); }
     @Override public boolean equals(Object other) {
-        return other instanceof GeneratedClass generated && className.equals(generated.className)
-                && Arrays.equals(bytes, generated.bytes);
+        return other instanceof GeneratedClass(var otherName, var otherBytes) && className.equals(otherName)
+                && Arrays.equals(bytes, otherBytes);
     }
     @Override public int hashCode() { return 31 * className.hashCode() + Arrays.hashCode(bytes); }
+    @Override public String toString() {
+        return "GeneratedClass[className=" + className + ", bytes=" + bytes.length + " bytes, hash="
+                + Integer.toHexString(Arrays.hashCode(bytes)) + "]";
+    }
 }

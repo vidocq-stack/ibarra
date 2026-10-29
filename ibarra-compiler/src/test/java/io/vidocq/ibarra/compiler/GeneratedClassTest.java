@@ -40,6 +40,14 @@ class GeneratedClassTest {
         var equivalent = new GeneratedClass("example.Expression", original);
         assertEquals(equivalent, generated); assertEquals(equivalent.hashCode(), generated.hashCode());
     }
+    @Test void textualFormDescribesTheBytecodeContentRatherThanTheArrayIdentity() {
+        byte[] bytes = io.vidocq.peano.compiler.ExpressionCompiler.compile("example.Expression", "${1+2}");
+        var generated = new GeneratedClass("example.Expression", bytes);
+        var equivalent = new GeneratedClass("example.Expression", bytes.clone());
+        assertEquals(equivalent.toString(), generated.toString());
+        assertTrue(generated.toString().contains("example.Expression"));
+        assertTrue(generated.toString().contains(bytes.length + " bytes"));
+    }
     @Test void mismatchedClassNamesAreRejected() {
         byte[] bytes = io.vidocq.peano.compiler.ExpressionCompiler.compile("example.Expression", "${1+2}");
         assertThrows(IllegalArgumentException.class, () -> new GeneratedClass("example.Other", bytes));

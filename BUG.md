@@ -1,5 +1,19 @@
 # BUG.md — Ibarra
 
+## IBARRA-157 · 2026-10-29 · Equal generated classes print different textual forms
+
+- Symptom: two equal `GeneratedClass` values (same class name, same bytecode) print
+  different `toString()` results, such as `bytes=[B@76304b46` and `bytes=[B@2fa3be26`:
+  the record's implicit `toString` shows the array identity, while `equals` and
+  `hashCode` compare the bytecode content. Diagnostics that log a generated class are
+  not reproducible between runs. Reported by SonarQube as `java:S6218`.
+- Minimal repro:
+  `GeneratedClassTest.textualFormDescribesTheBytecodeContentRatherThanTheArrayIdentity`.
+- Cause: the record overrides `equals`/`hashCode` for its `byte[]` component but not
+  `toString`.
+- Status: FIXED (2026-10-29). `toString` names the class, the bytecode length and the
+  content hash, consistent with `equals`; the regression test was red before the fix.
+
 ## IBARRA-156 · 2026-10-24 · Constant EL expression on a deferred attribute fails page compilation
 
 - Symptom: a constant expression on a deferred-value attribute (for example
