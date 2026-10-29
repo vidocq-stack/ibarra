@@ -84,7 +84,8 @@ class BeanScopeLockTest {
         assertNotNull(access.beanScopeLock(PageContext.APPLICATION_SCOPE));
         page.release();
         assertThrows(IllegalStateException.class, () -> access.beanScopeLock(PageContext.APPLICATION_SCOPE));
-        assertThrows(IllegalStateException.class, () -> ((BeanScopeContext) new IbarraPageContext()).beanScopeLock(PageContext.APPLICATION_SCOPE));
+        var uninitialized = (BeanScopeContext) new IbarraPageContext();
+        assertThrows(IllegalStateException.class, () -> uninitialized.beanScopeLock(PageContext.APPLICATION_SCOPE));
     }
 
     private PageContext page(IbarraJspFactory factory, ServletDoubles.Context context, boolean session) throws Exception {

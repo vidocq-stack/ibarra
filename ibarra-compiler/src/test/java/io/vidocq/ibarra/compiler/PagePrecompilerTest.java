@@ -107,11 +107,13 @@ class PagePrecompilerTest {
         byte[] manifest = Files.readAllBytes(classes.resolveSibling("classes.ibarra-manifest"));
         var invalid = List.of(Map.of("el-ignored", "maybe"), Map.of("buffer", "bogus"), Map.of("buffer", "0kb"),
                 Map.of("buffer", "2147483647kb"), Map.of("page-encoding", "not-a-real-charset"), Map.of("unknown", "true"));
+        var precompiler = new PagePrecompiler();
+        var modulePaths = modulePaths();
         for (boolean empty : List.of(false, true)) {
             if (empty) Files.delete(web.resolve("index.jsp"));
             for (var properties : invalid) {
                 var options = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"), properties, List.of(), List.of())), Map.of());
-                assertThrows(PageParseException.class, () -> new PagePrecompiler().precompileDeployment(web, classes, modulePaths(), "demo.generated", options), properties.toString());
+                assertThrows(PageParseException.class, () -> precompiler.precompileDeployment(web, classes, modulePaths, "demo.generated", options), properties.toString());
                 assertArrayEquals(descriptor, Files.readAllBytes(classes.resolve("module-info.class")));
                 assertArrayEquals(manifest, Files.readAllBytes(classes.resolveSibling("classes.ibarra-manifest")));
             }
@@ -132,7 +134,8 @@ class PagePrecompilerTest {
         assertEquals(Set.of("/broken.jsp", "/missing.jsp", "/javac.jsp"), result.failures().keySet());
         assertEquals(4, result.pages().pagePaths().size());
         assertTrue(result.failures().get("/javac.jsp").contains("javac.jsp"));
-        assertThrows(UnsupportedOperationException.class, () -> result.failures().clear());
+        var failures = result.failures();
+        assertThrows(UnsupportedOperationException.class, failures::clear);
         Path jar = directory.resolve("partial.jar"); jar(classes, jar); assertEquals("ready", render(jar, true));
         Files.writeString(web.resolve("javac.jsp"), "fixed");
         var repaired = new PagePrecompiler().precompileDeployment(web, classes, modulePaths(), "demo.generated", GenerationOptions.DEFAULT);
@@ -1098,8 +1101,11 @@ class PagePrecompilerTest {
         assertThrows(PageParseException.class, this::precompile);
         assertArrayEquals(module, Files.readAllBytes(classes.resolve("module-info.class")));
         assertEquals(before, classFiles());
-        assertThrows(IllegalArgumentException.class, () -> new PagePrecompiler().precompile(web, classes,
-                modulePaths(), "demo.generated", GenerationOptions.DEFAULT.withStartupEl(true)));
+        var precompiler = new PagePrecompiler();
+        var modulePaths = modulePaths();
+        var startupEl = GenerationOptions.DEFAULT.withStartupEl(true);
+        assertThrows(IllegalArgumentException.class, () -> precompiler.precompile(web, classes,
+                modulePaths, "demo.generated", startupEl));
     }
 
     @Test

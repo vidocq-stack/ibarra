@@ -39,8 +39,9 @@ class TranslationUnitTest {
         var options = new GenerationOptions(List.of(new JspPropertyGroup(List.of(path),
                 Map.of("is-xml", "false"), List.of(), List.of())), Map.of());
 
+        var unit = new TranslationUnit(options);
         var failure = assertThrows(PageParseException.class,
-                () -> new TranslationUnit(options).read(path, source));
+                () -> unit.read(path, source));
 
         assertEquals(path, failure.location().source());
     }

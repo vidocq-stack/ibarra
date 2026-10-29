@@ -54,7 +54,8 @@ class TldParserTest {
         assertEquals("/WEB-INF/test.tld", library.resourcePath());
         assertEquals("urn:test", library.uri());
         assertEquals(List.of("example.Startup", "example.Outer$Listener"), library.listenerClasses());
-        assertThrows(UnsupportedOperationException.class, () -> library.listenerClasses().clear());
+        var listenerClasses = library.listenerClasses();
+        assertThrows(UnsupportedOperationException.class, listenerClasses::clear);
     }
 
     @Test
@@ -72,7 +73,8 @@ class TldParserTest {
         assertEquals(new TagLibraryValidatorDescriptor("example.PageValidator", Map.of("mode", "strict", "empty", "")),
                 library.validator());
         assertTrue(library.validationRequired());
-        assertThrows(UnsupportedOperationException.class, () -> library.validator().initParameters().clear());
+        var initParameters = library.validator().initParameters();
+        assertThrows(UnsupportedOperationException.class, initParameters::clear);
     }
 
     @Test
@@ -95,7 +97,8 @@ class TldParserTest {
         assertFalse(tag.unsupportedMetadata());
         assertEquals(List.of(new TagVariableDescriptor("begin", "java.lang.Integer", true, TagVariableDescriptor.AT_BEGIN)),
                 tag.variables());
-        assertThrows(UnsupportedOperationException.class, () -> tag.variables().clear());
+        var variables = tag.variables();
+        assertThrows(UnsupportedOperationException.class, variables::clear);
     }
 
     @Test

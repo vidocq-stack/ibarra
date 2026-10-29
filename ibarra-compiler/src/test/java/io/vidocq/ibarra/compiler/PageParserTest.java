@@ -159,11 +159,14 @@ class PageParserTest {
     @Test
     void pageModelCollectionsCannotBeMutated() {
         var page = parser.parse("/immutable.jsp", "<%@ page language='java' %><jsp:include page='part.jsp'/>");
-        assertThrows(UnsupportedOperationException.class, () -> page.nodes().clear());
-        var directive = assertInstanceOf(PageNode.Directive.class, page.nodes().getFirst());
-        assertThrows(UnsupportedOperationException.class, () -> directive.attributes().put("x", "y"));
-        var element = assertInstanceOf(PageNode.Element.class, page.nodes().get(1));
-        assertThrows(UnsupportedOperationException.class, () -> element.children().clear());
+        var nodes = page.nodes();
+        assertThrows(UnsupportedOperationException.class, nodes::clear);
+        var directive = assertInstanceOf(PageNode.Directive.class, nodes.getFirst());
+        var attributes = directive.attributes();
+        assertThrows(UnsupportedOperationException.class, () -> attributes.put("x", "y"));
+        var element = assertInstanceOf(PageNode.Element.class, nodes.get(1));
+        var children = element.children();
+        assertThrows(UnsupportedOperationException.class, children::clear);
     }
 
     @Test
@@ -348,8 +351,8 @@ class PageParserTest {
     void doctypeIsRejectedBeforeAReadableExternalEntityCouldBeUsed(@TempDir Path directory) throws Exception {
         var entity = directory.resolve("entity.txt");
         Files.writeString(entity, "EXTERNAL_ENTITY_MARKER");
-        var error = assertThrows(PageParseException.class, () -> parser.parse("/external.jspx",
-                "<!DOCTYPE p [<!ENTITY x SYSTEM '" + entity.toUri() + "'>]><p>&x;</p>"));
+        String external = "<!DOCTYPE p [<!ENTITY x SYSTEM '" + entity.toUri() + "'>]><p>&x;</p>";
+        var error = assertThrows(PageParseException.class, () -> parser.parse("/external.jspx", external));
         assertTrue(error.getMessage().contains("DOCTYPE declarations are not supported"));
         for (String declaration : List.of("<!DOCTYPE p SYSTEM '" + entity.toUri() + "'>",
                 "<!DOCTYPE p [<!ENTITY x 'internal'>]>")) {

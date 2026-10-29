@@ -27,7 +27,8 @@ class TldFunctionTest {
     @Test void functionMetadataIsImmutableAndUsesDeclaredAliases() {
         var library=parse("<function><name>alias</name><function-class>example.Functions</function-class><function-signature>int actual(int)</function-signature></function>");
         assertEquals(new TldFunction("alias","example.Functions","int actual(int)"),library.functions().get("alias"));
-        assertThrows(UnsupportedOperationException.class,()->library.functions().clear());
+        var functions=library.functions();
+        assertThrows(UnsupportedOperationException.class,functions::clear);
     }
     @Test void malformedAndDuplicateFunctionDeclarationsFailTranslation() {
         for(String source:java.util.List.of("<function><name>x</name></function>",

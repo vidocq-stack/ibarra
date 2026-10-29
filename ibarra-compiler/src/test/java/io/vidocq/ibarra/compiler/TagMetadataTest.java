@@ -86,8 +86,10 @@ class TagMetadataTest {
         assertEquals("java.lang.String", tag.attributes().get("label").type());
         assertFalse(tag.attributes().get("label").required());
         assertEquals("java.lang.Object", tag.attributes().get("runtime").type());
-        assertThrows(UnsupportedOperationException.class, () -> library.tags().clear());
-        assertThrows(UnsupportedOperationException.class, () -> tag.attributes().clear());
+        var tags = library.tags();
+        assertThrows(UnsupportedOperationException.class, tags::clear);
+        var attributes = tag.attributes();
+        assertThrows(UnsupportedOperationException.class, attributes::clear);
     }
     @Test
     void fragmentAttributesAndLibraryValidationRemainVisibleToTranslation() {

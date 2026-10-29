@@ -49,13 +49,19 @@ class GeneratedClassTest {
         var source = new GeneratedPage("example.Expression", "package example; public class Expression {}",
                 Map.of(), List.of(new GeneratedClass("example.Expression", bytes)));
         Path output = directory.resolve("output");
-        assertThrows(IllegalArgumentException.class, () -> new PageCompiler().compile(List.of(source), output, List.of()));
+        var compiler = new PageCompiler();
+        var sources = List.of(source);
+        List<String> compilerOptions = List.of();
+        assertThrows(IllegalArgumentException.class, () -> compiler.compile(sources, output, compilerOptions));
         assertFalse(Files.exists(output));
     }
     @Test void javacNestedClassesCannotReplaceAuxiliaryBytecode() {
         byte[] bytes = io.vidocq.peano.compiler.ExpressionCompiler.compile("example.Page$Expression0", "${1+2}");
         var source = new GeneratedPage("example.Page", "package example; public class Page { public static class Expression0 {} }",
                 Map.of(), List.of(new GeneratedClass("example.Page$Expression0", bytes)));
-        assertThrows(IllegalArgumentException.class, () -> new PageCompiler().compile(List.of(source), directory, List.of()));
+        var compiler = new PageCompiler();
+        var sources = List.of(source);
+        List<String> compilerOptions = List.of();
+        assertThrows(IllegalArgumentException.class, () -> compiler.compile(sources, directory, compilerOptions));
     }
 }

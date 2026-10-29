@@ -28,6 +28,7 @@ import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.api.io.TempDir;
 
 class PageGeneratorTest {
@@ -77,7 +78,7 @@ class PageGeneratorTest {
     void jspRootRejectsAnUnsupportedVersion() {
         String xml = "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' version='999.2'><status>Test FAILED</status></jsp:root>";
         assertThrows(PageParseException.class,
-                () -> generator().generate("/invalid-version.jspx", xml, PAGE_CLASS, GenerationOptions.DEFAULT));
+                generation("/invalid-version.jspx", xml, GenerationOptions.DEFAULT));
     }
 
     @Test
@@ -145,7 +146,7 @@ class PageGeneratorTest {
         var options = new GenerationOptions(List.of(), Map.of("/included.jspx",
                 "<jsp:output xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' omit-xml-declaration='false'/>"));
         var failure = assertThrows(PageParseException.class,
-                () -> generator().generate("/document.jspx", source, PAGE_CLASS, options));
+                generation("/document.jspx", source, options));
         assertTrue(failure.getMessage().contains("/included.jspx"), failure.getMessage());
         assertTrue(failure.getMessage().contains("Conflicting omit-xml-declaration"), failure.getMessage());
     }
@@ -157,7 +158,7 @@ class PageGeneratorTest {
                     + "<jsp:output omit-xml-declaration='" + values[0] + "'/>"
                     + "<jsp:output omit-xml-declaration='" + values[1] + "'/></jsp:root>";
             assertThrows(PageParseException.class,
-                    () -> generator().generate("/document.jspx", source, PAGE_CLASS, GenerationOptions.DEFAULT));
+                    generation("/document.jspx", source, GenerationOptions.DEFAULT));
         }
     }
 
@@ -338,7 +339,7 @@ class PageGeneratorTest {
         var options = new GenerationOptions(List.of(), Map.of("/part.jspf", "<%! String word = \"included\"; %><%= word %>"));
         var generated = generator().generate("/main.jsp", "<%@ page session='false' %>A<%@ include file='part.jspf' %>B", PAGE_CLASS, options);
         assertEquals("AincludedB", run(generated, "", ""));
-        assertThrows(PageParseException.class, () -> generator().generate("/main.jsp", "<%@ include file='part.jspf' %>", PAGE_CLASS,
+        assertThrows(PageParseException.class, generation("/main.jsp", "<%@ include file='part.jspf' %>",
                 new GenerationOptions(List.of(), Map.of("/part.jspf", "<%@ include file='main.jsp' %>", "/main.jsp", "<%@ include file='part.jspf' %>"))));
     }
 
@@ -346,19 +347,21 @@ class PageGeneratorTest {
     void rejectsUnsupportedActionsInvalidNamesAndDisallowedScriptingWithSourceLocations() {
         for (String source : List.of("<jsp:plugin/>", "<jsp:unknown/>", "<c:tag/>", "<%@ page language='groovy' %>")) {
             String page = source.startsWith("<c:") ? "<%@ taglib prefix='c' uri='urn:custom' %>" + source : source;
-            assertThrows(PageParseException.class, () -> generator().generate("/bad.jsp", page, PAGE_CLASS, GenerationOptions.DEFAULT));
+            assertThrows(PageParseException.class, generation("/bad.jsp", page, GenerationOptions.DEFAULT));
         }
-        assertThrows(IllegalArgumentException.class, () -> generator().generate("/x.jsp", "text", "not-a-name", GenerationOptions.DEFAULT));
+        var pageGenerator = generator();
+        assertThrows(IllegalArgumentException.class, () -> pageGenerator.generate("/x.jsp", "text", "not-a-name", GenerationOptions.DEFAULT));
         var options = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"),
                 Map.of("scripting-invalid", "true"), List.of(), List.of())), Map.of());
-        var error = assertThrows(PageParseException.class, () -> generator().generate("/bad.jsp", "\n<%= 1 %>", PAGE_CLASS, options));
+        var error = assertThrows(PageParseException.class, generation("/bad.jsp", "\n<%= 1 %>", options));
         assertEquals(2, error.location().line());
     }
 
     @Test
     void compilerErrorsMapBackToJspSourceAndGeneratedClassesAreJava25() throws Exception {
         var bad = generator().generate("/broken.jsp", "<%@ page session='false' %>\n<% nonexistent(); %>", PAGE_CLASS, GenerationOptions.DEFAULT);
-        var failure = assertThrows(PageCompilationException.class, () -> compile(List.of(bad)));
+        var badPages = List.of(bad);
+        var failure = assertThrows(PageCompilationException.class, () -> compile(badPages));
         assertTrue(failure.getMessage().contains("/broken.jsp:2"));
         var good = generator().generate("/ok.jsp", "<%@ page session='false' %>ok", PAGE_CLASS, GenerationOptions.DEFAULT);
         compile(List.of(good));
@@ -411,9 +414,8 @@ class PageGeneratorTest {
     void strictMissingElPolicyIsSupportedAndSessionlessSessionBeansAreRejected() {
         assertDoesNotThrow(() -> generator().generate("/missing.jsp",
                 "<%@ page errorOnELNotFound='true' %>literal", PAGE_CLASS, GenerationOptions.DEFAULT));
-        assertThrows(PageParseException.class, () -> generator().generate("/session.jsp",
-                "<%@ page session='false' %><jsp:useBean id='bean' type='fixture.Bean' scope='session'/>",
-                PAGE_CLASS, GenerationOptions.DEFAULT));
+        assertThrows(PageParseException.class, generation("/session.jsp",
+                "<%@ page session='false' %><jsp:useBean id='bean' type='fixture.Bean' scope='session'/>", GenerationOptions.DEFAULT));
     }
 
     @Test
@@ -422,7 +424,8 @@ class PageGeneratorTest {
                 "public void service(jakarta.servlet.ServletRequest request, jakarta.servlet.ServletResponse response) {}")) {
             var generated = generator().generate("/lifecycle.jsp", "<%@ page session='false' %><%! " + declaration + " %>",
                     PAGE_CLASS, GenerationOptions.DEFAULT);
-            assertThrows(PageCompilationException.class, () -> compile(List.of(generated)));
+            var pages = List.of(generated);
+            assertThrows(PageCompilationException.class, () -> compile(pages));
         }
     }
 
@@ -633,8 +636,8 @@ class PageGeneratorTest {
     @Test
     void cyclicIncludeIsDetectedWithoutRequiringTheRootInTheSourceMap() {
         var options = new GenerationOptions(List.of(), Map.of("/part.jspf", "<%@ include file='main.jsp' %>"));
-        var failure = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
-                "<%@ include file='part.jspf' %>", PAGE_CLASS, options));
+        var failure = assertThrows(PageParseException.class, generation("/main.jsp",
+                "<%@ include file='part.jspf' %>", options));
         assertTrue(failure.getMessage().contains("Recursive"));
     }
 
@@ -661,7 +664,7 @@ class PageGeneratorTest {
     void undeclaredNamespacesFailOnlyWhenConfiguredAndKeepTheirSourceLocation() {
         var strict = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"),
                 Map.of("error-on-undeclared-namespace", "true"), List.of(), List.of())), Map.of());
-        var error = assertThrows(PageParseException.class, () -> generator().generate("/names.jsp", "first\n<x:item/>", PAGE_CLASS, strict));
+        var error = assertThrows(PageParseException.class, generation("/names.jsp", "first\n<x:item/>", strict));
         assertTrue(error.getMessage().contains("Undeclared namespace prefix: x"));
         assertEquals(2, error.location().line());
         assertEquals(1, error.location().column());
@@ -675,12 +678,12 @@ class PageGeneratorTest {
         var strict = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"),
                 Map.of("error-on-undeclared-namespace", "true"), List.of(), List.of())),
                 Map.of("/tags.jspf", "<%@ taglib prefix='c' uri='urn:custom' %>"));
-        var error = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
-                "<%@ include file='tags.jspf' %><c:item/>", PAGE_CLASS, strict));
+        var error = assertThrows(PageParseException.class, generation("/main.jsp",
+                "<%@ include file='tags.jspf' %><c:item/>", strict));
         assertTrue(error.getMessage().contains("No build-time tag library"));
         assertEquals("/main.jsp", error.location().source());
-        var later = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
-                "<c:item/><%@ include file='tags.jspf' %>", PAGE_CLASS, strict));
+        var later = assertThrows(PageParseException.class, generation("/main.jsp",
+                "<c:item/><%@ include file='tags.jspf' %>", strict));
         assertTrue(later.getMessage().contains("Taglib directive must precede"));
     }
 
@@ -692,14 +695,14 @@ class PageGeneratorTest {
             var options = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"),
                     Map.of(name, "yes"), List.of(), List.of())), Map.of());
             var error = assertThrows(PageParseException.class,
-                    () -> generator().generate("/policy.jsp", "plain", PAGE_CLASS, options), name);
+                    generation("/policy.jsp", "plain", options), name);
             assertEquals(new SourceLocation("/policy.jsp", 1, 1), error.location());
             assertTrue(error.getMessage().contains(name));
         }
         for (String name : List.of("session", "autoFlush", "isErrorPage", "isELIgnored",
                 "deferredSyntaxAllowedAsLiteral", "trimDirectiveWhitespaces", "errorOnELNotFound")) {
-            var error = assertThrows(PageParseException.class, () -> generator().generate("/policy.jsp",
-                    "first\n<%@ page " + name + "='yes' %>", PAGE_CLASS, GenerationOptions.DEFAULT), name);
+            var error = assertThrows(PageParseException.class, generation("/policy.jsp",
+                    "first\n<%@ page " + name + "='yes' %>", GenerationOptions.DEFAULT), name);
             assertEquals(new SourceLocation("/policy.jsp", 2, 1), error.location());
             assertTrue(error.getMessage().contains(name));
         }
@@ -710,11 +713,11 @@ class PageGeneratorTest {
         var strict = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"),
                 Map.of("error-on-undeclared-namespace", "true"), List.of(), List.of())),
                 Map.of("/fragment.jspf", "first\n<x:item/>"));
-        var error = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
-                "<%@ include file='fragment.jspf' %>", PAGE_CLASS, strict));
+        var error = assertThrows(PageParseException.class, generation("/main.jsp",
+                "<%@ include file='fragment.jspf' %>", strict));
         assertEquals(new SourceLocation("/fragment.jspf", 2, 1), error.location());
-        assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
-                "<!-- <x:item/> -->", PAGE_CLASS, strict));
+        assertThrows(PageParseException.class, generation("/main.jsp",
+                "<!-- <x:item/> -->", strict));
         assertDoesNotThrow(() -> generator().generate("/main.jsp", "<http://example>", PAGE_CLASS, strict));
     }
 
@@ -732,13 +735,13 @@ class PageGeneratorTest {
 
     @Test
     void duplicateAndUnknownEncodingsFailAtTheOwningDirective() {
-        var duplicate = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
-                "<%@ page pageEncoding='UTF-8' %>\n<%@ page pageEncoding='UTF-8' %>", PAGE_CLASS, GenerationOptions.DEFAULT));
+        var duplicate = assertThrows(PageParseException.class, generation("/main.jsp",
+                "<%@ page pageEncoding='UTF-8' %>\n<%@ page pageEncoding='UTF-8' %>", GenerationOptions.DEFAULT));
         assertEquals(new SourceLocation("/main.jsp", 2, 1), duplicate.location());
         assertTrue(duplicate.getMessage().contains("once per file"));
         var options = new GenerationOptions(List.of(), Map.of("/part.jspf", "first\n<%@ page pageEncoding='not-an-encoding' %>"));
-        var unknown = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
-                "<%@ include file='part.jspf' %>", PAGE_CLASS, options));
+        var unknown = assertThrows(PageParseException.class, generation("/main.jsp",
+                "<%@ include file='part.jspf' %>", options));
         assertEquals(new SourceLocation("/part.jspf", 2, 1), unknown.location());
     }
 
@@ -776,8 +779,8 @@ class PageGeneratorTest {
     @Test
     void malformedIncludedXmlKeepsTheIncludedResourcesLocation() {
         var options = new GenerationOptions(List.of(), Map.of("/part.jspx", "<root>\n<bad></root>"));
-        var error = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
-                "<%@ include file='part.jspx' %>", PAGE_CLASS, options));
+        var error = assertThrows(PageParseException.class, generation("/main.jsp",
+                "<%@ include file='part.jspx' %>", options));
         assertEquals("/part.jspx", error.location().source());
         assertEquals(2, error.location().line());
     }
@@ -785,21 +788,21 @@ class PageGeneratorTest {
     @Test
     void invalidBufferAndUnknownGroupKeysHaveTranslationDiagnostics() {
         var options = new GenerationOptions(List.of(), Map.of("/part.jspf", "first\n<%@ page buffer='huge' %>"));
-        var buffer = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
-                "<%@ include file='part.jspf' %>", PAGE_CLASS, options));
+        var buffer = assertThrows(PageParseException.class, generation("/main.jsp",
+                "<%@ include file='part.jspf' %>", options));
         assertEquals(new SourceLocation("/part.jspf", 2, 1), buffer.location());
         var typo = new GenerationOptions(List.of(new JspPropertyGroup(List.of("*.jsp"),
                 Map.of("error-on-el-not-fond", "true"), List.of(), List.of())), Map.of());
-        var error = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp", "plain", PAGE_CLASS, typo));
+        var error = assertThrows(PageParseException.class, generation("/main.jsp", "plain", typo));
         assertTrue(error.getMessage().contains("error-on-el-not-fond"));
     }
 
     @Test
     void standardTaglibCannotRedefineAnEnclosingXmlNamespace() {
         var options = new GenerationOptions(List.of(), Map.of("/tags.jspf", "<%@ taglib prefix='c' uri='urn:other' %>"));
-        var error = assertThrows(PageParseException.class, () -> generator().generate("/main.jspx",
+        var error = assertThrows(PageParseException.class, generation("/main.jspx",
                 "<jsp:root xmlns:jsp='" + PageParser.JSP_NAMESPACE + "' xmlns:c='urn:existing' version='4.0'>"
-                + "<jsp:directive.include file='tags.jspf'/></jsp:root>", PAGE_CLASS, options));
+                + "<jsp:directive.include file='tags.jspf'/></jsp:root>", options));
         assertEquals("/tags.jspf", error.location().source());
         assertTrue(error.getMessage().contains("Conflicting taglib prefix"));
         var same = new GenerationOptions(List.of(), Map.of("/tags.jspf", "<%@ taglib prefix='c' uri='urn:existing' %>"));
@@ -812,8 +815,8 @@ class PageGeneratorTest {
         var options = new GenerationOptions(List.of(), Map.of("/part.jspx", "<p>text</p>",
                 "/tags.jspf", "<%@ taglib prefix='c' uri='urn:custom' %><c:item/>"));
         assertEquals("<p>text</p>", run(generator().generate("/main.jsp", "<%@ include file='part.jspx' %>", PAGE_CLASS, options), "", ""));
-        var error = assertThrows(PageParseException.class, () -> generator().generate("/main.jspx",
-                "<j:root xmlns:j='" + PageParser.JSP_NAMESPACE + "' version='4.0'><j:directive.include file='tags.jspf'/></j:root>", PAGE_CLASS, options));
+        var error = assertThrows(PageParseException.class, generation("/main.jspx",
+                "<j:root xmlns:j='" + PageParser.JSP_NAMESPACE + "' version='4.0'><j:directive.include file='tags.jspf'/></j:root>", options));
         assertTrue(error.getMessage().contains("No build-time tag library"));
     }
 
@@ -826,16 +829,16 @@ class PageGeneratorTest {
 
     @Test
     void defaultJspNamespacesStillValidateFileLocalEncodings() {
-        var error = assertThrows(PageParseException.class, () -> generator().generate("/main.jspx",
+        var error = assertThrows(PageParseException.class, generation("/main.jspx",
                 "<root xmlns='" + PageParser.JSP_NAMESPACE + "' version='4.0'>\n"
-                + "<directive.page pageEncoding='not-an-encoding'/></root>", PAGE_CLASS, GenerationOptions.DEFAULT));
+                + "<directive.page pageEncoding='not-an-encoding'/></root>", GenerationOptions.DEFAULT));
         assertEquals(new SourceLocation("/main.jspx", 2, 1), error.location());
         String prefix = "<root xmlns='" + PageParser.JSP_NAMESPACE + "' version='4.0'>\n";
         for (String directives : List.of("<directive.page pageEncoding='not-an-encoding'/>",
                 "<directive.page pageEncoding='UTF-8'/><directive.page pageEncoding='UTF-8'/>")) {
             var options = new GenerationOptions(List.of(), Map.of("/part.jspx", prefix + directives + "</root>"));
-            var included = assertThrows(PageParseException.class, () -> generator().generate("/main.jsp",
-                    "<%@ include file='part.jspx' %>", PAGE_CLASS, options));
+            var included = assertThrows(PageParseException.class, generation("/main.jsp",
+                    "<%@ include file='part.jspx' %>", options));
             assertEquals("/part.jspx", included.location().source());
             assertEquals(2, included.location().line());
         }
@@ -888,8 +891,9 @@ class PageGeneratorTest {
         assertEquals(options, reconstructed);
         assertEquals(options.hashCode(), reconstructed.hashCode());
         assertEquals(options, options.withStartupEl(false));
-        assertThrows(IllegalArgumentException.class, () -> new GenerationOptions(List.of(), Map.of("/part.jspf", "text"))
-                .withByteSources(Map.of("/part.jspf", bytes)));
+        var textual = new GenerationOptions(List.of(), Map.of("/part.jspf", "text"));
+        var conflicting = Map.of("/part.jspf", bytes);
+        assertThrows(IllegalArgumentException.class, () -> textual.withByteSources(conflicting));
     }
 
     @Test
@@ -925,8 +929,7 @@ class PageGeneratorTest {
         assertTrue(preview.source().contains("createValueExpression"));
     }
     @Test void invalidCompiledElKeepsTheOriginalPageLocation() {
-        var failure = assertThrows(PageParseException.class, () -> generator().generate("/bad-el.jsp", "before\n${1 + }",
-                PAGE_CLASS, GenerationOptions.DEFAULT));
+        var failure = assertThrows(PageParseException.class, generation("/bad-el.jsp", "before\n${1 + }", GenerationOptions.DEFAULT));
         assertTrue(failure.getMessage().contains("/bad-el.jsp:2:"));
     }
     @Test void defaultExplicitWildcardAndNestedImportsAreVisibleToEl() throws Exception {
@@ -1042,10 +1045,10 @@ class PageGeneratorTest {
         assertTrue(failure.getMessage().contains("Ambiguous EL import"));
     }
     @Test void staticMemberPageImportsFailTranslation() {
-        assertThrows(PageParseException.class, () -> generator().generate("/bad.jsp", "<%@ page import='static java.lang.Math.PI' %>", PAGE_CLASS, GenerationOptions.DEFAULT));
+        assertThrows(PageParseException.class, generation("/bad.jsp", "<%@ page import='static java.lang.Math.PI' %>", GenerationOptions.DEFAULT));
     }
     @Test void unavailableImportedTypesKeepDirectiveOrigins() {
-        var failure = assertThrows(PageParseException.class, () -> generator().generate("/missing-import.jsp", "before\n<%@ page import='java.util.DoesNotExist' %>", PAGE_CLASS, GenerationOptions.DEFAULT));
+        var failure = assertThrows(PageParseException.class, generation("/missing-import.jsp", "before\n<%@ page import='java.util.DoesNotExist' %>", GenerationOptions.DEFAULT));
         assertTrue(failure.getMessage().contains("/missing-import.jsp:2:"));
     }
 
@@ -1081,6 +1084,11 @@ class PageGeneratorTest {
     }
 
     private PageGenerator generator() { return new PageGenerator(List.of(directory)); }
+    /** Defers one generation, so that an expected failure can only come from {@code generate}. */
+    private Executable generation(String path, String source, GenerationOptions options) {
+        var pageGenerator = generator();
+        return () -> pageGenerator.generate(path, source, PAGE_CLASS, options);
+    }
 
     private PageGenerator generatorWithRuntimeModulePath() {
         var beanModulePath = new ArrayList<Path>();
@@ -1119,9 +1127,8 @@ class PageGeneratorTest {
     @Test
     void dynamicBeanInfoIsRejectedAtThePropertyActionInsteadOfLoadingApplicationCode() throws Exception {
         preparePropertyEditor(true);
-        var failure = assertThrows(PageParseException.class, () -> generator().generate("/dynamic.jsp",
-                "<jsp:useBean id='bean' class='fixture.EditedBean'/>\n<jsp:setProperty name='bean' property='name' value='x'/>",
-                PAGE_CLASS, GenerationOptions.DEFAULT));
+        var failure = assertThrows(PageParseException.class, generation("/dynamic.jsp",
+                "<jsp:useBean id='bean' class='fixture.EditedBean'/>\n<jsp:setProperty name='bean' property='name' value='x'/>", GenerationOptions.DEFAULT));
         assertEquals(2, failure.location().line());
         assertTrue(failure.getMessage().contains("build-time BeanInfo"));
         assertNull(System.getProperty("ibarra.editor.beaninfo.initialized"));
@@ -1141,9 +1148,8 @@ class PageGeneratorTest {
     void beanInfoNeedsAnAccessibleConstructorAndValidUnusedDescriptors() throws Exception {
         for (String shape : List.of("private-constructor", "invalid-descriptor")) {
             preparePropertyEditor(shape);
-            var failure = assertThrows(PageParseException.class, () -> generator().generate("/metadata.jsp",
-                    "<jsp:useBean id='bean' class='fixture.EditedBean'/><jsp:setProperty name='bean' property='name' value='x'/>",
-                    PAGE_CLASS, GenerationOptions.DEFAULT));
+            var failure = assertThrows(PageParseException.class, generation("/metadata.jsp",
+                    "<jsp:useBean id='bean' class='fixture.EditedBean'/><jsp:setProperty name='bean' property='name' value='x'/>", GenerationOptions.DEFAULT));
             assertTrue(failure.getMessage().contains(shape.equals("private-constructor")
                     ? "public no-argument constructor" : "missing"), failure.getMessage());
         }
@@ -1160,9 +1166,8 @@ class PageGeneratorTest {
                 public class EditedGrandchild extends EditedChild { }
                 """, Map.of())));
         for (String type : List.of("fixture.EditedChild", "fixture.EditedGrandchild")) {
-            var failure = assertThrows(PageParseException.class, () -> generator().generate("/inherited.jsp",
-                    "<jsp:useBean id='bean' class='" + type + "'/>\n<jsp:setProperty name='bean' property='name' value='x'/>",
-                    PAGE_CLASS, GenerationOptions.DEFAULT));
+            var failure = assertThrows(PageParseException.class, generation("/inherited.jsp",
+                    "<jsp:useBean id='bean' class='" + type + "'/>\n<jsp:setProperty name='bean' property='name' value='x'/>", GenerationOptions.DEFAULT));
             assertEquals(2, failure.location().line());
             assertTrue(failure.getMessage().contains("inherited build-time BeanInfo"), failure.getMessage());
             assertTrue(failure.getMessage().contains("fixture.EditedBeanBeanInfo"), failure.getMessage());

@@ -66,9 +66,12 @@ class SourceDecodingTest {
     @Test
     void bomAndDirectiveOrConfigurationConflictsAreFatal() {
         String source = "\ufeff<%@ page pageEncoding='ISO-8859-1' %>é";
-        assertThrows(PageParseException.class, () -> decode("/p.jsp", source.getBytes(StandardCharsets.UTF_8), Map.of()));
-        assertThrows(PageParseException.class, () -> decode("/p.jsp", "\ufefftext".getBytes(StandardCharsets.UTF_8),
-                Map.of("page-encoding", "ISO-8859-1")));
+        byte[] conflicting = source.getBytes(StandardCharsets.UTF_8);
+        Map<String, String> none = Map.of();
+        assertThrows(PageParseException.class, () -> decode("/p.jsp", conflicting, none));
+        byte[] bom = "\ufefftext".getBytes(StandardCharsets.UTF_8);
+        var configured = Map.of("page-encoding", "ISO-8859-1");
+        assertThrows(PageParseException.class, () -> decode("/p.jsp", bom, configured));
         String generic = "\ufeff<%@ page pageEncoding='UTF-16' %>é";
         assertTrue(decode("/p.jsp", generic.getBytes(StandardCharsets.UTF_16LE), Map.of()).text().endsWith("é"));
     }
@@ -99,15 +102,20 @@ class SourceDecodingTest {
     void xmlDeclaredEncodingMustMatchConfiguredAndPageEncodings() {
         String source = "<?xml version='1.0' encoding='UTF-8'?><j:root xmlns:j='" + PageParser.JSP_NAMESPACE
                 + "' version='4.0'>\n<j:directive.page pageEncoding='ISO-8859-1'/></j:root>";
-        var error = assertThrows(PageParseException.class, () -> decode("/p.jspx", source.getBytes(StandardCharsets.UTF_8), Map.of()));
+        byte[] bytes = source.getBytes(StandardCharsets.UTF_8);
+        Map<String, String> none = Map.of();
+        var error = assertThrows(PageParseException.class, () -> decode("/p.jspx", bytes, none));
         assertEquals(2, error.location().line());
-        assertThrows(PageParseException.class, () -> decode("/p.jspx", "<?xml version='1.0' encoding='UTF-8'?><p/>".getBytes(StandardCharsets.UTF_8),
-                Map.of("page-encoding", "ISO-8859-1")));
+        byte[] declared = "<?xml version='1.0' encoding='UTF-8'?><p/>".getBytes(StandardCharsets.UTF_8);
+        var configured = Map.of("page-encoding", "ISO-8859-1");
+        assertThrows(PageParseException.class, () -> decode("/p.jspx", declared, configured));
     }
 
     @Test
     void malformedInputIsRejectedWithoutReplacementCharacters() {
-        var error = assertThrows(PageParseException.class, () -> decode("/p.jspx", new byte[] {'<','p','>',(byte)0xc3,'(','<','/','p','>'}, Map.of()));
+        byte[] malformed = {'<','p','>',(byte)0xc3,'(','<','/','p','>'};
+        Map<String, String> none = Map.of();
+        var error = assertThrows(PageParseException.class, () -> decode("/p.jspx", malformed, none));
         assertEquals("/p.jspx", error.location().source());
         assertTrue(error.getMessage().contains("UTF-8"));
     }
@@ -121,13 +129,16 @@ class SourceDecodingTest {
     @Test
     void xmlPrologCannotContradictUnicodeByteOrder() {
         String source = "<?xml version='1.0' encoding='UTF-16BE'?><p/>";
-        assertThrows(PageParseException.class, () -> decode("/p.jspx", source.getBytes(StandardCharsets.UTF_16LE), Map.of()));
+        byte[] bytes = source.getBytes(StandardCharsets.UTF_16LE);
+        Map<String, String> none = Map.of();
+        assertThrows(PageParseException.class, () -> decode("/p.jspx", bytes, none));
     }
 
     @Test
     void configurationConflictsRetainTheRequestedResourceName() {
-        var error = assertThrows(PageParseException.class, () -> decode("/encoded.jspx",
-                "<?xml version='1.0' encoding='UTF-8'?><p/>".getBytes(StandardCharsets.UTF_8), Map.of("page-encoding", "ISO-8859-1")));
+        byte[] declared = "<?xml version='1.0' encoding='UTF-8'?><p/>".getBytes(StandardCharsets.UTF_8);
+        var configured = Map.of("page-encoding", "ISO-8859-1");
+        var error = assertThrows(PageParseException.class, () -> decode("/encoded.jspx", declared, configured));
         assertEquals("/encoded.jspx", error.location().source());
     }
 

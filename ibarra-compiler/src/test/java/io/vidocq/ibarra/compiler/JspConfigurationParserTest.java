@@ -37,7 +37,8 @@ class JspConfigurationParserTest {
         assertEquals(Map.of("el-ignored", "true", "buffer", "16kb"), groups.getFirst().properties());
         assertEquals(List.of("/head.jspf", "/second.jspf"), groups.getFirst().preludes());
         assertEquals(List.of("/tail.jspf"), groups.getFirst().codas());
-        assertThrows(UnsupportedOperationException.class, () -> groups.add(groups.getFirst()));
+        var first = groups.getFirst();
+        assertThrows(UnsupportedOperationException.class, () -> groups.add(first));
     }
     @Test
     void legacyDescriptorDefaultsToIgnoredElWithoutReadingExternalDtd() {
