@@ -33,11 +33,23 @@ public final class TranslationUnit {
             this(page, properties, sourceSyntaxes, responseEncoding, List.of());
         }
     }
+    private static final String EL_IGNORED_PROPERTY = "el-ignored";
+    private static final String DEFERRED_LITERAL_PROPERTY = "deferred-syntax-allowed-as-literal";
+    private static final String UNDECLARED_NAMESPACE_PROPERTY = "error-on-undeclared-namespace";
+    private static final String PAGE_ENCODING_PROPERTY = "page-encoding";
+    private static final String IS_XML_PROPERTY = "is-xml";
+    private static final String BUFFER_PROPERTY = "buffer";
+    private static final List<String> BOOLEAN_PROPERTIES = List.of(EL_IGNORED_PROPERTY, IS_XML_PROPERTY, "scripting-invalid",
+            DEFERRED_LITERAL_PROPERTY, "trim-directive-whitespaces", "error-on-el-not-found", UNDECLARED_NAMESPACE_PROPERTY);
+    private static final Set<String> KNOWN_PROPERTIES = Set.of(EL_IGNORED_PROPERTY, IS_XML_PROPERTY, "scripting-invalid",
+            PAGE_ENCODING_PROPERTY, DEFERRED_LITERAL_PROPERTY, "trim-directive-whitespaces", "default-content-type",
+            BUFFER_PROPERTY, "error-on-el-not-found", UNDECLARED_NAMESPACE_PROPERTY);
+    private static final String TAGLIB = "taglib";
+    private static final String TAGDIR = "tagdir";
     private final GenerationOptions options;
     private final ParserOptions parserDefaults;
     private final Map<PageNode.Text, List<SourceLocation>> origins = new IdentityHashMap<>();
     private final Set<String> stack = new LinkedHashSet<>();
-    private Page.Syntax syntax;
     private final Map<String, Page.Syntax> sourceSyntaxes = new HashMap<>();
     private final Map<String, SourceDecoder.Decoded> decodedSources = new HashMap<>();
     private final Set<String> decodingSources = new HashSet<>();
@@ -69,10 +81,11 @@ public final class TranslationUnit {
 
     public Result read(String path, byte[] bytes) {
         rawBodies.resetBindings();
-        for (var group : options.propertyGroups()) if (matches(group, path))
+        for (var group : matching(path)) {
             for (String prelude : group.preludes()) rawBodies.includeBindings(
                     new PageNode.Directive("include", Map.of("file", prelude), new SourceLocation(path, 1, 1)),
                     rawBodies.bindings(), rawBodies.origins(), parserOptions(properties(path)));
+        }
         var decoded = decode(path, bytes);
         return read(path, decoded.text());
     }
@@ -91,14 +104,14 @@ public final class TranslationUnit {
     public Result read(String path, String source) {
         var properties = properties(path);
         var defaults = parserOptions(properties);
-        syntax = fileSyntax(path, source, properties);
+        Page.Syntax syntax = fileSyntax(path, source, properties);
         unitOptions = defaults;
         var raw = readRoot(path, source, properties);
         var settings = new LinkedHashMap<String, String>();
         collectUnitSettings(raw, settings);
         unitOptions = new ParserOptions(bool(settings.get("isELIgnored"), defaults.elIgnored()),
                 bool(settings.get("deferredSyntaxAllowedAsLiteral"), defaults.deferredSyntaxAllowedAsLiteral()));
-        strictNamespaces = bool(properties.get("error-on-undeclared-namespace"), false);
+        strictNamespaces = bool(properties.get(UNDECLARED_NAMESPACE_PROPERTY), false);
         tagLibraries.clear();
         raw = readRoot(path, source, properties);
         validateTaglibOrder(raw, new HashSet<>(Set.of("jsp")));
@@ -108,19 +121,25 @@ public final class TranslationUnit {
     }
 
     private ParserOptions parserOptions(Map<String, String> properties) {
-        return new ParserOptions(bool(properties.get("el-ignored"), parserDefaults.elIgnored()),
-                bool(properties.get("deferred-syntax-allowed-as-literal"), parserDefaults.deferredSyntaxAllowedAsLiteral()));
+        return new ParserOptions(bool(properties.get(EL_IGNORED_PROPERTY), parserDefaults.elIgnored()),
+                bool(properties.get(DEFERRED_LITERAL_PROPERTY), parserDefaults.deferredSyntaxAllowedAsLiteral()));
     }
 
     private List<PageNode> readRoot(String path, String source, Map<String, String> properties) {
         rawBodies.resetBindings();
         var raw = new ArrayList<PageNode>();
-        for (var group : options.propertyGroups()) if (matches(group, path))
+        for (var group : matching(path)) {
             for (String prelude : group.preludes()) raw.addAll(included(prelude, new SourceLocation(path, 1, 1), properties));
+        }
         raw.addAll(readFile(path, source, properties));
-        for (var group : options.propertyGroups()) if (matches(group, path))
+        for (var group : matching(path)) {
             for (String coda : group.codas()) raw.addAll(included(coda, new SourceLocation(path, 1, 1), properties));
+        }
         return raw;
+    }
+
+    private List<JspPropertyGroup> matching(String path) {
+        return options.propertyGroups().stream().filter(group -> matches(group, path)).toList();
     }
 
     private void collectUnitSettings(List<PageNode> nodes, Map<String, String> settings) {
@@ -129,38 +148,56 @@ public final class TranslationUnit {
 
     private void collectUnitSettings(List<PageNode> nodes, Map<String, String> settings, Map<String, String> namespaces) {
         for (var node : nodes) {
-            if (node instanceof PageNode.Directive directive) {
-                if (directive.name().equals("taglib")) {
-                    String prefix = directive.attributes().get("prefix");
-                    String namespace = directive.attributes().getOrDefault("uri", "urn:jsptagdir:" + directive.attributes().get("tagdir"));
-                    if (namespaces.containsKey(prefix) && !namespaces.get(prefix).equals(namespace))
-                        throw new PageParseException(directive.location(), "Conflicting taglib prefix: " + prefix);
-                    String previous = unitBindings.putIfAbsent(prefix, namespace);
-                    if (previous != null && !previous.equals(namespace))
-                        throw new PageParseException(directive.location(), "Conflicting taglib prefix: " + prefix);
-                } else if (directive.name().equals("page") || directive.name().equals("tag")) {
-                    for (String name : List.of("isELIgnored", "deferredSyntaxAllowedAsLiteral")) {
-                        String value = directive.attributes().get(name);
-                        if (value != null) {
-                            if (!value.equals("true") && !value.equals("false"))
-                                throw new PageParseException(directive.location(), name + " must be true or false");
-                            String previous = settings.putIfAbsent(name, value);
-                            if (previous != null && !previous.equals(value)) throw new PageParseException(directive.location(), "Conflicting " + name);
-                        }
-                    }
+            switch (node) {
+                case PageNode.Directive directive when directive.name().equals(TAGLIB) -> bindUnitPrefix(directive, namespaces);
+                case PageNode.Directive directive when directive.name().equals("page") || directive.name().equals("tag") ->
+                        collectElSettings(directive, settings);
+                case PageNode.Element(var _, var _, var attributes, var children, var _, var _) ->
+                        collectUnitSettings(children, settings, nested(namespaces, attributes));
+                default -> {
+                    // Other nodes declare neither prefixes nor EL settings.
                 }
-            } else if (node instanceof PageNode.Element element) {
-                var nested = new HashMap<>(namespaces);
-                for (var attribute : element.attributes().entrySet())
-                    if (attribute.getKey().startsWith("xmlns:")) nested.put(attribute.getKey().substring(6), attribute.getValue());
-                collectUnitSettings(element.children(), settings, nested);
             }
         }
     }
 
+    private void bindUnitPrefix(PageNode.Directive directive, Map<String, String> namespaces) {
+        String prefix = directive.attributes().get("prefix");
+        String namespace = tagLibraryNamespace(directive.attributes());
+        if (namespaces.containsKey(prefix) && !namespaces.get(prefix).equals(namespace))
+            throw new PageParseException(directive.location(), "Conflicting taglib prefix: " + prefix);
+        String previous = unitBindings.putIfAbsent(prefix, namespace);
+        if (previous != null && !previous.equals(namespace))
+            throw new PageParseException(directive.location(), "Conflicting taglib prefix: " + prefix);
+    }
+
+    private static void collectElSettings(PageNode.Directive directive, Map<String, String> settings) {
+        for (String name : List.of("isELIgnored", "deferredSyntaxAllowedAsLiteral")) {
+            String value = directive.attributes().get(name);
+            if (value != null) {
+                if (!booleanLiteral(value))
+                    throw new PageParseException(directive.location(), name + " must be true or false");
+                String previous = settings.putIfAbsent(name, value);
+                if (previous != null && !previous.equals(value)) throw new PageParseException(directive.location(), "Conflicting " + name);
+            }
+        }
+    }
+
+    private static Map<String, String> nested(Map<String, String> namespaces, Map<String, String> attributes) {
+        var nested = new HashMap<>(namespaces);
+        for (var attribute : attributes.entrySet()) {
+            if (attribute.getKey().startsWith("xmlns:")) nested.put(attribute.getKey().substring(6), attribute.getValue());
+        }
+        return nested;
+    }
+
+    private static String tagLibraryNamespace(Map<String, String> attributes) {
+        return attributes.getOrDefault("uri", "urn:jsptagdir:" + attributes.get(TAGDIR));
+    }
+
     private void validateTaglibOrder(List<PageNode> nodes, Set<String> declared) {
         for (var node : nodes) {
-            if (node instanceof PageNode.Directive directive && directive.name().equals("taglib"))
+            if (node instanceof PageNode.Directive directive && directive.name().equals(TAGLIB))
                 declared.add(directive.attributes().get("prefix"));
             else if (node instanceof PageNode.Element element) {
                 if (sourceSyntaxes.get(element.location().source()) == Page.Syntax.STANDARD) {
@@ -193,68 +230,96 @@ public final class TranslationUnit {
 
     private void tagLibraries(List<PageNode> nodes) {
         for (var node : nodes) {
-            if (node instanceof PageNode.Directive directive && directive.name().equals("taglib")
-                    && (directive.attributes().containsKey("uri") || directive.attributes().containsKey("tagdir")))
-                tagLibraries.add(new TldReferences.Reference(directive.attributes().getOrDefault("uri",
-                        "urn:jsptagdir:" + directive.attributes().get("tagdir")), directive.location(), false));
-            else if (node instanceof PageNode.Element element) {
-                for (var attribute : element.attributes().entrySet())
-                    if ((attribute.getKey().equals("xmlns") || attribute.getKey().startsWith("xmlns:"))
-                            && attribute.getValue().startsWith("urn:jsptld:"))
-                        tagLibraries.add(new TldReferences.Reference(attribute.getValue().substring(11), element.location(), true));
-                tagLibraries(element.children());
+            switch (node) {
+                case PageNode.Directive(var name, var attributes, var location)
+                        when name.equals(TAGLIB) && (attributes.containsKey("uri") || attributes.containsKey(TAGDIR)) ->
+                        tagLibraries.add(new TldReferences.Reference(tagLibraryNamespace(attributes), location, false));
+                case PageNode.Element(var _, var _, var attributes, var children, var _, var location) -> {
+                    xmlnsTagLibraries(attributes, location);
+                    tagLibraries(children);
+                }
+                default -> {
+                    // Other nodes reference no tag library.
+                }
             }
+        }
+    }
+
+    private void xmlnsTagLibraries(Map<String, String> attributes, SourceLocation location) {
+        for (var attribute : attributes.entrySet()) {
+            if ((attribute.getKey().equals("xmlns") || attribute.getKey().startsWith("xmlns:"))
+                    && attribute.getValue().startsWith("urn:jsptld:"))
+                tagLibraries.add(new TldReferences.Reference(attribute.getValue().substring(11), location, true));
         }
     }
 
     private void validateEncoding(List<PageNode> nodes, Map<String, String> properties, Set<String> encodedFiles) {
         for (var node : nodes) {
-            Map<String, String> attributes = null;
-            if (node instanceof PageNode.Directive directive && directive.name().equals("page"))
-                attributes = directive.attributes();
-            else if (node instanceof PageNode.Element element && element.namespace().equals(PageParser.JSP_NAMESPACE)
-                    && element.name().substring(element.name().lastIndexOf(':') + 1).equals("directive.page")) attributes = element.attributes();
-            if (attributes != null && attributes.containsKey("pageEncoding")) {
-                if (!encodedFiles.add(node.location().source()))
-                    throw new PageParseException(node.location(), "pageEncoding may occur only once per file");
-                var charset = charset(attributes.get("pageEncoding"), node.location());
-                if (properties.containsKey("page-encoding") && !(decodedSources.containsKey(node.location().source())
-                        ? SourceDecoder.compatible(charset, charset(properties.get("page-encoding"), node.location()))
-                        : charset.equals(charset(properties.get("page-encoding"), node.location()))))
-                    throw new PageParseException(node.location(), "pageEncoding conflicts with configuration");
-            }
+            Map<String, String> attributes = pageDirectiveAttributes(node);
+            if (attributes != null && attributes.containsKey("pageEncoding"))
+                validatePageEncoding(node.location(), attributes.get("pageEncoding"), properties, encodedFiles);
             if (node instanceof PageNode.Element element) validateEncoding(element.children(), properties, encodedFiles);
         }
     }
 
+    /** The attributes of a standard or XML page directive, otherwise {@code null}. */
+    private static Map<String, String> pageDirectiveAttributes(PageNode node) {
+        if (node instanceof PageNode.Directive(var name, var attributes, var _) && name.equals("page")) return attributes;
+        if (node instanceof PageNode.Element element && jspAction(element, "directive.page")) return element.attributes();
+        return null;
+    }
+
+    private void validatePageEncoding(SourceLocation location, String value, Map<String, String> properties, Set<String> encodedFiles) {
+        if (!encodedFiles.add(location.source()))
+            throw new PageParseException(location, "pageEncoding may occur only once per file");
+        var charset = charset(value, location);
+        if (!properties.containsKey(PAGE_ENCODING_PROPERTY)) return;
+        var configured = charset(properties.get(PAGE_ENCODING_PROPERTY), location);
+        boolean consistent = decodedSources.containsKey(location.source())
+                ? SourceDecoder.compatible(charset, configured) : charset.equals(configured);
+        if (!consistent) throw new PageParseException(location, "pageEncoding conflicts with configuration");
+    }
+
+    private static boolean jspAction(PageNode.Element element, String localName) {
+        return element.namespace().equals(PageParser.JSP_NAMESPACE)
+                && element.name().substring(element.name().lastIndexOf(':') + 1).equals(localName);
+    }
+
     private static Charset charset(String name, SourceLocation at) {
         try { return Charset.forName(name); }
-        catch (IllegalArgumentException failure) { throw new PageParseException(at, "Invalid page encoding: " + name); }
+        catch (IllegalArgumentException _) { throw new PageParseException(at, "Invalid page encoding: " + name); }
     }
 
     private List<PageNode> expand(List<PageNode> nodes, Map<String, String> properties) {
         var result = new ArrayList<PageNode>();
         for (var node : nodes) {
-            if (node instanceof PageNode.Directive directive && directive.name().equals("include")) {
-                String file = directive.attributes().get("file");
-                if (file == null || directive.attributes().size() != 1)
-                    throw new PageParseException(directive.location(), "include requires only the file attribute");
-                String path = resolve(directive.location().source(), file);
-                result.addAll(included(path, directive.location(), properties));
-            } else if (node instanceof PageNode.Element element && element.namespace().equals(PageParser.JSP_NAMESPACE)
-                    && element.name().substring(element.name().lastIndexOf(':') + 1).equals("directive.include")) {
-                var attributes = new LinkedHashMap<>(element.attributes());
-                attributes.keySet().removeIf(name -> name.startsWith("xmlns"));
-                String file = attributes.get("file");
-                if (file == null || attributes.size() != 1 || !element.children().isEmpty())
-                    throw new PageParseException(element.location(), "include requires only the file attribute and an empty body");
-                result.addAll(included(resolve(element.location().source(), file), element.location(), properties));
-            } else if (node instanceof PageNode.Element element)
-                result.add(new PageNode.Element(element.name(), element.namespace(), element.attributes(),
-                        expand(element.children(), properties), element.selfClosing(), element.location()));
-            else result.add(node);
+            switch (node) {
+                case PageNode.Directive(var name, var attributes, var location) when name.equals("include") ->
+                        result.addAll(includeDirective(attributes, location, properties));
+                case PageNode.Element element when jspAction(element, "directive.include") ->
+                        result.addAll(includeAction(element, properties));
+                case PageNode.Element(var name, var namespace, var attributes, var children, var selfClosing, var location) ->
+                        result.add(new PageNode.Element(name, namespace, attributes, expand(children, properties), selfClosing, location));
+                default -> result.add(node);
+            }
         }
         return result;
+    }
+
+    private List<PageNode> includeDirective(Map<String, String> attributes, SourceLocation location, Map<String, String> properties) {
+        String file = attributes.get("file");
+        if (file == null || attributes.size() != 1)
+            throw new PageParseException(location, "include requires only the file attribute");
+        return included(resolve(location.source(), file), location, properties);
+    }
+
+    private List<PageNode> includeAction(PageNode.Element element, Map<String, String> properties) {
+        var attributes = new LinkedHashMap<>(element.attributes());
+        attributes.keySet().removeIf(name -> name.startsWith("xmlns"));
+        String file = attributes.get("file");
+        if (file == null || attributes.size() != 1 || !element.children().isEmpty())
+            throw new PageParseException(element.location(), "include requires only the file attribute and an empty body");
+        return included(resolve(element.location().source(), file), element.location(), properties);
     }
 
     private List<PageNode> included(String path, SourceLocation at, Map<String, String> properties) {
@@ -269,7 +334,7 @@ public final class TranslationUnit {
     }
 
     private Page.Syntax fileSyntax(String path, String source, Map<String, String> properties) {
-        String configured = properties.get("is-xml");
+        String configured = properties.get(IS_XML_PROPERTY);
         if (configured != null) return bool(configured, false) ? Page.Syntax.XML : Page.Syntax.STANDARD;
         return PageParser.detectSyntax(path, source);
     }
@@ -279,41 +344,51 @@ public final class TranslationUnit {
         var result = new LinkedHashMap<String, String>();
         var specificity = new HashMap<String, Match>();
         for (var group : options.propertyGroups()) {
-            Match best = null;
-            for (String pattern : group.patterns()) {
-                var match = match(pattern, path);
-                if (match != null && (best == null || match.compareTo(best) > 0)) best = match;
-            }
-            if (best == null) continue;
-            for (var entry : group.properties().entrySet()) {
-                var previous = specificity.get(entry.getKey());
-                if (previous == null || best.compareTo(previous) > 0) {
-                    result.put(entry.getKey(), entry.getValue()); specificity.put(entry.getKey(), best);
-                }
-            }
+            Match best = bestMatch(group, path);
+            if (best != null) apply(group, best, result, specificity);
         }
         return result;
     }
 
-    /** Configuration failures are deployment-wide, even if no page matches a group. */
-    public static void validateConfiguration(GenerationOptions options, SourceLocation at) {
-        for (var group : options.propertyGroups()) {
-            for (String name : group.properties().keySet())
-                if (!Set.of("el-ignored", "is-xml", "scripting-invalid", "page-encoding",
-                        "deferred-syntax-allowed-as-literal", "trim-directive-whitespaces",
-                        "default-content-type", "buffer", "error-on-el-not-found", "error-on-undeclared-namespace").contains(name))
-                    throw new PageParseException(at, "Unknown JSP property: " + name);
-            if (group.properties().containsKey("page-encoding"))
-                charset(group.properties().get("page-encoding"), at);
-            if (group.properties().containsKey("buffer")) bufferCapacity(group.properties().get("buffer"), at);
-            for (String name : List.of("el-ignored", "is-xml", "scripting-invalid",
-                    "deferred-syntax-allowed-as-literal", "trim-directive-whitespaces",
-                    "error-on-el-not-found", "error-on-undeclared-namespace")) {
-                String value = group.properties().get(name);
-                if (value != null && !value.equals("true") && !value.equals("false"))
-                    throw new PageParseException(at, name + " must be true or false");
+    private static Match bestMatch(JspPropertyGroup group, String path) {
+        Match best = null;
+        for (String pattern : group.patterns()) {
+            var match = match(pattern, path);
+            if (match != null && (best == null || match.compareTo(best) > 0)) best = match;
+        }
+        return best;
+    }
+
+    /** A more specific group overrides the properties it declares. */
+    private static void apply(JspPropertyGroup group, Match match, Map<String, String> result, Map<String, Match> specificity) {
+        for (var entry : group.properties().entrySet()) {
+            var previous = specificity.get(entry.getKey());
+            if (previous == null || match.compareTo(previous) > 0) {
+                result.put(entry.getKey(), entry.getValue());
+                specificity.put(entry.getKey(), match);
             }
         }
+    }
+
+    /** Configuration failures are deployment-wide, even if no page matches a group. */
+    public static void validateConfiguration(GenerationOptions options, SourceLocation at) {
+        for (var group : options.propertyGroups()) validateGroup(group.properties(), at);
+    }
+
+    private static void validateGroup(Map<String, String> properties, SourceLocation at) {
+        for (String name : properties.keySet()) {
+            if (!KNOWN_PROPERTIES.contains(name)) throw new PageParseException(at, "Unknown JSP property: " + name);
+        }
+        if (properties.containsKey(PAGE_ENCODING_PROPERTY)) charset(properties.get(PAGE_ENCODING_PROPERTY), at);
+        if (properties.containsKey(BUFFER_PROPERTY)) bufferCapacity(properties.get(BUFFER_PROPERTY), at);
+        for (String name : BOOLEAN_PROPERTIES) {
+            String value = properties.get(name);
+            if (value != null && !booleanLiteral(value)) throw new PageParseException(at, name + " must be true or false");
+        }
+    }
+
+    private static boolean booleanLiteral(String value) {
+        return value.equals("true") || value.equals("false");
     }
 
     /** Shared buffer validation for deployment defaults and page directives. */
@@ -324,7 +399,7 @@ public final class TranslationUnit {
             int capacity = Math.multiplyExact(Integer.parseInt(value.substring(0, value.length() - 2)), 1024);
             if (capacity <= 0) throw new NumberFormatException();
             return capacity;
-        } catch (NumberFormatException | ArithmeticException failure) {
+        } catch (NumberFormatException | ArithmeticException _) {
             throw new PageParseException(at, "Invalid page buffer: " + value);
         }
     }
