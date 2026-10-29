@@ -62,17 +62,21 @@ public final class PageDataXmlView {
                 String uri = directive.attributes().get("uri");
                 if (prefix != null && uri != null) namespaces.putIfAbsent(prefix, uri);
             } else if (node instanceof PageNode.Element element) {
-                element.attributes().forEach((name, value) -> {
-                    if (name.startsWith("xmlns:")) namespaces.putIfAbsent(name.substring(6), value);
-                    else if (name.equals("xmlns")) namespaces.putIfAbsent("", value);
-                });
-                if (!element.namespace().isEmpty() && !element.namespace().equals(JSP_NAMESPACE)) {
-                    String prefix = prefix(element.name());
-                    namespaces.putIfAbsent(prefix, element.namespace());
-                }
-                collectNamespaces(element.children(), namespaces);
+                collectElementNamespaces(element, namespaces);
             }
         }
+    }
+
+    private static void collectElementNamespaces(PageNode.Element element, Map<String, String> namespaces) {
+        element.attributes().forEach((name, value) -> {
+            if (name.startsWith("xmlns:")) namespaces.putIfAbsent(name.substring(6), value);
+            else if (name.equals("xmlns")) namespaces.putIfAbsent("", value);
+        });
+        if (!element.namespace().isEmpty() && !element.namespace().equals(JSP_NAMESPACE)) {
+            String prefix = prefix(element.name());
+            namespaces.putIfAbsent(prefix, element.namespace());
+        }
+        collectNamespaces(element.children(), namespaces);
     }
 
     private static void append(List<PageNode> nodes, StringBuilder xml, int[] id) {
@@ -81,23 +85,31 @@ public final class PageDataXmlView {
             else if (node instanceof PageNode.RawText text) appendText(text.value(), xml, id);
             else if (node instanceof PageNode.Expression expression)
                 appendText("${" + expression.code() + "}", xml, id);
-            else if (node instanceof PageNode.Script script) {
-                String element = switch (script.kind()) {
-                    case DECLARATION -> "jsp:declaration";
-                    case SCRIPTLET -> "jsp:scriptlet";
-                    case EXPRESSION -> "jsp:expression";
-                };
-                xml.append('<').append(element).append(" jsp:id=\"").append(id[0]++).append("\">")
-                        .append(text(script.code())).append("</").append(element).append('>');
-            } else if (node instanceof PageNode.Directive directive) {
-                if (directive.name().equals("taglib") || directive.name().equals("include")) continue;
-                appendElement("jsp:directive." + directive.name(), directive.attributes(), List.of(), xml, id);
-            } else if (node instanceof PageNode.Element element) {
-                if (element.namespace().equals(JSP_NAMESPACE) && localName(element.name()).equals("root"))
-                    append(element.children(), xml, id);
-                else appendElement(element.name(), element.attributes(), element.children(), xml, id);
-            }
+            else if (node instanceof PageNode.Script script) appendScript(script, xml, id);
+            else if (node instanceof PageNode.Directive directive) appendDirective(directive, xml, id);
+            else if (node instanceof PageNode.Element element) appendElement(element, xml, id);
         }
+    }
+
+    private static void appendScript(PageNode.Script script, StringBuilder xml, int[] id) {
+        String element = switch (script.kind()) {
+            case DECLARATION -> "jsp:declaration";
+            case SCRIPTLET -> "jsp:scriptlet";
+            case EXPRESSION -> "jsp:expression";
+        };
+        xml.append('<').append(element).append(" jsp:id=\"").append(id[0]++).append("\">")
+                .append(text(script.code())).append("</").append(element).append('>');
+    }
+
+    private static void appendDirective(PageNode.Directive directive, StringBuilder xml, int[] id) {
+        if (directive.name().equals("taglib") || directive.name().equals("include")) return;
+        appendElement("jsp:directive." + directive.name(), directive.attributes(), List.of(), xml, id);
+    }
+
+    private static void appendElement(PageNode.Element element, StringBuilder xml, int[] id) {
+        if (element.namespace().equals(JSP_NAMESPACE) && localName(element.name()).equals("root"))
+            append(element.children(), xml, id);
+        else appendElement(element.name(), element.attributes(), element.children(), xml, id);
     }
 
     private static void appendText(String value, StringBuilder xml, int[] id) {

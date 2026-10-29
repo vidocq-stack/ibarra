@@ -34,6 +34,9 @@ public final class SourceDecoder {
             "^<\\?xml\\s+[^?]*\\bencoding\\s*=\\s*(['\"])([^'\"]+)\\1", Pattern.DOTALL);
     private static final Pattern CHARSET = Pattern.compile(
             "(?:^|;)\\s*charset\\s*=\\s*(?:\"([^\"]+)\"|'([^']+)'|([^;\\s]+))", Pattern.CASE_INSENSITIVE);
+    private static final String PAGE_ENCODING = "pageEncoding";
+    private static final String PAGE_ENCODING_PROPERTY = "page-encoding";
+    private static final String IS_XML_PROPERTY = "is-xml";
     private SourceDecoder() { }
 
     public static Decoded decode(String path, byte[] bytes, Map<String, String> properties) {
@@ -44,51 +47,109 @@ public final class SourceDecoder {
         Objects.requireNonNull(bytes);
         var start = new SourceLocation(path, 1, 1);
         var mark = mark(bytes);
-        Charset configured = properties.containsKey("page-encoding") ? charset(properties.get("page-encoding"), start) : null;
+        Charset configured = properties.containsKey(PAGE_ENCODING_PROPERTY) ? charset(properties.get(PAGE_ENCODING_PROPERTY), start) : null;
         Charset initial = charset(mark != null ? mark.encoding() : signature(bytes), start);
-        int offset = mark == null ? 0 : mark.length();
-        String probe = new String(bytes, offset, bytes.length - offset, initial);
-        Page.Syntax syntax = properties.containsKey("is-xml")
-                ? (TranslationUnit.bool(properties.get("is-xml"), false) ? Page.Syntax.XML : Page.Syntax.STANDARD)
-                : PageParser.detectSyntax(path, probe);
-        if (syntax == Page.Syntax.XML) {
-            var prolog = PROLOG.matcher(probe);
-            Charset declared = prolog.find() ? charset(prolog.group(2), start) : null;
-            Charset detected = mark != null ? initial : declared != null ? declared
-                    : initial.equals(StandardCharsets.ISO_8859_1) ? StandardCharsets.UTF_8 : initial;
-            if (declared != null && (mark != null || unicode(initial)) && !compatible(initial, declared))
-                throw new PageParseException(start, "XML encoding conflicts with byte signature");
-            if (declared != null && unicode(initial) && generic(declared)) detected = initial;
-            String text = strict(path, bytes, offset, detected);
-            var parser = new XmlParser(new SourceDocument(path, text), rawBodies);
-            var directives = new ArrayList<PageNode.Directive>();
-            xmlDirectives(parser.parse(), directives);
-            check(start, directives, configured, declared, null);
-            return new Decoded(text, syntax, null);
+        var input = new Input(path, bytes, mark, initial, configured, rawBodies);
+        String probe = new String(bytes, input.offset, bytes.length - input.offset, initial);
+        Page.Syntax syntax = syntax(path, probe, properties);
+        return syntax == Page.Syntax.XML ? decodeXml(input, probe) : decodeStandard(input, probe, properties);
+    }
+
+    /** The bytes being decoded and what their signature and the configuration say about them. */
+    private static final class Input {
+        private final String path;
+        private final byte[] bytes;
+        private final SourceLocation start;
+        private final Mark mark;
+        private final Charset initial;
+        private final int offset;
+        private final Charset configured;
+        private final TagDependentBodies rawBodies;
+
+        private Input(String path, byte[] bytes, Mark mark, Charset initial, Charset configured, TagDependentBodies rawBodies) {
+            this.path = path;
+            this.bytes = bytes;
+            this.start = new SourceLocation(path, 1, 1);
+            this.mark = mark;
+            this.initial = initial;
+            this.offset = mark == null ? 0 : mark.length();
+            this.configured = configured;
+            this.rawBodies = rawBodies;
         }
-        if (mark == null && initial.equals(StandardCharsets.ISO_8859_1) && configured != null)
-            probe = new String(bytes, configured);
+    }
+
+    private static Page.Syntax syntax(String path, String probe, Map<String, String> properties) {
+        if (!properties.containsKey(IS_XML_PROPERTY)) return PageParser.detectSyntax(path, probe);
+        return TranslationUnit.bool(properties.get(IS_XML_PROPERTY), false) ? Page.Syntax.XML : Page.Syntax.STANDARD;
+    }
+
+    private static Decoded decodeXml(Input input, String probe) {
+        var prolog = PROLOG.matcher(probe);
+        Charset declared = prolog.find() ? charset(prolog.group(2), input.start) : null;
+        if (declared != null && (input.mark != null || unicode(input.initial)) && !compatible(input.initial, declared))
+            throw new PageParseException(input.start, "XML encoding conflicts with byte signature");
+        String text = strict(input.path, input.bytes, input.offset, xmlCharset(input, declared));
+        var parser = new XmlParser(new SourceDocument(input.path, text), input.rawBodies);
+        var directives = new ArrayList<PageNode.Directive>();
+        xmlDirectives(parser.parse(), directives);
+        check(input.start, directives, input.configured, declared, null);
+        return new Decoded(text, Page.Syntax.XML, null);
+    }
+
+    private static Charset xmlCharset(Input input, Charset declared) {
+        if (input.mark != null) return input.initial;
+        if (declared == null) return input.initial.equals(StandardCharsets.ISO_8859_1) ? StandardCharsets.UTF_8 : input.initial;
+        return unicode(input.initial) && generic(declared) ? input.initial : declared;
+    }
+
+    private static Decoded decodeStandard(Input input, String probe, Map<String, String> properties) {
+        String source = input.mark == null && input.initial.equals(StandardCharsets.ISO_8859_1) && input.configured != null
+                ? new String(input.bytes, input.configured) : probe;
         var parserOptions = new ParserOptions(TranslationUnit.bool(properties.get("el-ignored"), false),
                 TranslationUnit.bool(properties.get("deferred-syntax-allowed-as-literal"), false));
-        var directives = new StandardParser(new SourceDocument(path, probe), parserOptions,
-                Map.of(), false, rawBodies, Map.of()).encodingDirectives();
-        Charset directiveEncoding = null;
-        String contentEncoding = null;
-        for (var directive : directives) if (directive.name().equals("page") || directive.name().equals("tag")) {
-            if (directive.attributes().containsKey("pageEncoding")) {
-                var candidate = charset(directive.attributes().get("pageEncoding"), directive.location());
-                if (directiveEncoding == null) directiveEncoding = candidate;
+        var directives = new StandardParser(new SourceDocument(input.path, source), parserOptions,
+                Map.of(), false, input.rawBodies, Map.of()).encodingDirectives();
+        Charset directiveEncoding = directiveEncoding(directives);
+        String contentEncoding = contentEncoding(directives);
+        Charset detected = standardCharset(input, directiveEncoding, contentEncoding);
+        String text = strict(input.path, input.bytes, input.offset, detected);
+        directives = new StandardParser(new SourceDocument(input.path, text), parserOptions,
+                Map.of(), false, input.rawBodies, Map.of()).encodingDirectives();
+        check(input.start, directives, input.configured, null, input.mark == null ? null : detected);
+        return new Decoded(text, Page.Syntax.STANDARD, input.mark == null ? null : detected.name());
+    }
+
+    /** The first pageEncoding of a page or tag directive; every declared value must name a charset. */
+    private static Charset directiveEncoding(List<PageNode.Directive> directives) {
+        Charset result = null;
+        for (var directive : directives) {
+            if (encodingDirective(directive) && directive.attributes().containsKey(PAGE_ENCODING)) {
+                var candidate = charset(directive.attributes().get(PAGE_ENCODING), directive.location());
+                if (result == null) result = candidate;
             }
-            if (directive.name().equals("page") && directive.attributes().containsKey("contentType"))
-                contentEncoding = contentCharset(directive.attributes().get("contentType"));
         }
-        Charset detected = mark != null ? initial : configured != null ? configured : directiveEncoding != null
-                ? directiveEncoding : contentEncoding != null ? charset(contentEncoding, start) : StandardCharsets.ISO_8859_1;
-        String text = strict(path, bytes, offset, detected);
-        directives = new StandardParser(new SourceDocument(path, text), parserOptions,
-                Map.of(), false, rawBodies, Map.of()).encodingDirectives();
-        check(start, directives, configured, null, mark == null ? null : detected);
-        return new Decoded(text, syntax, mark == null ? null : detected.name());
+        return result;
+    }
+
+    /** The charset of the last page directive contentType that declares one. */
+    private static String contentEncoding(List<PageNode.Directive> directives) {
+        String result = null;
+        for (var directive : directives) {
+            if (directive.name().equals("page") && directive.attributes().containsKey("contentType"))
+                result = contentCharset(directive.attributes().get("contentType"));
+        }
+        return result;
+    }
+
+    private static boolean encodingDirective(PageNode.Directive directive) {
+        return directive.name().equals("page") || directive.name().equals("tag");
+    }
+
+    private static Charset standardCharset(Input input, Charset directiveEncoding, String contentEncoding) {
+        if (input.mark != null) return input.initial;
+        if (input.configured != null) return input.configured;
+        if (directiveEncoding != null) return directiveEncoding;
+        return contentEncoding != null ? charset(contentEncoding, input.start) : StandardCharsets.ISO_8859_1;
     }
 
     private static void check(SourceLocation start, List<PageNode.Directive> directives, Charset configured, Charset xml, Charset bom) {
@@ -98,8 +159,8 @@ public final class SourceDecoder {
         if (configured != null && bom != null && !compatible(configured, bom))
             throw new PageParseException(start,
                     "Configured page encoding conflicts with BOM");
-        for (var directive : directives) if (directive.attributes().containsKey("pageEncoding")) {
-            Charset value = charset(directive.attributes().get("pageEncoding"), directive.location());
+        for (var directive : directives) if (directive.attributes().containsKey(PAGE_ENCODING)) {
+            Charset value = charset(directive.attributes().get(PAGE_ENCODING), directive.location());
             if ((configured != null && !compatible(configured, value)) || (xml != null && !compatible(xml, value))
                     || (bom != null && !compatible(bom, value)))
                 throw new PageParseException(directive.location(), "pageEncoding conflicts with configuration, XML prolog or BOM");
@@ -118,7 +179,8 @@ public final class SourceDecoder {
     public static String contentCharset(String contentType) {
         var matcher = CHARSET.matcher(contentType);
         if (!matcher.find()) return null;
-        return matcher.group(1) != null ? matcher.group(1) : matcher.group(2) != null ? matcher.group(2) : matcher.group(3);
+        if (matcher.group(1) != null) return matcher.group(1);
+        return matcher.group(2) != null ? matcher.group(2) : matcher.group(3);
     }
 
     public static boolean compatible(Charset left, Charset right) {
@@ -130,7 +192,7 @@ public final class SourceDecoder {
     private static boolean unicode(Charset value) { return value.name().startsWith("UTF-16") || value.name().startsWith("UTF-32"); }
     private static Charset charset(String name, SourceLocation at) {
         try { return Charset.forName(name); }
-        catch (IllegalArgumentException failure) { throw new PageParseException(at, "Invalid page encoding: " + name); }
+        catch (IllegalArgumentException _) { throw new PageParseException(at, "Invalid page encoding: " + name); }
     }
 
     private static String strict(String path, byte[] bytes, int offset, Charset charset) {
