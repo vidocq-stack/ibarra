@@ -28,7 +28,16 @@ import java.util.Set;
 
 /** Standard-syntax lexer. Ordinary markup is preserved as template text. */
 public final class StandardParser {
-    private static final Set<String> DIRECTIVES = Set.of("page", "include", "taglib", "tag", "attribute", "variable");
+    private static final String TAGLIB = "taglib";
+    private static final Set<String> DIRECTIVES = Set.of("page", "include", TAGLIB, "tag", "attribute", "variable");
+    private static final String EL_IGNORED = "isELIgnored";
+    private static final String DEFERRED_LITERAL = "deferredSyntaxAllowedAsLiteral";
+    private static final String COMMENT_START = "<%--";
+    private static final String DIRECTIVE_START = "<%@";
+    private static final String SCRIPT_START = "<%";
+    private static final String END_TAG_START = "</";
+    private static final String EMPTY_TAG_END = "/>";
+    private static final String JSP_BODY = "jsp:body";
     private final SourceDocument source;
     private final Map<String, String> bindings = new LinkedHashMap<>();
     private int cursor;
@@ -86,54 +95,60 @@ public final class StandardParser {
     public List<PageNode.Directive> encodingDirectives() {
         var result = new ArrayList<PageNode.Directive>();
         while (cursor < source.text.length()) {
-            if (skipRawTag(result)) continue;
-            if (skipExpression()) continue;
-            if (starts("<%--")) comment();
-            else if (starts("<%@")) {
-                var directive = directive();
-                binding(directive);
-                result.add(directive);
-                if (directive.attributes().containsKey("isELIgnored"))
-                    elIgnored = Boolean.parseBoolean(directive.attributes().get("isELIgnored"));
-                if (directive.attributes().containsKey("deferredSyntaxAllowedAsLiteral"))
-                    deferredLiteral = Boolean.parseBoolean(directive.attributes().get("deferredSyntaxAllowedAsLiteral"));
-            } else if (starts("<%")) script();
-            else cursor++;
+            if (!skipRawTag(result) && !skipExpression()) encodingToken(result);
         }
         return List.copyOf(result);
     }
 
+    private void encodingToken(List<PageNode.Directive> result) {
+        if (starts(COMMENT_START)) comment();
+        else if (starts(DIRECTIVE_START)) {
+            var directive = directive();
+            binding(directive);
+            result.add(directive);
+            applyElSettings(directive);
+        } else if (starts(SCRIPT_START)) script();
+        else cursor++;
+    }
+
+    private void applyElSettings(PageNode.Directive directive) {
+        var attributes = directive.attributes();
+        if (attributes.containsKey(EL_IGNORED)) elIgnored = Boolean.parseBoolean(attributes.get(EL_IGNORED));
+        if (attributes.containsKey(DEFERRED_LITERAL)) deferredLiteral = Boolean.parseBoolean(attributes.get(DEFERRED_LITERAL));
+    }
+
     private void directivesOnly() {
         while (cursor < source.text.length()) {
-            if (skipRawTag()) continue;
-            if (skipExpression()) continue;
-            if (starts("<%--")) { comment(); continue; }
-            if (starts("<%@")) {
-                var directive = directive();
-                binding(directive);
-                if (directive.name().equals("page") || directive.name().equals("tag")) {
-                    if (directive.attributes().containsKey("isELIgnored"))
-                        elIgnored = Boolean.parseBoolean(directive.attributes().get("isELIgnored"));
-                    if (directive.attributes().containsKey("deferredSyntaxAllowedAsLiteral"))
-                        deferredLiteral = Boolean.parseBoolean(directive.attributes().get("deferredSyntaxAllowedAsLiteral"));
-                }
-                if (directive.name().equals("taglib")) {
-                    String prefix = directive.attributes().get("prefix");
-                    String uri = directive.attributes().get("uri");
-                    String tagdir = directive.attributes().get("tagdir");
-                    if (prefix == null || prefix.isBlank() || (uri == null) == (tagdir == null))
-                        throw error(cursor, "taglib requires a prefix and exactly one of uri or tagdir");
-                    if (prefix.equals("jsp") || prefix.contains(":"))
-                        throw error(cursor, "Invalid taglib prefix: " + prefix);
-                    String namespace = uri != null ? uri : "urn:jsptagdir:" + tagdir;
-                    String previous = bindings.putIfAbsent(prefix, namespace);
-                    if (previous != null && !previous.equals(namespace))
-                        throw error(cursor, "Conflicting taglib prefix: " + prefix);
-                    bindingOrigins.put(prefix, directive.location());
-                }
-            } else if (starts("<%")) script();
-            else cursor++;
+            if (!skipRawTag() && !skipExpression()) directiveToken();
         }
+    }
+
+    private void directiveToken() {
+        if (starts(COMMENT_START)) comment();
+        else if (starts(DIRECTIVE_START)) unitDirective(directive());
+        else if (starts(SCRIPT_START)) script();
+        else cursor++;
+    }
+
+    private void unitDirective(PageNode.Directive directive) {
+        binding(directive);
+        if (directive.name().equals("page") || directive.name().equals("tag")) applyElSettings(directive);
+        if (directive.name().equals(TAGLIB)) taglibBinding(directive);
+    }
+
+    private void taglibBinding(PageNode.Directive directive) {
+        String prefix = directive.attributes().get("prefix");
+        String uri = directive.attributes().get("uri");
+        String tagdir = directive.attributes().get("tagdir");
+        if (prefix == null || prefix.isBlank() || (uri == null) == (tagdir == null))
+            throw error(cursor, "taglib requires a prefix and exactly one of uri or tagdir");
+        if (prefix.equals("jsp") || prefix.contains(":"))
+            throw error(cursor, "Invalid taglib prefix: " + prefix);
+        String namespace = uri != null ? uri : "urn:jsptagdir:" + tagdir;
+        String previous = bindings.putIfAbsent(prefix, namespace);
+        if (previous != null && !previous.equals(namespace))
+            throw error(cursor, "Conflicting taglib prefix: " + prefix);
+        bindingOrigins.put(prefix, directive.location());
     }
 
     private List<PageNode> nodes(String closing, int opening) {
@@ -141,35 +156,53 @@ public final class StandardParser {
         int textStart = cursor;
         while (cursor < source.text.length()) {
             if (skipExpression()) continue;
-            boolean token = starts("<%") || recognizedTag();
-            if (!token) { cursor++; continue; }
-            addText(result, textStart, cursor);
-            int start = cursor;
-            if (starts("<%--")) comment();
-            else if (starts("<%@")) { var directive = directive(); binding(directive); result.add(directive); }
-            else if (starts("<%")) result.add(script());
+            if (!starts(SCRIPT_START) && !recognizedTag()) cursor++;
             else {
-                boolean end = starts("</");
-                cursor += end ? 2 : 1;
-                String name = identifier();
-                if (end) {
-                    space();
-                    expect(">");
-                    if (!name.equals(closing)) throw error(start, "Unexpected closing element: " + name);
-                    return result;
-                }
-                var attributes = attributes(false);
-                boolean selfClosing = starts("/>");
-                expect(selfClosing ? "/>" : ">");
-                var children = selfClosing ? List.<PageNode>of() : raw(name, start) ? dependentNodes(name, start) : nodes(name, start);
-                result.add(new PageNode.Element(name, bindings.get(name.substring(0, name.indexOf(':'))),
-                        attributes, children, selfClosing, source.at(start)));
+                addText(result, textStart, cursor);
+                if (token(result, closing)) return result;
+                textStart = cursor;
             }
-            textStart = cursor;
         }
         addText(result, textStart, cursor);
         if (closing != null) throw error(opening, "Unclosed element: " + closing);
         return result;
+    }
+
+    /** Reads one JSP token or custom element; whether it was the closing tag of {@code closing}. */
+    private boolean token(List<PageNode> result, String closing) {
+        int start = cursor;
+        if (starts(COMMENT_START)) comment();
+        else if (starts(DIRECTIVE_START)) {
+            var directive = directive();
+            binding(directive);
+            result.add(directive);
+        } else if (starts(SCRIPT_START)) result.add(script());
+        else if (starts(END_TAG_START)) {
+            close(closing, start);
+            return true;
+        } else result.add(element(start));
+        return false;
+    }
+
+    private void close(String expected, int start) {
+        cursor += 2;
+        String name = identifier();
+        space();
+        expect(">");
+        if (!name.equals(expected)) throw error(start, "Unexpected closing element: " + name);
+    }
+
+    private PageNode.Element element(int start) {
+        cursor++;
+        String name = identifier();
+        var attributes = attributes(false);
+        boolean selfClosing = starts(EMPTY_TAG_END);
+        expect(selfClosing ? EMPTY_TAG_END : ">");
+        List<PageNode> children;
+        if (selfClosing) children = List.of();
+        else children = raw(name, start) ? dependentNodes(name, start) : nodes(name, start);
+        return new PageNode.Element(name, bindings.get(name.substring(0, name.indexOf(':'))),
+                attributes, children, selfClosing, source.at(start));
     }
 
     /** Exposes only lexical library bindings for a translation-time included file. */
@@ -178,7 +211,7 @@ public final class StandardParser {
     }
 
     private void binding(PageNode.Directive directive) {
-        if (directive.name().equals("taglib") && directive.attributes().containsKey("uri")) {
+        if (directive.name().equals(TAGLIB) && directive.attributes().containsKey("uri")) {
             String prefix = directive.attributes().get("prefix");
             if (prefix != null) {
                 String previous = bindings.putIfAbsent(prefix, directive.attributes().get("uri"));
@@ -202,13 +235,13 @@ public final class StandardParser {
     }
 
     private boolean skipRawTag(List<PageNode.Directive> directives) {
-        if (rawBodies == null || !starts("<") || starts("</") || starts("<%") || starts("<!")) return false;
+        if (rawBodies == null || !starts("<") || starts(END_TAG_START) || starts(SCRIPT_START) || starts("<!")) return false;
         int saved = cursor; cursor++;
         String name;
-        try { name = identifier(); } catch (PageParseException ignored) { cursor = saved; return false; }
+        try { name = identifier(); } catch (PageParseException _) { cursor = saved; return false; }
         if (!raw(name, saved)) { cursor = saved; return false; }
         attributes(false);
-        boolean empty = starts("/>"); expect(empty ? "/>" : ">");
+        boolean empty = starts(EMPTY_TAG_END); expect(empty ? EMPTY_TAG_END : ">");
         if (!empty) probeDirectives(dependentNodes(name, saved), directives);
         return true;
     }
@@ -218,9 +251,7 @@ public final class StandardParser {
             if (node instanceof PageNode.Directive directive) {
                 binding(directive);
                 if (result != null) result.add(directive);
-                if (directive.attributes().containsKey("isELIgnored")) elIgnored = Boolean.parseBoolean(directive.attributes().get("isELIgnored"));
-                if (directive.attributes().containsKey("deferredSyntaxAllowedAsLiteral"))
-                    deferredLiteral = Boolean.parseBoolean(directive.attributes().get("deferredSyntaxAllowedAsLiteral"));
+                applyElSettings(directive);
             } else if (node instanceof PageNode.Element element) probeDirectives(element.children(), result);
         }
     }
@@ -228,31 +259,43 @@ public final class StandardParser {
     private List<PageNode> dependentNodes(String name, int opening) {
         int first = cursor;
         while (first < source.text.length() && rawSpace(source.text.charAt(first))) first++;
-        if (!rawEnvelope(first, "jsp:attribute") && !rawEnvelope(first, "jsp:body")) return rawNodes(name, opening);
+        if (!envelopeAt(first)) return rawNodes(name, opening);
         cursor = first;
         var result = new ArrayList<PageNode>();
         while (cursor < source.text.length()) {
             space();
             int start = cursor;
-            if (starts("</")) {
-                cursor += 2; String closing = identifier(); space(); expect(">");
-                if (!closing.equals(name)) throw error(start, "Unexpected closing element: " + closing);
+            if (starts(END_TAG_START)) {
+                close(name, start);
                 return result;
             }
-            if (!rawEnvelope(cursor, "jsp:attribute") && !rawEnvelope(cursor, "jsp:body"))
+            if (!envelopeAt(cursor))
                 throw error(cursor, "Named attributes and explicit bodies require jsp:body around content");
-            cursor++; String wrapper = identifier(); var attributes = attributes(false);
-            boolean empty = starts("/>"); expect(empty ? "/>" : ">");
-            var children = empty ? List.<PageNode>of() : wrapper.equals("jsp:body") ? rawNodes(wrapper, start) : nodes(wrapper, start);
-            result.add(new PageNode.Element(wrapper, PageParser.JSP_NAMESPACE, attributes, children, empty, source.at(start)));
+            result.add(envelope(start));
         }
         throw error(opening, "Unclosed tag-dependent element: " + name);
+    }
+
+    private boolean envelopeAt(int start) {
+        return rawEnvelope(start, "jsp:attribute") || rawEnvelope(start, JSP_BODY);
+    }
+
+    private PageNode.Element envelope(int start) {
+        cursor++;
+        String wrapper = identifier();
+        var attributes = attributes(false);
+        boolean empty = starts(EMPTY_TAG_END);
+        expect(empty ? EMPTY_TAG_END : ">");
+        List<PageNode> children;
+        if (empty) children = List.of();
+        else children = wrapper.equals(JSP_BODY) ? rawNodes(wrapper, start) : nodes(wrapper, start);
+        return new PageNode.Element(wrapper, PageParser.JSP_NAMESPACE, attributes, children, empty, source.at(start));
     }
 
     private List<PageNode> rawNodes(String name, int opening) {
         int bodyStart = cursor;
         while (cursor < source.text.length()) {
-            int tag = source.text.indexOf("</" + name, cursor);
+            int tag = source.text.indexOf(END_TAG_START + name, cursor);
             if (tag < 0) break;
             int finish = tag + name.length() + 2;
             while (finish < source.text.length() && rawSpace(source.text.charAt(finish))) finish++;
@@ -276,7 +319,7 @@ public final class StandardParser {
 
     private boolean recognizedTag() {
         if (!starts("<")) return false;
-        int start = cursor + (starts("</") ? 2 : 1);
+        int start = cursor + (starts(END_TAG_START) ? 2 : 1);
         int end = start;
         while (end < source.text.length() && nameChar(source.text.charAt(end))) end++;
         String name = source.text.substring(start, end);
@@ -292,21 +335,27 @@ public final class StandardParser {
         if (elIgnored) return false;
         if (starts("\\$") || starts("\\#")) { cursor += 2; return true; }
         if (!starts("${") && (deferredLiteral || !starts("#{"))) return false;
-        int start = cursor;
-        cursor += 2;
+        int end = expressionEnd(cursor + 2);
+        if (end < 0) return false;
+        cursor = end;
+        return true;
+    }
+
+    /** The offset after the brace closing an expression whose body starts at {@code from}, or -1 if unclosed. */
+    private int expressionEnd(int from) {
+        int i = from;
         int depth = 1;
         char quote = 0;
-        while (cursor < source.text.length() && depth > 0) {
-            char c = source.text.charAt(cursor++);
+        while (i < source.text.length() && depth > 0) {
+            char c = source.text.charAt(i++);
             if (quote != 0) {
-                if (c == '\\' && cursor < source.text.length()) cursor++;
+                if (c == '\\' && i < source.text.length()) i++;
                 else if (c == quote) quote = 0;
             } else if (c == '\'' || c == '"') quote = c;
             else if (c == '{') depth++;
             else if (c == '}') depth--;
         }
-        if (depth != 0) { cursor = start; return false; }
-        return true;
+        return depth == 0 ? i : -1;
     }
 
     private PageNode.Directive directive() {
@@ -329,39 +378,41 @@ public final class StandardParser {
         while (true) {
             int beforeSpace = cursor;
             space();
-            if (starts(directive ? "%>" : ">") || (!directive && starts("/>"))) return result;
+            if (starts(directive ? "%>" : ">") || (!directive && starts(EMPTY_TAG_END))) return result;
             if (cursor == beforeSpace) throw error(cursor, "Attributes must be separated by whitespace");
             int start = cursor;
             String name = identifier();
             space();
             expect("=");
             space();
-            if (cursor == source.text.length()) throw error(start, "Missing attribute value");
-            char quote = source.text.charAt(cursor++);
-            if (quote != '\'' && quote != '"') throw error(start, "Attribute values must be quoted");
-            var value = new StringBuilder();
-            boolean closed = false;
-            while (cursor < source.text.length()) {
-                char c = source.text.charAt(cursor++);
-                if (c == quote) { closed = true; break; }
-                if (c == '\\' && cursor < source.text.length()) {
-                    char next = source.text.charAt(cursor);
-                    if (next == '\\' || next == '\'' || next == '"') {
-                        value.append(next); cursor++; continue;
-                    }
-                }
-                value.append(c);
-            }
-            if (!closed) throw error(start, "Unclosed attribute value");
-            String attributeValue = value.toString();
+            String attributeValue = attributeValue(start);
             String previous = result.putIfAbsent(name, attributeValue);
-            if (previous != null) {
-                if (directive && ("page".equals(directiveName) || "tag".equals(directiveName)) && name.equals("import"))
-                    result.put(name, previous + "," + attributeValue);
-                else if (directive && "tag".equals(directiveName) && previous.equals(attributeValue)) { /* identical metadata is harmless */ }
-                else throw error(start, "Duplicate attribute: " + name);
-            }
+            if (previous != null) duplicate(result, name, previous, attributeValue, directiveName, start);
         }
+    }
+
+    private String attributeValue(int start) {
+        if (cursor == source.text.length()) throw error(start, "Missing attribute value");
+        char quote = source.text.charAt(cursor++);
+        if (quote != '\'' && quote != '"') throw error(start, "Attribute values must be quoted");
+        var value = new StringBuilder();
+        while (cursor < source.text.length()) {
+            char c = source.text.charAt(cursor++);
+            if (c == quote) return value.toString();
+            if (c == '\\' && cursor < source.text.length() && escapable(source.text.charAt(cursor))) value.append(source.text.charAt(cursor++));
+            else value.append(c);
+        }
+        throw error(start, "Unclosed attribute value");
+    }
+
+    private static boolean escapable(char c) { return c == '\\' || c == '\'' || c == '"'; }
+
+    /** Repeated page/tag imports are combined; identical tag-directive metadata is harmless; others are errors. */
+    private void duplicate(Map<String, String> result, String name, String previous, String value, String directiveName, int start) {
+        if (("page".equals(directiveName) || "tag".equals(directiveName)) && name.equals("import"))
+            result.put(name, previous + "," + value);
+        else if (!"tag".equals(directiveName) || !previous.equals(value))
+            throw error(start, "Duplicate attribute: " + name);
     }
 
     private PageNode.Script script() {
