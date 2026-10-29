@@ -61,9 +61,39 @@ public final class PageGenerator {
     }
 
     private final class Generator {
-        private static final Set<String> PAGE_ATTRIBUTES = Set.of("language", "import", "extends", "session",
-                "buffer", "autoFlush", "contentType", "pageEncoding", "errorPage", "isErrorPage", "info",
-                "isELIgnored", "deferredSyntaxAllowedAsLiteral", "trimDirectiveWhitespaces", "errorOnELNotFound");
+        private static final String LANGUAGE = "language";
+        private static final String EXTENDS = "extends";
+        private static final String SESSION = "session";
+        private static final String BUFFER = "buffer";
+        private static final String AUTO_FLUSH = "autoFlush";
+        private static final String CONTENT_TYPE = "contentType";
+        private static final String PAGE_ENCODING = "pageEncoding";
+        private static final String ERROR_PAGE = "errorPage";
+        private static final String IS_ERROR_PAGE = "isErrorPage";
+        private static final String IS_EL_IGNORED = "isELIgnored";
+        private static final String DEFERRED_SYNTAX_ALLOWED = "deferredSyntaxAllowedAsLiteral";
+        private static final String TRIM_DIRECTIVE_WHITESPACES = "trimDirectiveWhitespaces";
+        private static final String ERROR_ON_EL_NOT_FOUND = "errorOnELNotFound";
+        private static final String EXPRESSION_SUFFIX = "$Expression";
+        private static final String NEW = " = new ";
+        private static final String FUNCTION_CONTEXT = "_jspxFunctionContext";
+        private static final String OUT_WRITE = "out.write(";
+        private static final String TAGLIB = "taglib";
+        private static final String TRUE = "true";
+        private static final String FALSE = "false";
+        private static final String OBJECT = "Object ";
+        private static final String NO_ARGUMENTS = "();\n";
+        private static final String GET_ATTRIBUTE = ") pageContext.getAttribute(";
+        private static final String REMOVE_ATTRIBUTE = "pageContext.removeAttribute(";
+        private static final String PAGE_SCOPE_ARGUMENT = ", jakarta.servlet.jsp.PageContext.PAGE_SCOPE);\n";
+        private static final String SET_DYNAMIC_ATTRIBUTE = ".setDynamicAttribute(null, ";
+        private static final Set<String> BOOLEAN_PAGE_ATTRIBUTES = Set.of(SESSION, AUTO_FLUSH, IS_ERROR_PAGE, IS_EL_IGNORED,
+                DEFERRED_SYNTAX_ALLOWED, TRIM_DIRECTIVE_WHITESPACES, ERROR_ON_EL_NOT_FOUND);
+        private static final Set<String> RESERVED_VARIABLE_NAMES = Set.of(TRUE, FALSE, "null", "_", "request", "response",
+                "pageContext", "out", "application", "config", "page", SESSION, "exception");
+        private static final Set<String> PAGE_ATTRIBUTES = Set.of(LANGUAGE, "import", EXTENDS, SESSION,
+                BUFFER, AUTO_FLUSH, CONTENT_TYPE, PAGE_ENCODING, ERROR_PAGE, IS_ERROR_PAGE, "info",
+                IS_EL_IGNORED, DEFERRED_SYNTAX_ALLOWED, TRIM_DIRECTIVE_WHITESPACES, ERROR_ON_EL_NOT_FOUND);
         private final Page page;
         private final String className;
         private final Map<String, String> settings = new LinkedHashMap<>();
@@ -126,8 +156,7 @@ public final class PageGenerator {
             directives(page.nodes());
             boolean xmlDeclaration = XmlDeclaration.collect(page);
             var doctype = XmlDoctype.collect(page);
-            if (settings.containsKey("language") && !settings.get("language").equals("java"))
-                throw error(page.nodes().isEmpty() ? new SourceLocation(page.source(), 1, 1) : page.nodes().getFirst().location(), "Only Java scripting is supported");
+            requireJavaScripting();
             emit(page.nodes());
             validateTagLibraries();
             int dot = className.lastIndexOf('.');
@@ -138,28 +167,49 @@ public final class PageGenerator {
             result.add("import jakarta.servlet.*;\nimport jakarta.servlet.http.*;\nimport jakarta.servlet.jsp.*;\n");
             for (String name : imports) result.add("import " + name + ";\n");
             result.add("public final class " + simple + " extends " + simple + "$Lifecycle {\n");
-            var compiled = new ArrayList<GeneratedClass>();
-            for (int i = 0; i < expressions.size(); i++) {
-                var spec = expressionSpecs.get(i);
-                if (startupElAllowed) result.add("private jakarta.el.ValueExpression _jspxExpression" + i + ";\n");
-                else {
-                    String name = className + "$Expression" + i;
-                    try {
-                        compiled.add(new GeneratedClass(name, spec.literal() ? LiteralExpressions.compile(name, expressions.get(i), spec.method() != null)
-                                : spec.method() == null ? io.vidocq.peano.compiler.ExpressionCompiler.compile(name, expressions.get(i))
-                                : io.vidocq.peano.compiler.ExpressionCompiler.compileMethod(name, expressions.get(i))));
-                    } catch (jakarta.el.ELException invalid) {
-                        throw error(expressionLocations.get(i), "Cannot compile EL: " + invalid.getMessage());
-                    }
-                    var functions = expressionFunctions.get(i);
-                    if (!functions.isEmpty()) functionDefinitions(result, i, functions);
-                    if (!spec.deferred()) result.add("private static final jakarta.el.ValueExpression _jspxExpression" + i + " = new " + name + "("
-                            + (functions.isEmpty() ? "" : "_jspxFunctionContext" + i + "(), ") + "Object.class);\n");
-                }
-            }
+            var compiled = expressionFields(result);
             result.add(declarations);
             if (expressionSpecs.stream().anyMatch(spec -> spec.method() != null)) methodScope(result);
             result.add(fragments);
+            initializeMethod(result);
+            serviceMethod(result, xmlDeclaration, doctype);
+            helperMethods(result);
+            lifecycleClass(result, simple);
+            return new GeneratedPage(className, result.text(), result.locations(), compiled);
+        }
+        private void requireJavaScripting() {
+            if (settings.containsKey(LANGUAGE) && !settings.get(LANGUAGE).equals("java"))
+                throw error(page.nodes().isEmpty() ? new SourceLocation(page.source(), 1, 1) : page.nodes().getFirst().location(), "Only Java scripting is supported");
+        }
+        private List<GeneratedClass> expressionFields(JavaSource result) {
+            var compiled = new ArrayList<GeneratedClass>();
+            for (int i = 0; i < expressions.size(); i++) {
+                if (startupElAllowed) result.add("private jakarta.el.ValueExpression _jspxExpression" + i + ";\n");
+                else compiled.add(compiledExpressionField(result, i));
+            }
+            return compiled;
+        }
+        private GeneratedClass compiledExpressionField(JavaSource result, int i) {
+            var spec = expressionSpecs.get(i);
+            String name = className + EXPRESSION_SUFFIX + i;
+            GeneratedClass expression;
+            try {
+                expression = new GeneratedClass(name, expressionBytecode(name, expressions.get(i), spec));
+            } catch (jakarta.el.ELException invalid) {
+                throw error(expressionLocations.get(i), "Cannot compile EL: " + invalid.getMessage());
+            }
+            var functions = expressionFunctions.get(i);
+            if (!functions.isEmpty()) functionDefinitions(result, i, functions);
+            if (!spec.deferred()) result.add("private static final jakarta.el.ValueExpression _jspxExpression" + i + NEW + name + "("
+                    + (functions.isEmpty() ? "" : FUNCTION_CONTEXT + i + "(), ") + "Object.class);\n");
+            return expression;
+        }
+        private static byte[] expressionBytecode(String name, String expression, ExpressionSpec spec) {
+            if (spec.literal()) return LiteralExpressions.compile(name, expression, spec.method() != null);
+            if (spec.method() == null) return io.vidocq.peano.compiler.ExpressionCompiler.compile(name, expression);
+            return io.vidocq.peano.compiler.ExpressionCompiler.compileMethod(name, expression);
+        }
+        private void initializeMethod(JavaSource result) {
             result.add("@Override protected final void _jspxInitialize() {\n");
             if (startupElAllowed && !expressions.isEmpty()) {
                 result.add("var factory = jakarta.servlet.jsp.JspFactory.getDefaultFactory().getJspApplicationContext(getServletContext()).getExpressionFactory();\n");
@@ -168,36 +218,60 @@ public final class PageGenerator {
                     result.add("_jspxExpression" + i + " = factory.createValueExpression(context, " + JavaSource.quote(expressions.get(i)) + ", Object.class);\n");
             }
             result.add("}\n");
+        }
+        private void serviceMethod(JavaSource result, boolean xmlDeclaration, XmlDoctype doctype) {
             result.add("@Override public final void _jspService(jakarta.servlet.http.HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) throws jakarta.servlet.ServletException, java.io.IOException {\n");
             result.add("response.setContentType(" + JavaSource.quote(contentType()) + ");\n");
             result.add("var _jspxFactory = jakarta.servlet.jsp.JspFactory.getDefaultFactory();\n");
             result.add("if (_jspxFactory == null) throw new jakarta.servlet.ServletException(\"No JSP factory installed\");\n");
             result.add("var pageContext = _jspxFactory.getPageContext(this, request, response, "
-                    + (settings.containsKey("errorPage") ? JavaSource.quote(settings.get("errorPage")) : "null") + ", "
-                    + bool("session", true) + ", " + buffer() + ", " + bool("autoFlush", true) + ");\n");
+                    + (settings.containsKey(ERROR_PAGE) ? JavaSource.quote(settings.get(ERROR_PAGE)) : "null") + ", "
+                    + bool(SESSION, true) + ", " + buffer() + ", " + bool(AUTO_FLUSH, true) + ");\n");
             result.add("if (pageContext == null) throw new jakarta.servlet.ServletException(\"Cannot initialize page context\");\n");
             result.add("var out = pageContext.getOut();\nvar application = getServletContext();\nvar config = getServletConfig();\nObject page = this;\n");
-            if (bool("session", true)) result.add("var session = pageContext.getSession();\n");
-            if (bool("isErrorPage", false)) result.add("Throwable exception = pageContext.getErrorData().getThrowable();\n");
+            if (bool(SESSION, true)) result.add("var session = pageContext.getSession();\n");
+            if (bool(IS_ERROR_PAGE, false)) result.add("Throwable exception = pageContext.getErrorData().getThrowable();\n");
             result.add("boolean _jspxFailed = false, _jspxHandled = false; boolean[] _jspxForwarded = {false};\ntry {\n");
             result.add(serviceDeclarations);
             if (xmlDeclaration) result.add("out.write(\"<?xml version=\\\"1.0\\\" encoding=\\\"\" + response.getCharacterEncoding() + \"\\\"?>\");\n");
-            if (!doctype.declaration().isEmpty()) result.add("out.write(" + JavaSource.quote(doctype.declaration()) + ");\n", doctype.location());
+            if (!doctype.declaration().isEmpty()) result.add(OUT_WRITE + JavaSource.quote(doctype.declaration()) + ");\n", doctype.location());
             if (needsFactory) result.add("var _jspxExpressionFactory = _jspxFactory.getJspApplicationContext(application).getExpressionFactory();\n");
             result.add(body);
             result.add("} catch (Throwable failure) { if (!(failure instanceof jakarta.servlet.jsp.SkipPageException)) { _jspxFailed = true; pageContext.handlePageException(failure); _jspxHandled = true; } } finally {\n");
-            result.add("try { if (!_jspxForwarded[0] && !(pageContext instanceof io.vidocq.ibarra.spi.PageDispatchContext _jspxDispatch && _jspxDispatch.isForwarded())"
-                    + " && (!_jspxFailed || (_jspxHandled && out.getRemaining() < out.getBufferSize()))) out.flush(); } finally { _jspxFactory.releasePageContext(pageContext); }\n}\n}\n");
+            result.add("""
+                    try { if (!_jspxForwarded[0] && !(pageContext instanceof io.vidocq.ibarra.spi.PageDispatchContext _jspxDispatch && _jspxDispatch.isForwarded())\
+                     && (!_jspxFailed || (_jspxHandled && out.getRemaining() < out.getBufferSize()))) out.flush(); } finally { _jspxFactory.releasePageContext(pageContext); }
+                    }
+                    }
+                    """);
+        }
+        private void helperMethods(JavaSource result) {
             result.add("private static String _jspxText(Object value) { return value == null ? \"\" : String.valueOf(value); }\n");
             result.add("private static Object _jspxBean(jakarta.servlet.jsp.PageContext context, String name) throws jakarta.servlet.ServletException { Object bean = context.findAttribute(name); if (bean == null) throw new jakarta.servlet.ServletException(\"No bean named \" + name); return bean; }\n");
             result.add("private static String _jspxAttribute(String value) { return value.replace(\"&\", \"&amp;\").replace(\"\\\"\", \"&quot;\").replace(\"<\", \"&lt;\"); }\n");
             result.add("private static String _jspxXmlName(String value) { if (!value.matches(\"[\\\\p{L}_][\\\\p{L}\\\\p{N}\\\\p{M}_.:-]*\")) throw new IllegalArgumentException(\"Invalid XML name: \" + value); return value; }\n");
             result.add("private static String _jspxParameter(String path, String name, Object value) { return path + (path.contains(\"?\") ? \"&\" : \"?\") + java.net.URLEncoder.encode(name, java.nio.charset.StandardCharsets.UTF_8) + \"=\" + java.net.URLEncoder.encode(_jspxText(value), java.nio.charset.StandardCharsets.UTF_8); }\n");
             if (needsBeanNameSupport) result.add("private static Object _jspxInstantiateBean(ClassLoader loader, String name) throws java.io.IOException, jakarta.servlet.ServletException { try { return Class.forName(name, true, loader).getConstructor().newInstance(); } catch (ClassNotFoundException missingClass) { String resource = name.replace('.', '/') + \".ser\"; try (var stream = loader.getResourceAsStream(resource)) { if (stream == null) throw new jakarta.servlet.ServletException(missingClass); try (var input = new java.io.ObjectInputStream(stream) { @Override protected Class<?> resolveClass(java.io.ObjectStreamClass descriptor) throws java.io.IOException, ClassNotFoundException { try { return Class.forName(descriptor.getName(), false, loader); } catch (ClassNotFoundException missingType) { return super.resolveClass(descriptor); } } }) { return input.readObject(); } catch (ClassNotFoundException failure) { throw new jakarta.servlet.ServletException(failure); } } } catch (ReflectiveOperationException failure) { throw new jakarta.servlet.ServletException(failure); } }\n");
-            result.add("}\nabstract class " + simple + "$Lifecycle extends " + settings.getOrDefault("extends", "jakarta.servlet.http.HttpServlet") + " implements jakarta.servlet.jsp.HttpJspPage, io.vidocq.ibarra.spi.PageOptions {\n");
-            result.add("@Override public final boolean errorOnELNotFound() { return " + bool("errorOnELNotFound", false) + "; }\n");
-            result.add("@Override public final boolean usesStaticELImports() { return true; }\n"
-                    + "@SuppressWarnings({\"removal\",\"deprecation\"}) @Override public final Class<?> resolveELClass(String name) { if (name == null) return null; return switch(name) {\n");
+        }
+        private void lifecycleClass(JavaSource result, String simple) {
+            result.add("}\nabstract class " + simple + "$Lifecycle extends " + settings.getOrDefault(EXTENDS, "jakarta.servlet.http.HttpServlet") + " implements jakarta.servlet.jsp.HttpJspPage, io.vidocq.ibarra.spi.PageOptions {\n");
+            result.add("@Override public final boolean errorOnELNotFound() { return " + bool(ERROR_ON_EL_NOT_FOUND, false) + "; }\n");
+            result.add("""
+                    @Override public final boolean usesStaticELImports() { return true; }
+                    @SuppressWarnings({"removal","deprecation"}) @Override public final Class<?> resolveELClass(String name) { if (name == null) return null; return switch(name) {
+                    """);
+            importResolutionCases(result);
+            result.add("default -> null; }; }\n");
+            result.add("protected abstract void _jspxInitialize();\nprivate final void _jspxValidateTagExtraInfo() {\n");
+            result.add(libraryValidations);
+            result.add(tagValidations);
+            result.add("}\npublic void jspInit() {}\npublic void jspDestroy() {}\n");
+            lifecycleOverrides(result);
+            if (settings.containsKey("info") && !hasFinalLifecycleMethod("getServletInfo", "()Ljava/lang/String;"))
+                result.add("@Override public String getServletInfo() { return " + JavaSource.quote(settings.get("info")) + "; }\n");
+            result.add("}\n");
+        }
+        private void importResolutionCases(JavaSource result) {
             var importClasses = new ImportClasses(importModulePath, applicationModule);
             for (String name : imports) if (!name.endsWith(".*")) importClasses.bindings(List.of(name), importLocations.get(name));
             var bindings = importClasses.bindings(imports, new SourceLocation(page.source(), 1, 1));
@@ -206,11 +280,8 @@ public final class PageGenerator {
                 if (binding.getValue().size() == 1) result.add(binding.getValue().iterator().next() + ".class;\n");
                 else result.add("throw new jakarta.el.ELException(" + JavaSource.quote("Ambiguous EL import: " + binding.getKey()) + ");\n");
             }
-            result.add("default -> null; }; }\n");
-            result.add("protected abstract void _jspxInitialize();\nprivate final void _jspxValidateTagExtraInfo() {\n");
-            result.add(libraryValidations);
-            result.add(tagValidations);
-            result.add("}\npublic void jspInit() {}\npublic void jspDestroy() {}\n");
+        }
+        private void lifecycleOverrides(JavaSource result) {
             if (!hasFinalLifecycleMethod("init", "()V"))
                 result.add("@Override public final void init() throws jakarta.servlet.ServletException { super.init(); _jspxInitialize(); _jspxValidateTagExtraInfo(); jspInit(); }\n");
             if (!hasFinalLifecycleMethod("init", "(Ljakarta/servlet/ServletConfig;)V"))
@@ -226,10 +297,6 @@ public final class PageGenerator {
             }
             if (!hasFinalLifecycleMethod("service", "(Ljakarta/servlet/ServletRequest;Ljakarta/servlet/ServletResponse;)V"))
                 result.add("@Override public final void service(jakarta.servlet.ServletRequest request, jakarta.servlet.ServletResponse response) throws jakarta.servlet.ServletException, java.io.IOException { super.service(request, response); }\n");
-            if (settings.containsKey("info") && !hasFinalLifecycleMethod("getServletInfo", "()Ljava/lang/String;"))
-                result.add("@Override public String getServletInfo() { return " + JavaSource.quote(settings.get("info")) + "; }\n");
-            result.add("}\n");
-            return new GeneratedPage(className, result.text(), result.locations(), compiled);
         }
 
         private void directives(List<PageNode> nodes) {
@@ -246,56 +313,67 @@ public final class PageGenerator {
         }
         private void collectDirectives(List<PageNode> nodes, Map<String, String> explicit) {
             for (var node : nodes) {
-                if (node instanceof PageNode.Directive directive) {
-                    if (directive.name().equals("taglib")) continue;
-                    if (!directive.name().equals("page")) throw error(directive.location(), "Unsupported directive: " + directive.name());
-                    for (var entry : directive.attributes().entrySet()) {
-                        if (namespaceAttribute(entry.getKey())) continue;
-                        if (!PAGE_ATTRIBUTES.contains(entry.getKey())) throw error(directive.location(), "Unsupported page attribute: " + entry.getKey());
-                        if (entry.getKey().equals("pageEncoding") && !directive.location().source().equals(page.source())) continue;
-                        if (Set.of("session", "autoFlush", "isErrorPage", "isELIgnored",
-                                "deferredSyntaxAllowedAsLiteral", "trimDirectiveWhitespaces", "errorOnELNotFound").contains(entry.getKey())
-                                && !entry.getValue().equals("true") && !entry.getValue().equals("false"))
-                            throw error(directive.location(), entry.getKey() + " must be true or false");
-                        if (entry.getKey().equals("import")) {
-                            for (String name : entry.getValue().split(",")) {
-                                name = name.trim();
-                                if (name.startsWith("static ")) throw error(directive.location(), "Page imports accept types or packages, not static members");
-                                String base = name.startsWith("static ") ? name.substring(7) : name;
-                                if (!SourceVersion.isName(base.endsWith(".*") ? base.substring(0, base.length() - 2) : base))
-                                    throw error(directive.location(), "Invalid page import: " + name);
-                                imports.add(name);
-                                importLocations.putIfAbsent(name, directive.location());
-                            }
-                        } else {
-                            String previous = explicit.putIfAbsent(entry.getKey(), entry.getValue());
-                            settingLocations.putIfAbsent(entry.getKey(), directive.location());
-                            if (previous != null && !previous.equals(entry.getValue()))
-                                throw error(directive.location(), "Conflicting page attribute: " + entry.getKey());
-                        }
-                    }
-                } else if (node instanceof PageNode.Element element) collectDirectives(element.children(), explicit);
+                if (node instanceof PageNode.Directive directive) pageDirective(directive, explicit);
+                else if (node instanceof PageNode.Element element) collectDirectives(element.children(), explicit);
+            }
+        }
+        private void pageDirective(PageNode.Directive directive, Map<String, String> explicit) {
+            if (directive.name().equals(TAGLIB)) return;
+            if (!directive.name().equals("page")) throw error(directive.location(), "Unsupported directive: " + directive.name());
+            for (var entry : directive.attributes().entrySet()) pageAttribute(directive, entry.getKey(), entry.getValue(), explicit);
+        }
+        private void pageAttribute(PageNode.Directive directive, String name, String value, Map<String, String> explicit) {
+            if (namespaceAttribute(name)) return;
+            if (!PAGE_ATTRIBUTES.contains(name)) throw error(directive.location(), "Unsupported page attribute: " + name);
+            if (name.equals(PAGE_ENCODING) && !directive.location().source().equals(page.source())) return;
+            if (BOOLEAN_PAGE_ATTRIBUTES.contains(name) && !value.equals(TRUE) && !value.equals(FALSE))
+                throw error(directive.location(), name + " must be true or false");
+            if (name.equals("import")) {
+                pageImports(directive, value);
+                return;
+            }
+            String previous = explicit.putIfAbsent(name, value);
+            settingLocations.putIfAbsent(name, directive.location());
+            if (previous != null && !previous.equals(value))
+                throw error(directive.location(), "Conflicting page attribute: " + name);
+        }
+        private void pageImports(PageNode.Directive directive, String value) {
+            for (String declared : value.split(",")) {
+                String name = declared.trim();
+                if (name.startsWith("static ")) throw error(directive.location(), "Page imports accept types or packages, not static members");
+                if (!SourceVersion.isName(name.endsWith(".*") ? name.substring(0, name.length() - 2) : name))
+                    throw error(directive.location(), "Invalid page import: " + name);
+                imports.add(name);
+                importLocations.putIfAbsent(name, directive.location());
             }
         }
 
         private void emit(List<PageNode> nodes) {
-            for (var node : nodes) {
-                if (node instanceof PageNode.RawText text) write(text.value(), text.location());
-                else if (node instanceof PageNode.Text text) {
-                    if (!bool("trimDirectiveWhitespaces", false) || !text.value().chars().allMatch(c -> c == ' ' || c == '\t' || c == '\r' || c == '\n'))
-                        write(text.value(), text.location());
-                } else if (node instanceof PageNode.Expression expression) {
-                    if (expression.deferred()) throw error(expression.location(), "Deferred EL in template text is not supported");
-                    body.add("out.write(_jspxText(" + expression("${" + expression.code() + "}", expression.location()) + "));\n", expression.location());
-                } else if (node instanceof PageNode.Script script) {
-                    if (bool("scriptingInvalid", false)) throw error(script.location(), "Scripting is disabled by configuration");
-                    if (script.kind() == PageNode.ScriptKind.DECLARATION) declarations.add(script.code() + "\n", script.location());
-                    else if (script.kind() == PageNode.ScriptKind.EXPRESSION) body.add("out.print(" + script.code() + ");\n", script.location());
-                    else body.add(script.code() + "\n", script.location());
-                } else if (node instanceof PageNode.Element element) element(element);
-                else if (node instanceof PageNode.Directive directive && directive.name().equals("taglib"))
-                    taglibBindings.put(directive.attributes().get("prefix"), directive);
+            for (var node : nodes) emit(node);
+        }
+        private void emit(PageNode node) {
+            switch (node) {
+                case PageNode.RawText(var value, var location) -> write(value, location);
+                case PageNode.Text(var value, var location) -> {
+                    if (!bool(TRIM_DIRECTIVE_WHITESPACES, false) || !value.chars().allMatch(c -> c == ' ' || c == '\t' || c == '\r' || c == '\n'))
+                        write(value, location);
+                }
+                case PageNode.Expression(var code, var deferred, var location) -> {
+                    if (deferred) throw error(location, "Deferred EL in template text is not supported");
+                    body.add("out.write(_jspxText(" + expression("${" + code + "}", location) + "));\n", location);
+                }
+                case PageNode.Script(var kind, var code, var location) -> script(kind, code, location);
+                case PageNode.Element element -> element(element);
+                case PageNode.Directive directive -> {
+                    if (directive.name().equals(TAGLIB)) taglibBindings.put(directive.attributes().get("prefix"), directive);
+                }
             }
+        }
+        private void script(PageNode.ScriptKind kind, String code, SourceLocation location) {
+            if (bool("scriptingInvalid", false)) throw error(location, "Scripting is disabled by configuration");
+            if (kind == PageNode.ScriptKind.DECLARATION) declarations.add(code + "\n", location);
+            else if (kind == PageNode.ScriptKind.EXPRESSION) body.add("out.print(" + code + ");\n", location);
+            else body.add(code + "\n", location);
         }
 
         private void element(PageNode.Element node) {
@@ -314,30 +392,11 @@ public final class PageGenerator {
             return previous;
         }
         private void elementContent(PageNode.Element node) {
-            String local = node.name().substring(node.name().lastIndexOf(':') + 1);
             if (!node.namespace().equals(PageParser.JSP_NAMESPACE)) {
-                String uri = node.namespace();
-                var binding = taglibBindings.get(node.name().substring(0, Math.max(0, node.name().indexOf(':'))));
-                boolean standard = sourceSyntaxes.get(node.location().source()) == Page.Syntax.STANDARD;
-                var namespace = namespaces.get(node.name().substring(0, Math.max(0, node.name().indexOf(':'))));
-                SourceLocation origin = standard && binding != null && uri.equals(binding.attributes().get("uri")) ? binding.location()
-                        : namespace != null && uri.equals(namespace.uri()) ? namespace.location() : node.location();
-                var library = resolvedLibraries.resolve(uri, origin, standard);
-                if (library != null) { customTag(node, library); return; }
-                if (sourceSyntaxes.get(node.location().source()) == Page.Syntax.STANDARD || node.namespace().startsWith("urn:jsptag")
-                        || node.namespace().startsWith("urn:jsptld") || node.namespace().startsWith("jakarta.tags."))
-                    throw error(node.location(), "No build-time tag library for " + node.namespace() + ": " + node.name());
-                write("<" + node.name(), node.location());
-                for (var entry : node.attributes().entrySet()) {
-                    if (namespaceAttribute(entry.getKey()) && entry.getValue().equals(PageParser.JSP_NAMESPACE)) continue;
-                    write(" " + entry.getKey() + "=\"", node.location());
-                    body.add("out.write(_jspxText(" + value(entry.getValue(), node.location(), true) + "));\n", node.location());
-                    write("\"", node.location());
-                }
-                write(node.selfClosing() ? "/>" : ">", node.location());
-                if (!node.selfClosing()) { emit(node.children()); write("</" + node.name() + ">", node.location()); }
+                foreignElement(node);
                 return;
             }
+            String local = node.name().substring(node.name().lastIndexOf(':') + 1);
             switch (local) {
                 case "root" -> jspRoot(node);
                 case "text" -> emit(node.children());
@@ -350,6 +409,41 @@ public final class PageGenerator {
                     // Prolog metadata is collected for the whole translation unit before body generation.
                 }
                 default -> throw error(node.location(), "Unsupported standard action: " + node.name());
+            }
+        }
+        private void foreignElement(PageNode.Element node) {
+            boolean standard = sourceSyntaxes.get(node.location().source()) == Page.Syntax.STANDARD;
+            var library = resolvedLibraries.resolve(node.namespace(), tagLibraryOrigin(node, standard), standard);
+            if (library != null) {
+                customTag(node, library);
+                return;
+            }
+            if (standard || node.namespace().startsWith("urn:jsptag")
+                    || node.namespace().startsWith("urn:jsptld") || node.namespace().startsWith("jakarta.tags."))
+                throw error(node.location(), "No build-time tag library for " + node.namespace() + ": " + node.name());
+            templateElement(node);
+        }
+        private SourceLocation tagLibraryOrigin(PageNode.Element node, boolean standard) {
+            String uri = node.namespace();
+            String prefix = node.name().substring(0, Math.max(0, node.name().indexOf(':')));
+            var binding = taglibBindings.get(prefix);
+            if (standard && binding != null && uri.equals(binding.attributes().get("uri"))) return binding.location();
+            var namespace = namespaces.get(prefix);
+            if (namespace != null && uri.equals(namespace.uri())) return namespace.location();
+            return node.location();
+        }
+        private void templateElement(PageNode.Element node) {
+            write("<" + node.name(), node.location());
+            for (var entry : node.attributes().entrySet()) {
+                if (namespaceAttribute(entry.getKey()) && entry.getValue().equals(PageParser.JSP_NAMESPACE)) continue;
+                write(" " + entry.getKey() + "=\"", node.location());
+                body.add("out.write(_jspxText(" + value(entry.getValue(), node.location(), true) + "));\n", node.location());
+                write("\"", node.location());
+            }
+            write(node.selfClosing() ? "/>" : ">", node.location());
+            if (!node.selfClosing()) {
+                emit(node.children());
+                write("</" + node.name() + ">", node.location());
             }
         }
 
@@ -369,22 +463,27 @@ public final class PageGenerator {
 
 
         private void synchronizeVariables(List<ScriptingVariable> variables, int... scopes) {
-            for (var variable : variables) for (int scope : scopes) if (variable.synchronize() && variable.scope() == scope)
-                body.add(variable.name() + " = (" + variable.type() + ") pageContext.getAttribute("
-                        + JavaSource.quote(variable.name()) + ");\n");
+            for (var variable : variables) {
+                for (int scope : scopes) {
+                    if (variable.synchronize() && variable.scope() == scope)
+                        body.add(variable.name() + " = (" + variable.type() + GET_ATTRIBUTE
+                                + JavaSource.quote(variable.name()) + ");\n");
+                }
+            }
         }
 
-        private void addScriptingVariable(List<ScriptingVariable> variables, String name, String contextName, String className,
-                boolean declare, int scope, boolean synchronizeUndeclared, SourceLocation at) {
+        /** Validates the declared variable name and resolves its class name (carried in {@code type}) at build time. */
+        private void addScriptingVariable(List<ScriptingVariable> variables, ScriptingVariable declared, SourceLocation at) {
+            String name = declared.name();
             if (!SourceVersion.isIdentifier(name) || SourceVersion.isKeyword(name)
-                    || Set.of("true", "false", "null", "_", "request", "response", "pageContext", "out",
-                            "application", "config", "page", "session", "exception").contains(name)
+                    || RESERVED_VARIABLE_NAMES.contains(name)
                     || name.startsWith("_jspx"))
                 throw error(at, "Invalid or reserved tag scripting variable: " + name);
-            String type = classes.expressionType(className, at);
-            var resolved = new ScriptingVariable(name, contextName, type, declare, scope, declare || synchronizeUndeclared);
+            String type = classes.expressionType(declared.type(), at);
+            var resolved = new ScriptingVariable(name, declared.contextName(), type, declared.declare(), declared.scope(),
+                    declared.synchronize());
             variables.add(resolved);
-            if (scope != 0 && declare) {
+            if (declared.scope() != 0 && declared.declare()) {
                 var previous = pageVariables.putIfAbsent(name, resolved);
                 if (previous == null) serviceDeclarations.add(type + " " + name + " = null;\n", at);
                 else if (!previous.type().equals(type)) throw error(at, "Conflicting tag scripting variable type: " + name);
@@ -394,7 +493,7 @@ public final class PageGenerator {
         private String tagVariableName(String attributeName, PageNode.Element tag, TagInvocation invocation) {
             String value = tag.attributes().get(attributeName);
             var parser = new PageNormalizer(sourceSyntaxes.getOrDefault(tag.location().source(), Page.Syntax.STANDARD),
-                    new ParserOptions(bool("isELIgnored", false), bool("deferredSyntaxAllowedAsLiteral", false)), Map.of());
+                    new ParserOptions(bool(IS_EL_IGNORED, false), bool(DEFERRED_SYNTAX_ALLOWED, false)), Map.of());
             if (value != null) {
                 if (value.contains("<%"))
                     throw error(tag.location(), "Tag variable name attribute must be a translation-time constant: " + attributeName);
@@ -403,6 +502,12 @@ public final class PageGenerator {
             var named = invocation.attributes().get(attributeName);
             if (named == null) throw error(tag.location(), "Missing tag variable name attribute: " + attributeName);
             return templateLiteral(parser.normalizeStructured(namedContent(named)));
+        }
+
+        /** One custom action being generated: its element, descriptor, handler kind and generated handler variable. */
+        private record TagUse(PageNode.Element node, TagDescriptor tag, BeanClasses.Handler kind, String handler,
+                List<ScriptingVariable> variables, List<PageNode> children) {
+            SourceLocation location() { return node.location(); }
         }
 
         private void customTag(PageNode.Element node, TagLibraryDescriptor library) {
@@ -414,175 +519,224 @@ public final class PageGenerator {
             var invocation = tagInvocation(node);
             var scriptingVariables = new ArrayList<ScriptingVariable>();
             if (tag.teiClass() != null) for (var variable : classes.tagVariables(tag.teiClass(), node.location()))
-                addScriptingVariable(scriptingVariables, variable.name(), variable.name(), variable.className(),
-                        variable.declare(), variable.scope(), false, node.location());
-            var kind = tag.tagFile() ? new BeanClasses.Handler(tag.handlerClass(), true, false, false, false, tag.dynamicAttributes(), false)
-                    : classes.handler(tag.handlerClass(), node.location());
-            if (kind.simple() && tag.bodyContent().equals("JSP")) throw error(node.location(), "SimpleTag cannot have JSP body-content");
-            if (tag.dynamicAttributes() && !kind.dynamic()) throw error(node.location(), "Handler does not implement DynamicAttributes");
+                addScriptingVariable(scriptingVariables, new ScriptingVariable(variable.name(), variable.name(),
+                        variable.className(), variable.declare(), variable.scope(), variable.declare()), node.location());
+            var kind = handlerKind(tag, node.location());
             validateTagExtraInfo(tag, library, node, invocation);
             var children = invocation.content();
-            if (tag.bodyContent().equals("empty") && !children.isEmpty()) throw error(node.location(), "Tag requires an empty body");
-            if (tag.bodyContent().equals("scriptless")) scriptless(children);
+            validateTagContent(tag, node, invocation);
+            declaredTagVariables(tag, node, invocation, scriptingVariables);
+            var use = new TagUse(node, tag, kind, "_jspxTag" + serial++, scriptingVariables, children);
+            body.add("{\n", node.location());
+            initializeHandler(use);
+            for (var supplied : node.attributes().entrySet()) suppliedAttribute(use, supplied.getKey(), supplied.getValue());
+            for (var supplied : invocation.attributes().entrySet()) namedAttribute(use, supplied.getKey(), supplied.getValue());
+            String previousParent = parentTag;
+            parentTag = use.handler();
+            if (kind.simple()) simpleTagInvocation(use);
+            else classicTagInvocation(use);
+            parentTag = previousParent;
+            body.add("}\n");
+        }
+        private BeanClasses.Handler handlerKind(TagDescriptor tag, SourceLocation at) {
+            var kind = tag.tagFile() ? new BeanClasses.Handler(tag.handlerClass(), true, false, false, false, tag.dynamicAttributes(), false)
+                    : classes.handler(tag.handlerClass(), at);
+            if (kind.simple() && tag.bodyContent().equals("JSP")) throw error(at, "SimpleTag cannot have JSP body-content");
+            if (tag.dynamicAttributes() && !kind.dynamic()) throw error(at, "Handler does not implement DynamicAttributes");
+            return kind;
+        }
+        private void validateTagContent(TagDescriptor tag, PageNode.Element node, TagInvocation invocation) {
+            if (tag.bodyContent().equals("empty") && !invocation.content().isEmpty()) throw error(node.location(), "Tag requires an empty body");
+            if (tag.bodyContent().equals("scriptless")) scriptless(invocation.content());
             for (var attribute : tag.attributes().values())
                 if (attribute.required() && !node.attributes().containsKey(attribute.name()) && !invocation.attributes().containsKey(attribute.name()))
                     throw error(node.location(), "Required tag attribute: " + attribute.name());
+        }
+        private void declaredTagVariables(TagDescriptor tag, PageNode.Element node, TagInvocation invocation,
+                List<ScriptingVariable> scriptingVariables) {
             for (var variable : tag.variables()) {
                 String name = variable.name() != null ? variable.name()
                         : tagVariableName(variable.nameFromAttribute(), node, invocation);
                 String contextName = variable.alias() == null ? name : variable.alias();
-                addScriptingVariable(scriptingVariables, name, contextName, variable.className(), variable.declare(),
-                        variable.scope(), tag.tagFile(), node.location());
+                addScriptingVariable(scriptingVariables, new ScriptingVariable(name, contextName, variable.className(),
+                        variable.declare(), variable.scope(), variable.declare() || tag.tagFile()), node.location());
             }
-            String handler = "_jspxTag" + serial++;
-            body.add("{\n", node.location());
-            for (var variable : scriptingVariables)
+        }
+        private void initializeHandler(TagUse use) {
+            String handler = use.handler();
+            var kind = use.kind();
+            for (var variable : use.variables())
                 if (variable.scope() == TagVariableDescriptor.NESTED && variable.declare()
-                        && (!tag.tagFile() || !children.isEmpty()))
-                    body.add(variable.type() + " " + variable.name() + " = null;\n", node.location());
-            body.add("var " + handler + " = new " + kind.sourceName() + "();\n", node.location());
+                        && (!use.tag().tagFile() || !use.children().isEmpty()))
+                    body.add(variable.type() + " " + variable.name() + " = null;\n", use.location());
+            body.add("var " + handler + NEW + kind.sourceName() + NO_ARGUMENTS, use.location());
             if (!kind.simple()) body.add("try {\n");
-            body.add(handler + (kind.simple() ? ".setJspContext(pageContext);\n" : ".setPageContext(pageContext);\n"), node.location());
+            body.add(handler + (kind.simple() ? ".setJspContext(pageContext);\n" : ".setPageContext(pageContext);\n"), use.location());
             if (!kind.simple()) body.add(handler + ".setParent(" + classicParent(parentTag) + ");\n");
             else if (!parentTag.equals("null")) body.add(handler + ".setParent(" + parentTag + ");\n");
-            if (kind.jspIdConsumer()) body.add(handler + ".setJspId(" + JavaSource.quote("ibarra_tag_" + jspIdSerial++) + ");\n", node.location());
-            for (var supplied : node.attributes().entrySet()) {
-                if (namespaceAttribute(supplied.getKey())) continue;
-                var attribute = tag.attributes().get(supplied.getKey());
-                if (attribute == null) {
-                    if (kind.jspIdConsumer() && supplied.getKey().equals("jspId")) throw error(node.location(), "Tag attribute cannot override compiler-provided jspId");
-                    if (tag.tagFile() && supplied.getKey().contains(":")) continue;
-                    if (!tag.dynamicAttributes() || supplied.getKey().contains(":")) throw error(node.location(), "Unknown or namespaced tag attribute: " + supplied.getKey());
-                    body.add(handler + ".setDynamicAttribute(null, " + JavaSource.quote(supplied.getKey()) + ", "
-                            + dynamicAttributeValue(supplied.getValue(), node.location()) + ");\n", node.location());
-                } else {
-                    if (attribute.fragment()) throw error(node.location(), "Fragment attributes require jsp:attribute");
-                    DeferredInput deferredValue = attribute.deferred() ? attributeInput(supplied.getValue(), node.location()) : null;
-                    var setter = tag.tagFile() ? tagFileSetter(attribute)
-                            : attribute.fragment()
-                            ? classes.tagFragmentSetter(tag.handlerClass(), attribute.name(), attribute.setterType(), node.location())
-                            : attribute.deferred() ? classes.tagSetter(tag.handlerClass(), attribute.name(), deferredSetterType(attribute, deferredValue), node.location())
-                            : classes.tagPropertySetter(tag.handlerClass(), attribute.name(), node.location());
-                    var target = new TagAttribute(attribute.name(), setter.type(), attribute.required(), attribute.runtimeExpression(), false);
-                    protectJspIdSetter(kind, setter, node.location());
-                    String argument = attribute.deferred() ? deferredAttribute(deferredValue, attribute, node.location())
-                            : tagValue(supplied.getValue(), target, node.location());
-                    body.add(handler + "." + setter.name() + "((" + setter.type() + ") (" + argument + "));\n", node.location());
-                }
+            if (kind.jspIdConsumer()) body.add(handler + ".setJspId(" + JavaSource.quote("ibarra_tag_" + jspIdSerial++) + ");\n", use.location());
+        }
+        /** Rejects or skips an attribute the tag does not declare; {@code true} when it is set as a dynamic attribute. */
+        private boolean acceptsDynamicAttribute(TagUse use, String name, SourceLocation at) {
+            if (use.kind().jspIdConsumer() && name.equals("jspId")) throw error(at, "Tag attribute cannot override compiler-provided jspId");
+            if (use.tag().tagFile() && name.contains(":")) return false;
+            if (!use.tag().dynamicAttributes() || name.contains(":")) throw error(at, "Unknown or namespaced tag attribute: " + name);
+            return true;
+        }
+        private BeanClasses.Accessor tagSetter(TagUse use, TagAttribute attribute, DeferredInput deferredValue, SourceLocation at) {
+            if (use.tag().tagFile()) return tagFileSetter(attribute);
+            String handlerClass = use.tag().handlerClass();
+            if (attribute.fragment()) return classes.tagFragmentSetter(handlerClass, attribute.name(), attribute.setterType(), at);
+            if (attribute.deferred()) return classes.tagSetter(handlerClass, attribute.name(), deferredSetterType(attribute, deferredValue), at);
+            return classes.tagPropertySetter(handlerClass, attribute.name(), at);
+        }
+        private void suppliedAttribute(TagUse use, String name, String value) {
+            if (namespaceAttribute(name)) return;
+            var at = use.location();
+            var attribute = use.tag().attributes().get(name);
+            if (attribute == null) {
+                if (acceptsDynamicAttribute(use, name, at))
+                    body.add(use.handler() + SET_DYNAMIC_ATTRIBUTE + JavaSource.quote(name) + ", "
+                            + dynamicAttributeValue(value, at) + ");\n", at);
+                return;
             }
-            for (var supplied : invocation.attributes().entrySet()) {
-                var named = supplied.getValue();
-                var previousNamespaces = enterNamespaces(named);
-                try {
-                var attribute = tag.attributes().get(supplied.getKey());
-                var content = namedContent(named);
-                if (attribute == null) {
-                    if (kind.jspIdConsumer() && supplied.getKey().equals("jspId")) throw error(named.location(), "Tag attribute cannot override compiler-provided jspId");
-                    if (tag.tagFile() && supplied.getKey().contains(":")) continue;
-                    if (!tag.dynamicAttributes() || supplied.getKey().contains(":")) throw error(named.location(), "Unknown or namespaced tag attribute: " + supplied.getKey());
-                    body.add(handler + ".setDynamicAttribute(null, " + JavaSource.quote(supplied.getKey()) + ", "
-                            + dynamicAttributeValue(content, named.location(), handler) + ");\n", named.location());
-                } else {
-                    DeferredInput deferredValue = attribute.deferred() ? deferredInput(content, named.location()) : null;
-                    var setter = tag.tagFile() ? tagFileSetter(attribute)
-                            : attribute.fragment()
-                            ? classes.tagFragmentSetter(tag.handlerClass(), attribute.name(), attribute.setterType(), named.location())
-                            : attribute.deferred() ? classes.tagSetter(tag.handlerClass(), attribute.name(), deferredSetterType(attribute, deferredValue), named.location())
-                            : classes.tagPropertySetter(tag.handlerClass(), attribute.name(), named.location());
-                    protectJspIdSetter(kind, setter, named.location());
-                    String argument;
-                    if (attribute.fragment()) argument = fragment(content, named.location(), handler);
-                    else if (attribute.deferred()) argument = deferredAttribute(deferredValue, attribute, named.location());
-                    else if (attribute.runtimeExpression()) argument = stringConversion(capture(content, named.location(), handler), setter.type(), named.location());
-                    else {
-                        argument = literalValue(templateLiteral(content), new TagAttribute(attribute.name(), setter.type(), attribute.required(), false, false), named.location());
-                    }
-                    body.add(handler + "." + setter.name() + "((" + setter.type() + ") (" + argument + "));\n", named.location());
-                }
-                } finally { namespaces.clear(); namespaces.putAll(previousNamespaces); }
+            if (attribute.fragment()) throw error(at, "Fragment attributes require jsp:attribute");
+            DeferredInput deferredValue = attribute.deferred() ? attributeInput(value, at) : null;
+            var setter = tagSetter(use, attribute, deferredValue, at);
+            var target = new TagAttribute(attribute.name(), setter.type(), attribute.required(), attribute.runtimeExpression(), false);
+            protectJspIdSetter(use.kind(), setter, at);
+            String argument = attribute.deferred() ? deferredAttribute(deferredValue, attribute, at)
+                    : tagValue(value, target, at);
+            body.add(use.handler() + "." + setter.name() + "((" + setter.type() + ") (" + argument + "));\n", at);
+        }
+        private void namedAttribute(TagUse use, String name, PageNode.Element named) {
+            var previousNamespaces = enterNamespaces(named);
+            try {
+                namedAttributeValue(use, name, named);
+            } finally {
+                namespaces.clear();
+                namespaces.putAll(previousNamespaces);
             }
-            String previousParent = parentTag; parentTag = handler;
-            if (kind.simple()) {
-                if (!children.isEmpty()) {
-                    String bodyFragment = tag.tagFile()
-                            ? tagFileFragment(children, node.location(), handler, kind.sourceName(), scriptingVariables)
-                            : fragment(children, node.location(), handler);
-                    body.add(handler + ".setJspBody(" + bodyFragment + ");\n", node.location());
-                }
-                var nestedTagFileVariableIndexes = new ArrayList<Integer>();
-                if (tag.tagFile()) {
-                    int variableIndex = 0;
-                    for (var variable : scriptingVariables) {
-                        if (variable.scope() == TagVariableDescriptor.NESTED) {
-                            String state = handler + "_jspxVariable" + variableIndex;
-                            String name = JavaSource.quote(variable.name());
-                            body.add("boolean " + state + "Present = pageContext.getAttributesScope(" + name
-                                    + ") == jakarta.servlet.jsp.PageContext.PAGE_SCOPE;\n"
-                                    + "Object " + state + "Value = pageContext.getAttribute(" + name
-                                    + ", jakarta.servlet.jsp.PageContext.PAGE_SCOPE);\n"
-                                    + "pageContext.removeAttribute(" + name + ", jakarta.servlet.jsp.PageContext.PAGE_SCOPE);\n",
-                                    node.location());
-                            nestedTagFileVariableIndexes.add(variableIndex);
-                        }
-                        variableIndex++;
-                    }
-                }
-                if (nestedTagFileVariableIndexes.isEmpty()) body.add(handler + ".doTag();\n", node.location());
-                else {
-                    body.add("try { " + handler + ".doTag(); } finally {\n", node.location());
-                    for (int variableIndex : nestedTagFileVariableIndexes) {
-                        var variable = scriptingVariables.get(variableIndex);
-                        String state = handler + "_jspxVariable" + variableIndex;
-                        String name = JavaSource.quote(variable.name());
-                        body.add("pageContext.removeAttribute(" + name + ", jakarta.servlet.jsp.PageContext.PAGE_SCOPE);\n"
-                                + "if (" + state + "Present) pageContext.setAttribute(" + name + ", " + state
-                                + "Value, jakarta.servlet.jsp.PageContext.PAGE_SCOPE);\n", node.location());
-                    }
-                    body.add("}\n");
-                }
-                if (tag.tagFile()) synchronizeTagFileVariables(handler, scriptingVariables, node.location());
-                synchronizeVariables(scriptingVariables, 1, 2);
+        }
+        private void namedAttributeValue(TagUse use, String name, PageNode.Element named) {
+            var at = named.location();
+            var attribute = use.tag().attributes().get(name);
+            var content = namedContent(named);
+            if (attribute == null) {
+                if (acceptsDynamicAttribute(use, name, at))
+                    body.add(use.handler() + SET_DYNAMIC_ATTRIBUTE + JavaSource.quote(name) + ", "
+                            + dynamicAttributeValue(content, at, use.handler()) + ");\n", at);
+                return;
+            }
+            DeferredInput deferredValue = attribute.deferred() ? deferredInput(content, at) : null;
+            var setter = tagSetter(use, attribute, deferredValue, at);
+            protectJspIdSetter(use.kind(), setter, at);
+            String argument;
+            if (attribute.fragment()) argument = fragment(content, at, use.handler());
+            else if (attribute.deferred()) argument = deferredAttribute(deferredValue, attribute, at);
+            else if (attribute.runtimeExpression()) argument = stringConversion(capture(content, at, use.handler()), setter.type(), at);
+            else argument = literalValue(templateLiteral(content), new TagAttribute(attribute.name(), setter.type(), attribute.required(), false, false), at);
+            body.add(use.handler() + "." + setter.name() + "((" + setter.type() + ") (" + argument + "));\n", at);
+        }
+        private void simpleTagInvocation(TagUse use) {
+            String handler = use.handler();
+            if (!use.children().isEmpty()) {
+                String bodyFragment = use.tag().tagFile()
+                        ? tagFileFragment(use.children(), use.location(), handler, use.kind().sourceName(), use.variables())
+                        : fragment(use.children(), use.location(), handler);
+                body.add(handler + ".setJspBody(" + bodyFragment + ");\n", use.location());
+            }
+            var nestedTagFileVariableIndexes = use.tag().tagFile() ? saveNestedTagFileVariables(use) : List.<Integer>of();
+            if (nestedTagFileVariableIndexes.isEmpty()) body.add(handler + ".doTag();\n", use.location());
+            else restoreNestedTagFileVariables(use, nestedTagFileVariableIndexes);
+            if (use.tag().tagFile()) synchronizeTagFileVariables(handler, use.variables(), use.location());
+            synchronizeVariables(use.variables(), 1, 2);
+        }
+        private List<Integer> saveNestedTagFileVariables(TagUse use) {
+            var indexes = new ArrayList<Integer>();
+            var variables = use.variables();
+            for (int variableIndex = 0; variableIndex < variables.size(); variableIndex++) {
+                var variable = variables.get(variableIndex);
+                if (variable.scope() != TagVariableDescriptor.NESTED) continue;
+                String state = use.handler() + "_jspxVariable" + variableIndex;
+                String name = JavaSource.quote(variable.name());
+                body.add("boolean " + state + "Present = pageContext.getAttributesScope(" + name
+                        + ") == jakarta.servlet.jsp.PageContext.PAGE_SCOPE;\n"
+                        + OBJECT + state + "Value = pageContext.getAttribute(" + name
+                        + PAGE_SCOPE_ARGUMENT
+                        + REMOVE_ATTRIBUTE + name + PAGE_SCOPE_ARGUMENT,
+                        use.location());
+                indexes.add(variableIndex);
+            }
+            return indexes;
+        }
+        private void restoreNestedTagFileVariables(TagUse use, List<Integer> indexes) {
+            body.add("try { " + use.handler() + ".doTag(); } finally {\n", use.location());
+            for (int variableIndex : indexes) {
+                var variable = use.variables().get(variableIndex);
+                String state = use.handler() + "_jspxVariable" + variableIndex;
+                String name = JavaSource.quote(variable.name());
+                body.add(REMOVE_ATTRIBUTE + name + PAGE_SCOPE_ARGUMENT
+                        + "if (" + state + "Present) pageContext.setAttribute(" + name + ", " + state
+                        + "Value, jakarta.servlet.jsp.PageContext.PAGE_SCOPE);\n", use.location());
+            }
+            body.add("}\n");
+        }
+        private void classicTagInvocation(TagUse use) {
+            String handler = use.handler();
+            var kind = use.kind();
+            if (kind.catchFinally()) body.add("boolean _jspxSetterFailed" + handler + " = false;\n");
+            body.add("int _jspxEnd" + handler + " = jakarta.servlet.jsp.tagext.Tag.EVAL_PAGE;\n");
+            body.add("try {\nint _jspxStart" + handler + " = " + handler + ".doStartTag();\n", use.location());
+            String start = "_jspxStart" + handler;
+            body.add("if (" + start + " != 0 && " + start + " != 1" + (kind.buffered() ? " && " + start + " != 2" : "")
+                    + ") throw new jakarta.servlet.jsp.JspException(\"Invalid doStartTag result\");\n");
+            synchronizeVariables(use.variables(), 1);
+            if (!use.children().isEmpty()) classicTagBody(use, start);
+            body.add("_jspxEnd" + handler + " = " + handler + ".doEndTag();\n", use.location());
+            synchronizeVariables(use.variables(), 1, 2);
+            if (kind.catchFinally()) body.add("} catch (Throwable _jspxFailure" + handler + ") { if (_jspxSetterFailed" + handler + ") throw _jspxFailure" + handler + "; "
+                    + handler + ".doCatch(_jspxFailure" + handler + "); if (_jspxFailure" + handler + " instanceof jakarta.servlet.jsp.SkipPageException) throw _jspxFailure" + handler + ";"
+                    + " } finally { if (!_jspxSetterFailed" + handler + ") " + handler + ".doFinally(); }\n");
+            else body.add("} finally { /* Handler action scope. */ }\n");
+            body.add("if (_jspxEnd" + handler + " == jakarta.servlet.jsp.tagext.Tag.SKIP_PAGE) throw new jakarta.servlet.jsp.SkipPageException();\n", use.location());
+            body.add("} finally { " + handler + ".release(); }\n");
+        }
+        private void classicTagBody(TagUse use, String start) {
+            String handler = use.handler();
+            var kind = use.kind();
+            var previousBody = body;
+            var content = new JavaSource();
+            body = content;
+            emit(use.children());
+            body = previousBody;
+            body.add("if (" + start + " != jakarta.servlet.jsp.tagext.Tag.SKIP_BODY) {\n");
+            if (kind.buffered()) {
+                body.add(bufferedBodyStart(handler, start, kind.catchFinally()));
+                synchronizeVariables(use.variables(), 1, 0);
+            } else synchronizeVariables(use.variables(), 0);
+            if (kind.iteration() && !use.variables().isEmpty()) {
+                String afterBody = "_jspxAfterBody" + handler;
+                body.add("int " + afterBody + ";\ndo {\n");
+                body.add(content);
+                body.add(afterBody + " = " + handler + ".doAfterBody();\n");
+                synchronizeVariables(use.variables(), 1, 0);
+                body.add("} while (" + afterBody + " == jakarta.servlet.jsp.tagext.IterationTag.EVAL_BODY_AGAIN);\n");
             } else {
-                if (kind.catchFinally()) body.add("boolean _jspxSetterFailed" + handler + " = false;\n");
-                body.add("int _jspxEnd" + handler + " = jakarta.servlet.jsp.tagext.Tag.EVAL_PAGE;\n");
-                body.add("try {\nint _jspxStart" + handler + " = " + handler + ".doStartTag();\n", node.location());
-                String start = "_jspxStart" + handler;
-                body.add("if (" + start + " != 0 && " + start + " != 1" + (kind.buffered() ? " && " + start + " != 2" : "")
-                        + ") throw new jakarta.servlet.jsp.JspException(\"Invalid doStartTag result\");\n");
-                synchronizeVariables(scriptingVariables, 1);
-                if (!children.isEmpty()) {
-                    var previousBody = body; var content = new JavaSource(); body = content; emit(children); body = previousBody;
-                    body.add("if (" + start + " != jakarta.servlet.jsp.tagext.Tag.SKIP_BODY) {\n");
-                    if (kind.buffered()) body.add("boolean _jspxBuffered" + handler + " = " + start + " == jakarta.servlet.jsp.tagext.BodyTag.EVAL_BODY_BUFFERED;\n"
-                            + "if (_jspxBuffered" + handler + ") out = pageContext.pushBody();\ntry {\n"
-                            + "if (_jspxBuffered" + handler + ") { " + (kind.catchFinally() ? "_jspxSetterFailed" + handler + " = true; " : "")
-                            + handler + ".setBodyContent((jakarta.servlet.jsp.tagext.BodyContent) out); "
-                            + (kind.catchFinally() ? "_jspxSetterFailed" + handler + " = false; " : "") + handler + ".doInitBody(); }\n");
-                    if (kind.buffered()) synchronizeVariables(scriptingVariables, 1, 0);
-                    else synchronizeVariables(scriptingVariables, 0);
-                    if (kind.iteration() && !scriptingVariables.isEmpty()) {
-                        String afterBody = "_jspxAfterBody" + handler;
-                        body.add("int " + afterBody + ";\ndo {\n"); body.add(content);
-                        body.add(afterBody + " = " + handler + ".doAfterBody();\n");
-                        synchronizeVariables(scriptingVariables, 1, 0);
-                        body.add("} while (" + afterBody + " == jakarta.servlet.jsp.tagext.IterationTag.EVAL_BODY_AGAIN);\n");
-                    } else {
-                        body.add("do {\n"); body.add(content);
-                        body.add("} while (" + (kind.iteration() ? handler + ".doAfterBody() == jakarta.servlet.jsp.tagext.IterationTag.EVAL_BODY_AGAIN" : "false") + ");\n");
-                    }
-                    if (kind.buffered()) body.add("} finally { if (_jspxBuffered" + handler + ") out = pageContext.popBody(); }\n");
-                    body.add("}\n");
-                }
-                body.add("_jspxEnd" + handler + " = " + handler + ".doEndTag();\n", node.location());
-                synchronizeVariables(scriptingVariables, 1, 2);
-                if (kind.catchFinally()) body.add("} catch (Throwable _jspxFailure" + handler + ") { if (_jspxSetterFailed" + handler + ") throw _jspxFailure" + handler + "; "
-                        + handler + ".doCatch(_jspxFailure" + handler + "); if (_jspxFailure" + handler + " instanceof jakarta.servlet.jsp.SkipPageException) throw _jspxFailure" + handler + ";"
-                        + " } finally { if (!_jspxSetterFailed" + handler + ") " + handler + ".doFinally(); }\n");
-                else body.add("} finally { /* Handler action scope. */ }\n");
-                body.add("if (_jspxEnd" + handler + " == jakarta.servlet.jsp.tagext.Tag.SKIP_PAGE) throw new jakarta.servlet.jsp.SkipPageException();\n", node.location());
-                body.add("} finally { " + handler + ".release(); }\n");
+                body.add("do {\n");
+                body.add(content);
+                body.add("} while (" + (kind.iteration() ? handler + ".doAfterBody() == jakarta.servlet.jsp.tagext.IterationTag.EVAL_BODY_AGAIN" : FALSE) + ");\n");
             }
-            parentTag = previousParent; body.add("}\n");
+            if (kind.buffered()) body.add("} finally { if (_jspxBuffered" + handler + ") out = pageContext.popBody(); }\n");
+            body.add("}\n");
+        }
+        private static String bufferedBodyStart(String handler, String start, boolean catchFinally) {
+            String failed = "_jspxSetterFailed" + handler;
+            return "boolean _jspxBuffered" + handler + " = " + start + " == jakarta.servlet.jsp.tagext.BodyTag.EVAL_BODY_BUFFERED;\n"
+                    + "if (_jspxBuffered" + handler + ") out = pageContext.pushBody();\ntry {\n"
+                    + "if (_jspxBuffered" + handler + ") { " + (catchFinally ? failed + " = true; " : "")
+                    + handler + ".setBodyContent((jakarta.servlet.jsp.tagext.BodyContent) out); "
+                    + (catchFinally ? failed + " = false; " : "") + handler + ".doInitBody(); }\n";
         }
 
         private void synchronizeTagFileVariables(String handler, List<ScriptingVariable> variables, SourceLocation at) {
