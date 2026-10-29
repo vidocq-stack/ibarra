@@ -76,6 +76,15 @@ public final class PagePrecompiler {
 
     /** One packaging run: the validated application module and the per-page failures retained so far. */
     private static final class Packaging {
+        private static boolean requiresNonStatic(ModuleDescriptor descriptor, String module) {
+            return descriptor.requires().stream().anyMatch(value -> value.name().equals(module)
+                    && !value.modifiers().contains(ModuleDescriptor.Requires.Modifier.STATIC));
+        }
+
+        private static List<Path> classFiles(java.util.stream.Stream<Path> files) {
+            return files.filter(Files::isRegularFile).filter(file -> file.toString().endsWith(CLASS_SUFFIX)).toList();
+        }
+
         private final Path output;
         private final List<Path> modulePath;
         private final List<Path> paths;
@@ -425,15 +434,6 @@ public final class PagePrecompiler {
             for (String relative : compiled) lines.add(relative + "\t" + digest(Files.readAllBytes(output.resolve(relative))));
             Files.write(manifest, lines, StandardCharsets.UTF_8);
         }
-    }
-
-    private static boolean requiresNonStatic(ModuleDescriptor descriptor, String module) {
-        return descriptor.requires().stream().anyMatch(value -> value.name().equals(module)
-                && !value.modifiers().contains(ModuleDescriptor.Requires.Modifier.STATIC));
-    }
-
-    private static List<Path> classFiles(java.util.stream.Stream<Path> files) {
-        return files.filter(Files::isRegularFile).filter(file -> file.toString().endsWith(CLASS_SUFFIX)).toList();
     }
 
     /** {@code file} relative to {@code root}, with '/' separators. */

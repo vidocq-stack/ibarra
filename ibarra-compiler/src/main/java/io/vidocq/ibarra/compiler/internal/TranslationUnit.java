@@ -152,7 +152,7 @@ public final class TranslationUnit {
                 case PageNode.Directive directive when directive.name().equals(TAGLIB) -> bindUnitPrefix(directive, namespaces);
                 case PageNode.Directive directive when directive.name().equals("page") || directive.name().equals("tag") ->
                         collectElSettings(directive, settings);
-                case PageNode.Element(var _, var _, var attributes, var children, var _, var _) ->
+                case PageNode.Element(_, _, var attributes, var children, _, _) ->
                         collectUnitSettings(children, settings, nested(namespaces, attributes));
                 default -> {
                     // Other nodes declare neither prefixes nor EL settings.
@@ -234,7 +234,7 @@ public final class TranslationUnit {
                 case PageNode.Directive(var name, var attributes, var location)
                         when name.equals(TAGLIB) && (attributes.containsKey("uri") || attributes.containsKey(TAGDIR)) ->
                         tagLibraries.add(new TldReferences.Reference(tagLibraryNamespace(attributes), location, false));
-                case PageNode.Element(var _, var _, var attributes, var children, var _, var location) -> {
+                case PageNode.Element(_, _, var attributes, var children, _, var location) -> {
                     xmlnsTagLibraries(attributes, location);
                     tagLibraries(children);
                 }
@@ -256,17 +256,17 @@ public final class TranslationUnit {
     private void validateEncoding(List<PageNode> nodes, Map<String, String> properties, Set<String> encodedFiles) {
         for (var node : nodes) {
             Map<String, String> attributes = pageDirectiveAttributes(node);
-            if (attributes != null && attributes.containsKey("pageEncoding"))
+            if (attributes.containsKey("pageEncoding"))
                 validatePageEncoding(node.location(), attributes.get("pageEncoding"), properties, encodedFiles);
             if (node instanceof PageNode.Element element) validateEncoding(element.children(), properties, encodedFiles);
         }
     }
 
-    /** The attributes of a standard or XML page directive, otherwise {@code null}. */
+    /** The attributes of a standard or XML page directive, otherwise an empty map. */
     private static Map<String, String> pageDirectiveAttributes(PageNode node) {
-        if (node instanceof PageNode.Directive(var name, var attributes, var _) && name.equals("page")) return attributes;
+        if (node instanceof PageNode.Directive(var name, var attributes, _) && name.equals("page")) return attributes;
         if (node instanceof PageNode.Element element && jspAction(element, "directive.page")) return element.attributes();
-        return null;
+        return Map.of();
     }
 
     private void validatePageEncoding(SourceLocation location, String value, Map<String, String> properties, Set<String> encodedFiles) {

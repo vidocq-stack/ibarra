@@ -175,9 +175,9 @@ public final class ImportClasses {
         String pkg = binary.substring(0, binary.lastIndexOf('.'));
         try {
             for (var source : sources) {
-                byte[] bytes = accessible(source, pkg) ? bytes(source, entry) : null;
-                if (bytes != null) {
-                    var model = ClassFile.of().parse(bytes);
+                var bytes = accessible(source, pkg) ? bytes(source, entry) : Optional.<byte[]>empty();
+                if (bytes.isPresent()) {
+                    var model = ClassFile.of().parse(bytes.get());
                     models.put(binary, model);
                     return model;
                 }
@@ -186,15 +186,16 @@ public final class ImportClasses {
         return null;
     }
 
-    private static byte[] bytes(Source source, String entry) throws IOException {
+    /** The class-file bytes of {@code entry} in {@code source}, or empty when the source has no such entry. */
+    private static Optional<byte[]> bytes(Source source, String entry) throws IOException {
         if (source.directory() != null) {
             Path file = source.directory().resolve(entry);
-            return Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
+            return Files.isRegularFile(file) ? Optional.of(Files.readAllBytes(file)) : Optional.empty();
         }
         try (var reader = source.reference().open()) {
             var stream = reader.open(entry);
-            if (stream.isEmpty()) return null;
-            try (var input = stream.orElseThrow()) { return input.readAllBytes(); }
+            if (stream.isEmpty()) return Optional.empty();
+            try (var input = stream.orElseThrow()) { return Optional.of(input.readAllBytes()); }
         }
     }
 

@@ -104,30 +104,40 @@ final class BeanInfoEditors {
             case AASTORE -> arrayStore(stack);
             case AALOAD -> arrayLoad(stack);
             case ARRAYLENGTH -> stack.add(((Object[]) pop(stack)).length);
-            case CHECKCAST -> {
-                // Descriptor-array copies preserve the already known symbolic values.
-                if (!(stack.getLast() instanceof Object[])) throw new IllegalArgumentException("Unsupported metadata cast");
-            }
+            case CHECKCAST -> requireDescriptorArray(stack);
             default -> executeTyped(instruction, stack, locals);
         }
         return CONTINUE;
     }
 
+    /** Descriptor-array copies preserve the already known symbolic values; any other cast is unsupported. */
+    private static void requireDescriptorArray(List<Object> stack) {
+        if (!(stack.getLast() instanceof Object[])) throw new IllegalArgumentException("Unsupported metadata cast");
+    }
+
     private void executeTyped(Instruction instruction, List<Object> stack, Map<Integer, Object> locals) {
-        if (instruction instanceof ConstantInstruction constant) stack.add(literal(constant));
-        else if (instruction instanceof LoadInstruction load) stack.add(Objects.requireNonNull(locals.get(load.slot())));
-        else if (instruction instanceof StoreInstruction store) locals.put(store.slot(), pop(stack));
-        else if (instruction instanceof NewObjectInstruction allocation) {
-            if (!allocation.className().asInternalName().equals(DESCRIPTOR)) throw new IllegalArgumentException("Dynamic allocation");
-            stack.add(new Descriptor());
-        } else if (instruction instanceof NewReferenceArrayInstruction allocation) {
-            if (!allocation.componentType().asInternalName().equals(DESCRIPTOR)) throw new IllegalArgumentException("Unsupported metadata array");
-            int size = (Integer) pop(stack);
-            if (size < 0 || size > 4096) throw new IllegalArgumentException("Invalid descriptor count");
-            stack.add(new Object[size]);
-        } else if (instruction instanceof FieldInstruction field) field(field, stack);
-        else if (instruction instanceof InvokeInstruction invoke) invoke(invoke, stack);
-        else throw new IllegalArgumentException("Unsupported metadata instruction: " + instruction.opcode());
+        switch (instruction) {
+            case ConstantInstruction constant -> stack.add(literal(constant));
+            case LoadInstruction load -> stack.add(Objects.requireNonNull(locals.get(load.slot())));
+            case StoreInstruction store -> locals.put(store.slot(), pop(stack));
+            case NewObjectInstruction allocation -> newDescriptor(allocation, stack);
+            case NewReferenceArrayInstruction allocation -> newDescriptorArray(allocation, stack);
+            case FieldInstruction field -> field(field, stack);
+            case InvokeInstruction invoke -> invoke(invoke, stack);
+            default -> throw new IllegalArgumentException("Unsupported metadata instruction: " + instruction.opcode());
+        }
+    }
+
+    private static void newDescriptor(NewObjectInstruction allocation, List<Object> stack) {
+        if (!allocation.className().asInternalName().equals(DESCRIPTOR)) throw new IllegalArgumentException("Dynamic allocation");
+        stack.add(new Descriptor());
+    }
+
+    private static void newDescriptorArray(NewReferenceArrayInstruction allocation, List<Object> stack) {
+        if (!allocation.componentType().asInternalName().equals(DESCRIPTOR)) throw new IllegalArgumentException("Unsupported metadata array");
+        int size = (Integer) pop(stack);
+        if (size < 0 || size > 4096) throw new IllegalArgumentException("Invalid descriptor count");
+        stack.add(new Object[size]);
     }
 
     private static Object literal(ConstantInstruction constant) {

@@ -70,7 +70,7 @@ public final class PageNormalizer {
         for (var node : nodes) {
             switch (node) {
                 case PageNode.Element element -> result.add(structure(element));
-                case PageNode.Text(var value, var _) when syntax == Page.Syntax.XML && !preserveWhitespace && whitespace(value) -> {
+                case PageNode.Text(var value, _) when syntax == Page.Syntax.XML && !preserveWhitespace && whitespace(value) -> {
                     // XML document indentation is not template output.
                 }
                 default -> result.add(node);
@@ -155,7 +155,7 @@ public final class PageNormalizer {
             switch (node) {
                 case PageNode.Text text -> split(text, result);
                 case PageNode.Element element -> result.add(withChildren(element, expressions(element.children())));
-                case PageNode.Directive(var _, var attributes, var location) -> {
+                case PageNode.Directive(_, var attributes, var location) -> {
                     requireLiteral(attributes, location);
                     result.add(node);
                 }
