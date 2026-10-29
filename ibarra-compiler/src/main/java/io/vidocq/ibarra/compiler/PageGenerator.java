@@ -390,9 +390,11 @@ public final class PageGenerator {
         private void emit(PageNode node) {
             switch (node) {
                 case PageNode.RawText(var value, var location) -> write(value, location);
-                case PageNode.Text(var value, var location) -> {
-                    if (!bool(TRIM_DIRECTIVE_WHITESPACES, false) || !value.chars().allMatch(c -> c == ' ' || c == '\t' || c == '\r' || c == '\n'))
+                case PageNode.Text(var value, var location)
+                        when !bool(TRIM_DIRECTIVE_WHITESPACES, false) || !value.chars().allMatch(c -> c == ' ' || c == '\t' || c == '\r' || c == '\n') ->
                         write(value, location);
+                case PageNode.Text _ -> {
+                    // Whitespace-only template text is dropped under trimDirectiveWhitespaces.
                 }
                 case PageNode.Expression(var code, var deferred, var location) -> {
                     if (deferred) throw error(location, "Deferred EL in template text is not supported");
@@ -400,16 +402,20 @@ public final class PageGenerator {
                 }
                 case PageNode.Script(var kind, var code, var location) -> script(kind, code, location);
                 case PageNode.Element element -> element(element);
-                case PageNode.Directive directive -> {
-                    if (directive.name().equals(TAGLIB)) taglibBindings.put(directive.attributes().get("prefix"), directive);
+                case PageNode.Directive directive when directive.name().equals(TAGLIB) ->
+                        taglibBindings.put(directive.attributes().get("prefix"), directive);
+                case PageNode.Directive _ -> {
+                    // Page directives were applied by collectDirectives before body generation.
                 }
             }
         }
         private void script(PageNode.ScriptKind kind, String code, SourceLocation location) {
             if (bool("scriptingInvalid", false)) throw error(location, "Scripting is disabled by configuration");
-            if (kind == PageNode.ScriptKind.DECLARATION) declarations.add(code + "\n", location);
-            else if (kind == PageNode.ScriptKind.EXPRESSION) body.add("out.print(" + code + ");\n", location);
-            else body.add(code + "\n", location);
+            switch (kind) {
+                case DECLARATION -> declarations.add(code + "\n", location);
+                case EXPRESSION -> body.add("out.print(" + code + ");\n", location);
+                case SCRIPTLET -> body.add(code + "\n", location);
+            }
         }
 
         private void element(PageNode.Element node) {
@@ -643,7 +649,7 @@ public final class PageGenerator {
             var setter = tagSetter(use, attribute, deferredValue, at);
             var target = new TagAttribute(attribute.name(), setter.type(), attribute.required(), attribute.runtimeExpression(), false);
             protectJspIdSetter(use.kind(), setter, at);
-            String argument = attribute.deferred() ? deferredAttribute(deferredValue, attribute, at)
+            String argument = deferredValue != null ? deferredAttribute(deferredValue, attribute, at)
                     : tagValue(value, target, at);
             body.add(use.handler() + "." + setter.name() + "((" + setter.type() + ") (" + argument + CLOSE_CALL, at);
         }
@@ -671,7 +677,7 @@ public final class PageGenerator {
             protectJspIdSetter(use.kind(), setter, at);
             String argument;
             if (attribute.fragment()) argument = fragment(content, use.handler());
-            else if (attribute.deferred()) argument = deferredAttribute(deferredValue, attribute, at);
+            else if (deferredValue != null) argument = deferredAttribute(deferredValue, attribute, at);
             else if (attribute.runtimeExpression()) argument = stringConversion(capture(content, at, use.handler()), setter.type(), at);
             else argument = literalValue(templateLiteral(content), new TagAttribute(attribute.name(), setter.type(), attribute.required(), false, false), at);
             body.add(use.handler() + "." + setter.name() + "((" + setter.type() + ") (" + argument + CLOSE_CALL, at);
@@ -1081,7 +1087,7 @@ public final class PageGenerator {
             return new TagInvocation(named, content);
         }
         private boolean xmlWhitespace(PageNode node) {
-            return node instanceof PageNode.Text(var value, var _) && value.chars().allMatch(c -> xmlSpace((char) c));
+            return node instanceof PageNode.Text(var value, _) && value.chars().allMatch(c -> xmlSpace((char) c));
         }
         private void namedAttributeAction(PageNode.Element tag, PageNode.Element attribute, Map<String, PageNode.Element> named) {
             allowed(attribute, Set.of("name", "trim", "omit"));
@@ -1152,7 +1158,7 @@ public final class PageGenerator {
         private String templateLiteral(List<PageNode> nodes) {
             var literal = new StringBuilder();
             for (var node : nodes) {
-                if (node instanceof PageNode.Text(var value, var _)) literal.append(value);
+                if (node instanceof PageNode.Text(var value, _)) literal.append(value);
                 else if (action(node, TEXT_ACTION)) literal.append(templateLiteral(((PageNode.Element) node).children()));
                 else if (node instanceof PageNode.Element element && templateMarkup(element)) templateMarkupLiteral(literal, element);
                 else throw error(node.location(), "Static named attributes accept only template text");
@@ -1326,7 +1332,7 @@ public final class PageGenerator {
         private void deferredParts(List<PageNode> pieces, SourceLocation at, StringBuilder code, StringBuilder literal,
                 Map<String, BeanClasses.Function> functions, boolean[] kinds) {
             for (var piece : pieces) {
-                if (piece instanceof PageNode.Text(var value, var _)) {
+                if (piece instanceof PageNode.Text(var value, _)) {
                     literal.append(value);
                     code.append(value.replace("\\", "\\\\").replace("${", "\\${").replace("#{", "\\#{"));
                 } else if (piece instanceof PageNode.Expression expression) {
@@ -1408,7 +1414,7 @@ public final class PageGenerator {
         }
         private boolean hasDeferredExpression(List<PageNode> content) {
             for (var node : content) {
-                if (node instanceof PageNode.Expression(var _, var deferred, var _) && deferred) return true;
+                if (node instanceof PageNode.Expression(_, var deferred, _) && deferred) return true;
                 if (node instanceof PageNode.Element element && action(element, TEXT_ACTION) && hasDeferredExpression(element.children())) return true;
             }
             return false;
@@ -1510,7 +1516,7 @@ public final class PageGenerator {
             }
         }
         private static boolean blankText(PageNode node) {
-            return node instanceof PageNode.Text(var value, var _) && value.isBlank();
+            return node instanceof PageNode.Text(var value, _) && value.isBlank();
         }
         private void dynamicElementAttribute(PageNode.Element attribute, Set<String> names) {
             allowed(attribute, Set.of("name", "trim"));
@@ -1820,7 +1826,7 @@ public final class PageGenerator {
             if (pieces.size() == 1 && pieces.getFirst() instanceof PageNode.Expression el) return immediateExpression(el, at);
             var parts = new ArrayList<String>();
             for (var piece : pieces) {
-                if (piece instanceof PageNode.Text(var text, var _)) parts.add(JavaSource.quote(xmlLiteral ? escapeAttribute(text) : text));
+                if (piece instanceof PageNode.Text(var text, _)) parts.add(JavaSource.quote(xmlLiteral ? escapeAttribute(text) : text));
                 else if (piece instanceof PageNode.Expression el) parts.add("_jspxText(" + immediateExpression(el, at) + ")");
             }
             return parts.isEmpty() ? "\"\"" : String.join(" + ", parts);
