@@ -88,8 +88,8 @@ class PageApplicationTest {
     }
 
     public static final class TestPage extends HttpServlet implements HttpJspPage {
-        public void jspInit() { }
-        public void jspDestroy() { }
-        public void _jspService(HttpServletRequest request, HttpServletResponse response) { }
+        public void jspInit() { /* Fixture page: nothing to initialize. */ }
+        public void jspDestroy() { /* Fixture page: nothing to release. */ }
+        public void _jspService(HttpServletRequest request, HttpServletResponse response) { /* Fixture page: never rendered by this test. */ }
     }
 }

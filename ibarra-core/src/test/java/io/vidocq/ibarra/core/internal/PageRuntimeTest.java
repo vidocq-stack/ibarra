@@ -334,7 +334,7 @@ class PageRuntimeTest {
             switch(operation) {
                 case 0->pc.getOut().write('x');
                 case 1->pc.getOut().write(new char[]{'x'},0,1);
-                case 2->pc.getOut().write("x",0,1);
+                default->pc.getOut().write("x",0,1);
             }
             assertFalse(web.response.isCommitted());
             assertThrows(IllegalStateException.class,()->pc.forward("/next.jsp"));
@@ -379,14 +379,13 @@ class PageRuntimeTest {
                 @Override public java.io.PrintWriter getWriter(){ return writer; }
             };
             var pc=new IbarraPageContext();pc.initialize(web.page,web.request,response,null,false,JspWriter.NO_BUFFER,true);
-            int selected=operation;
-            assertThrows(IllegalArgumentException.class,()->{
-                switch(selected) {
-                    case 0->pc.getOut().write('x');
-                    case 1->pc.getOut().write(new char[]{'x'},0,1);
-                    case 2->pc.getOut().write("x",0,1);
-                }
-            });
+            var out=pc.getOut();
+            org.junit.jupiter.api.function.Executable write=switch(operation) {
+                case 0->()->out.write('x');
+                case 1->()->out.write(new char[]{'x'},0,1);
+                default->()->out.write("x",0,1);
+            };
+            assertThrows(IllegalArgumentException.class,write);
             assertFalse(response.isCommitted());
             assertThrows(IllegalStateException.class,()->pc.forward("/next.jsp"));
             assertEquals(0,target.forwards);assertEquals("partial",sink.toString());
@@ -557,8 +556,9 @@ class PageRuntimeTest {
         el.setPropertyResolved(false);
         el.getELResolver().setValue(el, null, "value", "updated");
         assertEquals("updated", pc.getAttribute("value"));
+        var lateResolver = new jakarta.el.MapELResolver();
         assertThrows(IllegalStateException.class,
-                () -> application.addELResolver(new jakarta.el.MapELResolver()));
+                () -> application.addELResolver(lateResolver));
         pc.release();
         pc.initialize(web.page, web.request, web.response, null, false, 64, true);
         assertNotSame(el, pc.getELContext());
@@ -663,8 +663,8 @@ class PageRuntimeTest {
     }
 
     static final class FixturePage extends HttpServlet implements HttpJspPage {
-        public void jspInit() { }
-        public void jspDestroy() { }
+        public void jspInit() { /* Fixture page: nothing to initialize. */ }
+        public void jspDestroy() { /* Fixture page: nothing to release. */ }
         public void _jspService(HttpServletRequest request, HttpServletResponse response) throws IOException {
             var factory = JspFactory.getDefaultFactory();
             var pc = factory.getPageContext(this, request, response, null, false, 64, true);

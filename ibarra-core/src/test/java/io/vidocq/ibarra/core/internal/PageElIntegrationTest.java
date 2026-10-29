@@ -40,12 +40,12 @@ class PageElIntegrationTest {
                 return null;
             }
             public Class<?> getType(jakarta.el.ELContext context, Object base, Object property) { return null; }
-            public void setValue(jakarta.el.ELContext context, Object base, Object property, Object value) { }
+            public void setValue(jakarta.el.ELContext context, Object base, Object property, Object value) { /* Read-only resolver. */ }
             public boolean isReadOnly(jakarta.el.ELContext context, Object base, Object property) { return true; }
             public Class<?> getCommonPropertyType(jakarta.el.ELContext context, Object base) { return null; }
         };
         var factory = new ExpressionFactory() {
-            public jakarta.el.ELResolver getStreamELResolver() {
+            @Override public jakarta.el.ELResolver getStreamELResolver() {
                 observed.set(Thread.currentThread().getContextClassLoader());
                 if (fail.getAndSet(false)) throw new jakarta.el.ELException("provider failed");
                 return resolver;

@@ -28,7 +28,7 @@ public final class PropertyBean extends PropertyParent implements PropertyView {
     }
     public int getCount() { return count; }
     public void setCount(int value) { count = value; }
-    public void setReadOnly(Integer value) { throw new AssertionError("Incompatible setter selected"); }
+    public void setReadOnly(Integer value) { throw new AssertionError("Incompatible setter selected for " + value); }
     public boolean isActive() { return true; }
     public boolean getActive() { return false; }
     public String getEmpty() { return null; }

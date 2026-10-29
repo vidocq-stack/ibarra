@@ -34,15 +34,17 @@ class PrecompiledPagesTest {
         var listener = new io.vidocq.ibarra.spi.ListenerDescriptor(TestListener.class, () -> { created[0]++; return new TestListener(); });
         PageIndex index = new PageIndex() {
             public List<PageDescriptor> pages() { return List.of(); }
-            public List<io.vidocq.ibarra.spi.ListenerDescriptor> listeners() { return List.of(listener, listener); }
+            @Override public List<io.vidocq.ibarra.spi.ListenerDescriptor> listeners() { return List.of(listener, listener); }
         };
         var catalogue = new PrecompiledPages(List.of(index));
         assertEquals(List.of(listener), catalogue.listeners());
         assertEquals(0, created[0]);
-        assertThrows(UnsupportedOperationException.class, () -> catalogue.listeners().clear());
+        var listeners = catalogue.listeners();
+        assertThrows(UnsupportedOperationException.class, listeners::clear);
         assertNotSame(listener.createListener(), listener.createListener());
-        assertThrows(IllegalArgumentException.class, () -> new io.vidocq.ibarra.spi.ListenerDescriptor(
-                jakarta.servlet.ServletContextListener.class, TestListener::new).createListener());
+        var mismatched = new io.vidocq.ibarra.spi.ListenerDescriptor(
+                jakarta.servlet.ServletContextListener.class, TestListener::new);
+        assertThrows(IllegalArgumentException.class, mismatched::createListener);
         assertTrue(((PageIndex) List::of).listeners().isEmpty());
     }
 
@@ -64,7 +66,8 @@ class PrecompiledPagesTest {
     void duplicatePathsAreRejectedInsteadOfDependingOnProviderOrder() {
         PageIndex first = () -> List.of(new PageDescriptor("/index.jsp", TestPage::new));
         PageIndex second = () -> List.of(new PageDescriptor("/index.jsp", TestPage::new));
-        var error = assertThrows(IllegalArgumentException.class, () -> new PrecompiledPages(List.of(first, second)));
+        var indexes = List.of(first, second);
+        var error = assertThrows(IllegalArgumentException.class, () -> new PrecompiledPages(indexes));
         assertTrue(error.getMessage().contains("/index.jsp"));
     }
 
@@ -73,12 +76,13 @@ class PrecompiledPagesTest {
         for (String path : List.of("index.jsp", "/../index.jsp", "/a/../index.jsp", "/a\\b.jsp", "/a.jsp?x=1", "/a.jsp#x"))
             assertThrows(IllegalArgumentException.class, () -> new PageDescriptor(path, TestPage::new), path);
         assertThrows(NullPointerException.class, () -> new PageDescriptor("/index.jsp", null));
-        assertThrows(NullPointerException.class, () -> new PageDescriptor("/index.jsp", () -> null).createPage());
+        var nullFactory = new PageDescriptor("/index.jsp", () -> null);
+        assertThrows(NullPointerException.class, nullFactory::createPage);
     }
 
     public static final class TestPage extends HttpServlet implements HttpJspPage {
-        public void jspInit() { }
-        public void jspDestroy() { }
-        public void _jspService(HttpServletRequest request, HttpServletResponse response) { }
+        public void jspInit() { /* Fixture page: nothing to initialize. */ }
+        public void jspDestroy() { /* Fixture page: nothing to release. */ }
+        public void _jspService(HttpServletRequest request, HttpServletResponse response) { /* Fixture page: never rendered by this test. */ }
     }
 }

@@ -42,10 +42,10 @@ class PagePolicyTest {
         assertThrows(ELException.class, () -> imports.importStatic("java.lang.Math.PI"));
     }
     private static final class ImportedPage extends jakarta.servlet.http.HttpServlet implements jakarta.servlet.jsp.HttpJspPage, PageOptions {
-        public boolean usesStaticELImports() { return true; }
-        public Class<?> resolveELClass(String name) { return "Entry".equals(name) ? java.util.Map.Entry.class : null; }
-        public void jspInit() {} public void jspDestroy() {}
-        public void _jspService(jakarta.servlet.http.HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) {}
+        @Override public boolean usesStaticELImports() { return true; }
+        @Override public Class<?> resolveELClass(String name) { return "Entry".equals(name) ? java.util.Map.Entry.class : null; }
+        public void jspInit() { /* Fixture page: nothing to initialize. */ } public void jspDestroy() { /* Fixture page: nothing to release. */ }
+        public void _jspService(jakarta.servlet.http.HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) { /* Fixture page: never rendered by this test. */ }
     }
     @Test
     void strictAndPermissivePagesShareTheApplicationWithoutSharingPolicy() throws Exception {
@@ -84,13 +84,15 @@ class PagePolicyTest {
         var factory = ExpressionFactory.newInstance();
         var permissiveParent = open(web, application, false);
 
+        var strictTagFile = new TagFileJspContext(permissiveParent, true).getELContext();
         assertThrows(PropertyNotFoundException.class,
-                () -> evaluate(factory, new TagFileJspContext(permissiveParent, true).getELContext(), "${missing}"));
+                () -> evaluate(factory, strictTagFile, "${missing}"));
         assertEquals("", evaluate(factory, new TagFileJspContext(permissiveParent, false).getELContext(), "${missing}"));
 
         var strictParent = open(web, application, true);
+        var inheritingTagFile = new TagFileJspContext(strictParent, false).getELContext();
         assertThrows(PropertyNotFoundException.class,
-                () -> evaluate(factory, new TagFileJspContext(strictParent, false).getELContext(), "${missing}"));
+                () -> evaluate(factory, inheritingTagFile, "${missing}"));
     }
 
     @Test
@@ -100,8 +102,9 @@ class PagePolicyTest {
         var factory = ExpressionFactory.newInstance();
         application.addELContextListener(event -> {
             var context = event.getELContext();
+            var missing = factory.createValueExpression(context, "${missing}", Object.class);
             assertThrows(PropertyNotFoundException.class,
-                    () -> factory.createValueExpression(context, "${missing}", Object.class).getValue(context));
+                    () -> missing.getValue(context));
         });
         assertNotNull(open(web, application, true).getELContext());
     }
@@ -117,7 +120,7 @@ class PagePolicyTest {
                 return null;
             }
             public Class<?> getType(ELContext context, Object base, Object property) { return null; }
-            public void setValue(ELContext context, Object base, Object property, Object value) { }
+            public void setValue(ELContext context, Object base, Object property, Object value) { /* Read-only resolver. */ }
             public boolean isReadOnly(ELContext context, Object base, Object property) { return true; }
             public Class<?> getCommonPropertyType(ELContext context, Object base) { return null; }
         });

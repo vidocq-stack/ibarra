@@ -36,7 +36,7 @@ class RouterLifecycleTest {
         PageApplication application = new PageApplication() {
             public boolean containsPage(String path) { return path.equals("/page.jsp"); }
             public HttpJspPage createPage(String path) { created.incrementAndGet(); return new TestPage(initialized, new AtomicInteger(), false); }
-            public void close() { }
+            public void close() { /* Nothing to release: pages are created on demand. */ }
         };
         var router = new IbarraJspEngine.Router(application);
         router.init(new ServletConfigImpl("jsp", new VidocqServletContext("/pages"), Map.of()));
@@ -59,7 +59,7 @@ class RouterLifecycleTest {
         PageApplication application = new PageApplication() {
             public boolean containsPage(String path) { return true; }
             public HttpJspPage createPage(String path) { return new TestPage(new AtomicInteger(), destroyed, path.equals("/bad.jsp")); }
-            public void close() { }
+            public void close() { /* Nothing to release: pages are created on demand. */ }
         };
         var router = new IbarraJspEngine.Router(application);
         router.init(new ServletConfigImpl("jsp", new VidocqServletContext("/pages"), Map.of()));
@@ -71,10 +71,10 @@ class RouterLifecycleTest {
     static final class TestPage extends HttpServlet implements HttpJspPage {
         private final AtomicInteger initialized, destroyed; private final boolean failDestroy;
         TestPage(AtomicInteger initialized, AtomicInteger destroyed, boolean failDestroy) { this.initialized = initialized; this.destroyed = destroyed; this.failDestroy = failDestroy; }
-        public void jspInit() { }
-        public void jspDestroy() { }
+        public void jspInit() { /* Lifecycle is observed through init() and destroy(). */ }
+        public void jspDestroy() { /* Lifecycle is observed through init() and destroy(). */ }
         @Override public void init() { initialized.incrementAndGet(); }
         @Override public void destroy() { destroyed.incrementAndGet(); if (failDestroy) throw new IllegalStateException("destroy failure"); }
-        public void _jspService(HttpServletRequest request, HttpServletResponse response) { }
+        public void _jspService(HttpServletRequest request, HttpServletResponse response) { /* Fixture page: never rendered by this test. */ }
     }
 }

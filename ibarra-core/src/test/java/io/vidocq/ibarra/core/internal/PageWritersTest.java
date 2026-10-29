@@ -136,8 +136,8 @@ class PageWritersTest {
             @Override public void write(char[] chars, int offset, int length) throws IOException {
                 throw failure;
             }
-            @Override public void flush() { }
-            @Override public void close() { }
+            @Override public void flush() { /* Nothing buffered by this target. */ }
+            @Override public void close() { /* Nothing to release. */ }
         }, 0, true);
         assertSame(failure, assertThrows(IOException.class, () -> broken.print("test")));
     }
@@ -267,9 +267,9 @@ class PageWritersTest {
     void failedCloseLeavesTheWriterClosed() throws Exception {
         var failure = new IOException("flush failed");
         var out = new BufferedJspWriter(() -> new Writer() {
-            @Override public void write(char[] chars, int offset, int length) { }
+            @Override public void write(char[] chars, int offset, int length) { /* Discards output: only flush failures matter here. */ }
             @Override public void flush() throws IOException { throw failure; }
-            @Override public void close() { }
+            @Override public void close() { /* Nothing to release. */ }
         }, 8, true);
         out.write("pending");
         assertSame(failure, assertThrows(IOException.class, out::close));
