@@ -41,51 +41,75 @@ public final class JspConfigurationParser {
         if (!DeploymentXml.name(root).equals("web-app") || !NAMESPACES.contains(namespace))
             throw new PageParseException(at, "Expected a standard web-app root");
         var groups = new ArrayList<JspPropertyGroup>();
-        String version = root.getAttribute("version");
-        var type = document.getDoctype();
-        String publicId = type == null ? "" : Objects.toString(type.getPublicId(), "");
-        if (Set.of("2.2", "2.3").contains(version) || publicId.contains("DTD Web Application 2.2//") || publicId.contains("DTD Web Application 2.3//"))
+        if (legacyDescriptor(document, root))
             groups.add(new JspPropertyGroup(List.of("/*"), Map.of("el-ignored", "true"), List.of(), List.of()));
         boolean seenConfig = false;
-        for (var config : DeploymentXml.children(root)) if (DeploymentXml.name(config).equals("jsp-config")) {
+        for (var config : DeploymentXml.children(root)) {
+            if (!DeploymentXml.name(config).equals("jsp-config")) continue;
             requireNamespace(config, namespace, at);
             if (seenConfig) throw new PageParseException(at, "Duplicate jsp-config");
             seenConfig = true;
             for (var group : DeploymentXml.children(config)) {
                 requireNamespace(group, namespace, at);
-                if (DeploymentXml.name(group).equals("taglib")) continue;
-                if (!DeploymentXml.name(group).equals("jsp-property-group")) throw new PageParseException(at, "Unknown jsp-config element");
-                var patterns = new ArrayList<String>(); var properties = new LinkedHashMap<String, String>();
-                var preludes = new ArrayList<String>(); var codas = new ArrayList<String>();
-                for (var field : DeploymentXml.children(group)) {
-                    requireNamespace(field, namespace, at);
-                    String name = DeploymentXml.name(field);
-                    if (Set.of("description", "display-name", "icon").contains(name)) continue;
-                    for (var node = field.getFirstChild(); node != null; node = node.getNextSibling())
-                        if (node.getNodeType() == org.w3c.dom.Node.ENTITY_REFERENCE_NODE || node instanceof Element)
-                            throw new PageParseException(at, "JSP configuration values must be plain text");
-                    String value = field.getTextContent().trim();
-                    if (value.isEmpty()) throw new PageParseException(at, "Empty JSP configuration value: " + name);
-                    switch (name) {
-                        case "url-pattern" -> patterns.add(value);
-                        case "include-prelude", "include-coda" -> {
-                            try { PageDescriptor.validatePath(value); }
-                            catch (IllegalArgumentException failure) { throw new PageParseException(at, "Invalid implicit include path: " + value, failure); }
-                            (name.equals("include-prelude") ? preludes : codas).add(value);
-                        }
-                        default -> {
-                            if (!SCALARS.contains(name) || properties.putIfAbsent(name, value) != null)
-                                throw new PageParseException(at, "Unknown or duplicate JSP property: " + name);
-                        }
-                    }
-                }
-                if (patterns.isEmpty()) throw new PageParseException(at, "JSP property group requires url-pattern");
-                groups.add(new JspPropertyGroup(patterns, properties, preludes, codas));
+                if (!DeploymentXml.name(group).equals("taglib")) groups.add(propertyGroup(group, namespace, at));
             }
         }
         var result = List.copyOf(groups);
         TranslationUnit.validateConfiguration(new GenerationOptions(result, Map.of()), at);
         return result;
+    }
+
+    /** Servlet 2.2 and 2.3 descriptors ignore EL by default. */
+    private static boolean legacyDescriptor(org.w3c.dom.Document document, Element root) {
+        String version = root.getAttribute("version");
+        var type = document.getDoctype();
+        String publicId = type == null ? "" : Objects.toString(type.getPublicId(), "");
+        return Set.of("2.2", "2.3").contains(version) || publicId.contains("DTD Web Application 2.2//")
+                || publicId.contains("DTD Web Application 2.3//");
+    }
+
+    private static JspPropertyGroup propertyGroup(Element group, String namespace, SourceLocation at) {
+        if (!DeploymentXml.name(group).equals("jsp-property-group")) throw new PageParseException(at, "Unknown jsp-config element");
+        var patterns = new ArrayList<String>();
+        var properties = new LinkedHashMap<String, String>();
+        var preludes = new ArrayList<String>();
+        var codas = new ArrayList<String>();
+        for (var field : DeploymentXml.children(group)) {
+            requireNamespace(field, namespace, at);
+            String name = DeploymentXml.name(field);
+            if (Set.of("description", "display-name", "icon").contains(name)) continue;
+            String value = plainValue(field, name, at);
+            switch (name) {
+                case "url-pattern" -> patterns.add(value);
+                case "include-prelude" -> preludes.add(includePath(value, at));
+                case "include-coda" -> codas.add(includePath(value, at));
+                default -> {
+                    if (!SCALARS.contains(name) || properties.putIfAbsent(name, value) != null)
+                        throw new PageParseException(at, "Unknown or duplicate JSP property: " + name);
+                }
+            }
+        }
+        if (patterns.isEmpty()) throw new PageParseException(at, "JSP property group requires url-pattern");
+        return new JspPropertyGroup(patterns, properties, preludes, codas);
+    }
+
+    private static String plainValue(Element field, String name, SourceLocation at) {
+        for (var node = field.getFirstChild(); node != null; node = node.getNextSibling()) {
+            if (node.getNodeType() == org.w3c.dom.Node.ENTITY_REFERENCE_NODE || node instanceof Element)
+                throw new PageParseException(at, "JSP configuration values must be plain text");
+        }
+        String value = field.getTextContent().trim();
+        if (value.isEmpty()) throw new PageParseException(at, "Empty JSP configuration value: " + name);
+        return value;
+    }
+
+    private static String includePath(String value, SourceLocation at) {
+        try {
+            PageDescriptor.validatePath(value);
+        } catch (IllegalArgumentException failure) {
+            throw new PageParseException(at, "Invalid implicit include path: " + value, failure);
+        }
+        return value;
     }
 
     private static void requireNamespace(Element element, String namespace, SourceLocation at) {

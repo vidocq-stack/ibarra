@@ -67,11 +67,18 @@ public final class PageParser {
         return new Page(name, syntax, new PageNormalizer(syntax, options, origins).normalize(raw));
     }
 
+    /** The end delimiter of a processing instruction or comment starting at {@code start}, else {@code null}. */
+    private static String markupEnd(String source, int start) {
+        if (source.startsWith("<?", start)) return "?>";
+        if (source.startsWith("<!--", start)) return "-->";
+        return null;
+    }
+
     private static boolean xmlRoot(String source) {
         int start = source.startsWith("\ufeff") ? 1 : 0;
         while (start < source.length()) {
             if (Character.isWhitespace(source.charAt(start))) { start++; continue; }
-            String end = source.startsWith("<?", start) ? "?>" : source.startsWith("<!--", start) ? "-->" : null;
+            String end = markupEnd(source, start);
             if (end == null) return XML_ROOT.matcher(source).region(start, source.length()).lookingAt()
                     || DEFAULT_XML_ROOT.matcher(source).region(start, source.length()).lookingAt();
             int closing = source.indexOf(end, start + 2);

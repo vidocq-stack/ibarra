@@ -22,7 +22,7 @@ package io.vidocq.ibarra.compiler;
 import java.util.Objects;
 
 /** One-based line and column in the original source; columns count UTF-16 code units. */
-public record SourceLocation(String source, int line, int column) {
+public record SourceLocation(String source, int line, int column) implements java.io.Serializable {
     public SourceLocation {
         Objects.requireNonNull(source);
         if (line < 1 || column < 1) throw new IllegalArgumentException("Location must be one-based");
@@ -32,13 +32,19 @@ public record SourceLocation(String source, int line, int column) {
     public SourceLocation advance(String text) {
         int row = line;
         int col = column;
+        boolean afterCarriageReturn = false;
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
-            if (c == '\r' || c == '\n') {
-                if (c == '\r' && i + 1 < text.length() && text.charAt(i + 1) == '\n') i++;
+            if (c == '\n' && afterCarriageReturn) {
+                afterCarriageReturn = false;
+            } else if (c == '\r' || c == '\n') {
                 row++;
                 col = 1;
-            } else col++;
+                afterCarriageReturn = c == '\r';
+            } else {
+                col++;
+                afterCarriageReturn = false;
+            }
         }
         return new SourceLocation(source, row, col);
     }

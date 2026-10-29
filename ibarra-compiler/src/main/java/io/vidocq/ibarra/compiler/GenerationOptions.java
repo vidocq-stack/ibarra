@@ -34,8 +34,10 @@ public record GenerationOptions(List<JspPropertyGroup> propertyGroups, Map<Strin
     }
     public GenerationOptions {
         propertyGroups = List.copyOf(propertyGroups); sources = Map.copyOf(sources); byteSources = snapshot(byteSources); tagLibraries = Map.copyOf(tagLibraries);
-        for (String path : sources.keySet()) if (byteSources.containsKey(path))
-            throw new IllegalArgumentException("Source supplied as both text and bytes: " + path);
+        for (String path : sources.keySet()) {
+            if (byteSources.containsKey(path))
+                throw new IllegalArgumentException("Source supplied as both text and bytes: " + path);
+        }
     }
     private static Map<String, byte[]> snapshot(Map<String, byte[]> values) {
         var copy = new java.util.LinkedHashMap<String, byte[]>();
