@@ -22,7 +22,6 @@ package io.vidocq.ibarra.foy;
 import java.io.*;
 import java.net.URI;
 import java.net.http.*;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -54,55 +53,71 @@ class FoyHttpPagesTest {
         try {
             var metadata = container.deploy(archive);
             deployed = true;
-            var http = metadata.getContext(HTTPContext.class);
+            var http = metadata.getContexts(HTTPContext.class).iterator().next();
             String base = "http://" + http.getHost() + ":" + http.getPort() + "/site";
             try (var client = HttpClient.newHttpClient()) {
-                assertEquals("Hello A true jsp", get(client, base + "/index.jsp?who=A").body());
-                assertEquals("Hello B true dynamic", get(client, base + "/dynamic?who=B").body());
-                assertEquals("Hello C true named", get(client, base + "/named?who=C").body());
-                assertEquals("beforepieceafter", get(client, base + "/include.jsp").body());
-                assertEquals("XML", get(client, base + "/document.jspx").body());
-                assertEquals("ready ready 1", get(client, base + "/listeners.jsp").body());
-                assertEquals("one:1:BODYBODY!", get(client, base + "/tags.jsp?label=one").body());
-                assertEquals("two:1:BODYBODY!", get(client, base + "/tags.jsp?label=two").body());
-                assertEquals("xml:1:BODYBODY!", get(client, base + "/tags.jspx").body());
-                assertEquals("A:Direct:4", get(client, base + "/compiled-el.jspx?who=A").body(), Files.readString(directory.resolve("server.log")));
-                assertEquals("B:Direct:4", get(client, base + "/compiled-el.jspx?who=B").body());
-                assertEquals("imported:1:method:200method:200!", get(client, base + "/imports.jspx").body());
-                assertEquals("imported", get(client, base + "/imports.jsp").body());
-                assertEquals("hello-A:method", get(client, base + "/functions.jsp?who=A").body());
-                assertEquals("hello-A:1:methodmethod!", get(client, base + "/functions.jspx?who=A").body());
-                assertEquals("hello-B:1:methodmethod!", get(client, base + "/functions.jspx?who=B").body());
-                assertEquals("hello-A:1:xx!|ready|1", get(client, base + "/external.jsp?who=A").body());
-                assertEquals("hello-B:1:xx!|ready|1", get(client, base + "/external.jspx?who=B").body());
-                assertEquals("A|Direct:call", get(client, base + "/deferred.jsp?who=A").body(), Files.readString(directory.resolve("server.log")));
-                assertEquals("B|Direct:call", get(client, base + "/deferred.jspx?who=B").body());
-                var sharedCalls = new java.util.ArrayList<java.util.concurrent.CompletableFuture<HttpResponse<String>>>();
-                for (int i = 0; i < 16; i++) sharedCalls.add(client.sendAsync(
-                        HttpRequest.newBuilder(URI.create(base + (i % 2 == 0 ? "/shared.jsp" : "/shared.jspx"))).build(), HttpResponse.BodyHandlers.ofString()));
-                int created = 0;
-                for (var call : sharedCalls) {
-                    var result = call.get(10, java.util.concurrent.TimeUnit.SECONDS);
-                    assertEquals(200, result.statusCode(), result.body());
-                    if (result.body().equals("created:1")) created++;
-                    else assertEquals("1", result.body());
-                }
-                assertEquals(1, created);
-                try (var sessionClient = HttpClient.newBuilder().cookieHandler(new java.net.CookieManager(null, java.net.CookiePolicy.ACCEPT_ALL)).build()) {
-                    assertEquals("created:2", get(sessionClient, base + "/session.jsp").body());
-                    assertEquals("2", get(sessionClient, base + "/session.jsp").body());
-                }
-                try (var otherSession = HttpClient.newBuilder().cookieHandler(new java.net.CookieManager(null, java.net.CookiePolicy.ACCEPT_ALL)).build()) {
-                    assertEquals("created:3", get(otherSession, base + "/session.jsp").body());
-                }
-                assertEquals("1", get(client, base + "/shared.jspx").body());
-                assertEquals("<fragment>fragmentBODYBODY", get(client, base + "/named-tags.jspx").body());
-                assertEquals("<b title=\"&quot;&amp;\">label</b>:1:BB!", get(client, base + "/static-named-tags.jspx").body());
-                assertEquals(404, get(client, base + "/missing.jsp").statusCode());
-                assertEquals(404, get(client, base + "/WEB-INF/secret.jsp").statusCode());
+                assertCompiledPagesAndAliases(client, base);
+                assertTagsImportsAndFunctions(client, base);
+                assertApplicationAndSessionScopes(client, base);
+                assertNamedTagsAndProtectedResources(client, base);
             }
         } finally { try { if (deployed) container.undeploy(archive); } finally { container.stop(); } }
         assertEquals("1:1", Files.readString(directory.resolve("listener-destroyed.txt")));
+    }
+
+    private void assertCompiledPagesAndAliases(HttpClient client, String base) throws Exception {
+        assertEquals("Hello A true jsp", get(client, base + "/index.jsp?who=A").body());
+        assertEquals("Hello B true dynamic", get(client, base + "/dynamic?who=B").body());
+        assertEquals("Hello C true named", get(client, base + "/named?who=C").body());
+        assertEquals("beforepieceafter", get(client, base + "/include.jsp").body());
+        assertEquals("XML", get(client, base + "/document.jspx").body());
+        assertEquals("ready ready 1", get(client, base + "/listeners.jsp").body());
+    }
+
+    private void assertTagsImportsAndFunctions(HttpClient client, String base) throws Exception {
+        assertEquals("one:1:BODYBODY!", get(client, base + "/tags.jsp?label=one").body());
+        assertEquals("two:1:BODYBODY!", get(client, base + "/tags.jsp?label=two").body());
+        assertEquals("xml:1:BODYBODY!", get(client, base + "/tags.jspx").body());
+        assertEquals("A:Direct:4", get(client, base + "/compiled-el.jspx?who=A").body(), Files.readString(directory.resolve("server.log")));
+        assertEquals("B:Direct:4", get(client, base + "/compiled-el.jspx?who=B").body());
+        assertEquals("imported:1:method:200method:200!", get(client, base + "/imports.jspx").body());
+        assertEquals("imported", get(client, base + "/imports.jsp").body());
+        assertEquals("hello-A:method", get(client, base + "/functions.jsp?who=A").body());
+        assertEquals("hello-A:1:methodmethod!", get(client, base + "/functions.jspx?who=A").body());
+        assertEquals("hello-B:1:methodmethod!", get(client, base + "/functions.jspx?who=B").body());
+        assertEquals("hello-A:1:xx!|ready|1", get(client, base + "/external.jsp?who=A").body());
+        assertEquals("hello-B:1:xx!|ready|1", get(client, base + "/external.jspx?who=B").body());
+        assertEquals("A|Direct:call", get(client, base + "/deferred.jsp?who=A").body(), Files.readString(directory.resolve("server.log")));
+        assertEquals("B|Direct:call", get(client, base + "/deferred.jspx?who=B").body());
+    }
+
+    private static void assertApplicationAndSessionScopes(HttpClient client, String base) throws Exception {
+        var sharedCalls = new java.util.ArrayList<java.util.concurrent.CompletableFuture<HttpResponse<String>>>();
+        for (int i = 0; i < 16; i++) sharedCalls.add(client.sendAsync(
+                HttpRequest.newBuilder(URI.create(base + (i % 2 == 0 ? "/shared.jsp" : "/shared.jspx"))).build(), HttpResponse.BodyHandlers.ofString()));
+        int created = 0;
+        for (var call : sharedCalls) {
+            var result = call.get(10, java.util.concurrent.TimeUnit.SECONDS);
+            assertEquals(200, result.statusCode(), result.body());
+            if (result.body().equals("created:1")) created++;
+            else assertEquals("1", result.body());
+        }
+        assertEquals(1, created);
+        try (var sessionClient = HttpClient.newBuilder().cookieHandler(new java.net.CookieManager(null, java.net.CookiePolicy.ACCEPT_ALL)).build()) {
+            assertEquals("created:2", get(sessionClient, base + "/session.jsp").body());
+            assertEquals("2", get(sessionClient, base + "/session.jsp").body());
+        }
+        try (var otherSession = HttpClient.newBuilder().cookieHandler(new java.net.CookieManager(null, java.net.CookiePolicy.ACCEPT_ALL)).build()) {
+            assertEquals("created:3", get(otherSession, base + "/session.jsp").body());
+        }
+        assertEquals("1", get(client, base + "/shared.jspx").body());
+    }
+
+    private static void assertNamedTagsAndProtectedResources(HttpClient client, String base) throws Exception {
+        assertEquals("<fragment>fragmentBODYBODY", get(client, base + "/named-tags.jspx").body());
+        assertEquals("<b title=\"&quot;&amp;\">label</b>:1:BB!", get(client, base + "/static-named-tags.jspx").body());
+        assertEquals(404, get(client, base + "/missing.jsp").statusCode());
+        assertEquals(404, get(client, base + "/WEB-INF/secret.jsp").statusCode());
     }
 
     private static HttpResponse<String> get(HttpClient client, String url) throws Exception {
@@ -379,7 +394,7 @@ class FoyHttpPagesTest {
     static class PagesContainer implements DeployableContainer<Configuration> {
         private Configuration configuration; private Process process;
         public Class<Configuration> getConfigurationClass() { return Configuration.class; }
-        public void setup(Configuration configuration) { configuration.validate(); this.configuration = configuration; }
+        @Override public void setup(Configuration configuration) { configuration.validate(); this.configuration = configuration; }
         public ProtocolDescription getDefaultProtocol() { return new ProtocolDescription("Servlet 3.0"); }
         public ProtocolMetaData deploy(Archive<?> archive) throws DeploymentException {
             try {
@@ -400,7 +415,7 @@ class FoyHttpPagesTest {
                         int port = Integer.parseInt(output.substring(start + 6, output.indexOf('\n', start)).trim());
                         return new ProtocolMetaData().addContext(new HTTPContext("127.0.0.1", port));
                     }
-                    Thread.sleep(20);
+                    if (process.waitFor(20, TimeUnit.MILLISECONDS)) break;
                 }
                 throw new DeploymentException("Server did not start: " + Files.readString(log));
             } catch (Exception failure) { if (failure instanceof DeploymentException deployment) throw deployment; throw new DeploymentException("Cannot deploy modular pages", failure); }
@@ -413,6 +428,6 @@ class FoyHttpPagesTest {
                 if (process.exitValue() != 0) throw new DeploymentException("Server failed: " + Files.readString(configuration.directory.resolve("server.log")));
             } catch (Exception failure) { if (failure instanceof DeploymentException deployment) throw deployment; throw new DeploymentException("Cannot undeploy pages", failure); }
         }
-        public void stop() { if (process != null && process.isAlive()) process.destroyForcibly(); }
+        @Override public void stop() { if (process != null && process.isAlive()) process.destroyForcibly(); }
     }
 }

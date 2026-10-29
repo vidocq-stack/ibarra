@@ -29,6 +29,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.util.List;
+import org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext;
+import org.jboss.arquillian.container.spi.client.protocol.metadata.ProtocolMetaData;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
@@ -84,11 +86,14 @@ class PagesContainerTest {
                 .addAsWebResource(new StringAsset(tagx), "WEB-INF/tags/declaration.tagx");
         var container = new PagesContainer(); container.setup(new PagesConfiguration());
         try {
-            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http = http(container.deploy(war));
             for (var path : List.of("index.jsp", "utf8.jsp")) {
                 var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort()
                         + "/tag-file-encoding/" + path)).GET().build();
-                var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> response;
+                try (var client = HttpClient.newHttpClient()) {
+                    response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                }
                 assertEquals(200, response.statusCode(), response.body());
                 String expectedCharset = path.equals("index.jsp") ? "ISO-8859-1" : "UTF-8";
                 assertTrue(response.headers().firstValue("content-type").orElse("")
@@ -119,7 +124,7 @@ class PagesContainerTest {
                 .addAsWebResource(new StringAsset("<%=application.getAttribute(\"after-parent\")%>|<%=application.getAttribute(\"after-middle\")%>"), "state.jsp");
         var container = new PagesContainer(); container.setup(new PagesConfiguration());
         try {
-            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http = http(container.deploy(war));
             String base = "http://127.0.0.1:" + http.getPort() + "/typed-forward/";
             try (var client = HttpClient.newHttpClient()) {
                 var response = client.send(HttpRequest.newBuilder(URI.create(base + "index.jsp")).build(), HttpResponse.BodyHandlers.ofString());
@@ -146,7 +151,7 @@ class PagesContainerTest {
                 .addAsWebResource(new StringAsset("secret"),"WEB-INF/private.jsp");
         var container=new PagesContainer();container.setup(new PagesConfiguration());
         try {
-            var http=container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http=http(container.deploy(war));
             String base="http://127.0.0.1:"+http.getPort()+"/precompile-protocol/";
             try(var client=HttpClient.newHttpClient()) {
                 for(String path:java.util.List.of("index.jsp","alias")) {
@@ -189,7 +194,7 @@ class PagesContainerTest {
                         + " throw new AssertionError(\"Bean packages must be qualified-exported only to Jakarta EL\"); %>"), "index.jsp");
         var container = new PagesContainer(); container.setup(new PagesConfiguration());
         try {
-            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http = http(container.deploy(war));
             try (var client = HttpClient.newHttpClient()) {
                 var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort()
                         + "/editor-collections/index.jsp")).build(), HttpResponse.BodyHandlers.ofString());
@@ -212,7 +217,7 @@ class PagesContainerTest {
                 .addAsWebResource(new StringAsset("target"),"target.jsp");
         var container=new PagesContainer();container.setup(new PagesConfiguration());
         try {
-            var http=container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http=http(container.deploy(war));
             try(var client=HttpClient.newHttpClient()) {
                 for(var entry:java.util.Map.of("empty.jsp","target","buffered.jsp","target","unbuffered.jsp","sent|blocked","failure.jsp","sent|true").entrySet()) {
                     var response=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+http.getPort()+"/forward-output/"+entry.getKey())).build(),HttpResponse.BodyHandlers.ofString());
@@ -237,7 +242,7 @@ class PagesContainerTest {
                         + "<m:probe action='#{values.add}'/>|${values[0]}|${values.add(0,'first')}|${values[0]}"),"index.jsp");
         var container=new PagesContainer();container.setup(new PagesConfiguration());
         try {
-            var http=container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http=http(container.deploy(war));
             try(var client=HttpClient.newHttpClient()) {
                 var response=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+http.getPort()+"/collection-methods/index.jsp")).build(),HttpResponse.BodyHandlers.ofString());
                 assertEquals(200,response.statusCode(),response.body());
@@ -258,7 +263,7 @@ class PagesContainerTest {
                         + "${bean.booleanValue}|${bean.byteValue}|${bean.charValue}|${bean.shortValue}|${bean.intValue}|${bean.longValue}|${bean.floatValue}|${bean.doubleValue}"),"index.jsp");
         var container=new PagesContainer();container.setup(new PagesConfiguration());
         try {
-            var http=container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http=http(container.deploy(war));
             try(var client=HttpClient.newHttpClient()) {
                 var response=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+http.getPort()+"/primitive-beans/index.jsp")).build(),HttpResponse.BodyHandlers.ofString());
                 assertEquals(200,response.statusCode(),response.body());assertEquals("true|12|x|34|56|78|1.5|2.5",response.body());
@@ -273,7 +278,7 @@ class PagesContainerTest {
                 .addAsWebResource(new StringAsset("<jsp:useBean id='mapping' class='io.vidocq.ibarra.arquillian.fixtures.PropertyMap'/>${mapping.name}"),"index.jsp");
         var container=new PagesContainer();container.setup(new PagesConfiguration());
         try {
-            var http=container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http=http(container.deploy(war));
             try(var client=HttpClient.newHttpClient()) {
                 var response=client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+http.getPort()+"/map-beans/index.jsp")).build(),HttpResponse.BodyHandlers.ofString());
                 assertEquals(200,response.statusCode(),response.body());assertEquals("map",response.body());
@@ -303,7 +308,7 @@ class PagesContainerTest {
                         + "out.print(el.getELResolver().getType(el,base,\"readOnly\")==null); %>"), "readonly.jsp");
         var container = new PagesContainer(); container.setup(new PagesConfiguration());
         try {
-            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http = http(container.deploy(war));
             try (var client = HttpClient.newHttpClient()) {
                 var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/beans/index.jsp")).build(), HttpResponse.BodyHandlers.ofString());
                 assertEquals(200, response.statusCode(), response.body()); assertEquals("private|7|7|true|parent|true", response.body());
@@ -333,7 +338,7 @@ class PagesContainerTest {
                 .addAsWebResource(new StringAsset("<%@ taglib prefix='lib' uri='urn:second' %><lib:value/>"), "second.jsp");
         var container = new PagesContainer(); container.setup(new PagesConfiguration());
         try {
-            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http = http(container.deploy(war));
             try (var client = HttpClient.newHttpClient()) {
                 for (String page : java.util.List.of("index.jsp", "direct.jsp", "second.jsp")) {
                     var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/libraries/" + page)).build(), HttpResponse.BodyHandlers.ofString());
@@ -360,7 +365,7 @@ class PagesContainerTest {
                 .addAsWebResource(new StringAsset("${applicationScope.ready}"), "index.jsp");
         var container = new PagesContainer(); container.setup(new PagesConfiguration());
         try {
-            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http = http(container.deploy(war));
             try (var client = HttpClient.newHttpClient()) {
                 for (String path : java.util.List.of("probe", "index.jsp")) {
                     var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/components/" + path)).build(), HttpResponse.BodyHandlers.ofString());
@@ -373,7 +378,9 @@ class PagesContainerTest {
     }
 
     public static class DescriptorServlet extends jakarta.servlet.http.HttpServlet {
-        public DescriptorServlet() throws java.io.IOException { }
+        public DescriptorServlet() throws java.io.IOException {
+            // Declares a checked exception on purpose: the descriptor deployment must still instantiate the servlet.
+        }
         @Override protected void doGet(jakarta.servlet.http.HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
             var module = getClass().getModule();
             if (!module.isNamed() || module.isExported(getClass().getPackageName()) || module.isOpen(getClass().getPackageName()))
@@ -426,7 +433,7 @@ class PagesContainerTest {
                 .addAsWebResource(new StringAsset("${1+1}<% int x = ; %>"), "javac.jsp");
         var container = new PagesContainer(); container.setup(new PagesConfiguration());
         try {
-            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http = http(container.deploy(war));
             try (var client = HttpClient.newHttpClient()) {
                 for (String path : java.util.List.of("parse.jsp", "javac.jsp", "parse.jsp?jsp_precompile=true")) {
                     var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/partial/" + path)).build(), HttpResponse.BodyHandlers.ofString());
@@ -449,7 +456,7 @@ class PagesContainerTest {
                 .addAsWebResource(new StringAsset("|tail"), "tail.jspf");
         var container = new PagesContainer(); container.setup(new PagesConfiguration());
         try {
-            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http = http(container.deploy(war));
             try (var client = HttpClient.newHttpClient()) {
                 for (String page : java.util.List.of("index.jsp", "literal.jsp")) {
                     var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/configuration/" + page + "?name=compiled")).build(), HttpResponse.BodyHandlers.ofString());
@@ -470,7 +477,7 @@ class PagesContainerTest {
                 .addAsWebResource(new StringAsset("<%@ page contentType='text/plain' %>included page"), "pages/included.jsp");
         var container = new PagesContainer(); container.setup(new PagesConfiguration());
         try {
-            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http = http(container.deploy(war));
             try (var client = HttpClient.newHttpClient()) {
                 for (var request : java.util.List.of(java.util.Map.entry("pages/index.jsp", "prefix page"),
                         java.util.Map.entry("include.jsp", "included page"))) {
@@ -493,11 +500,13 @@ class PagesContainerTest {
                 .addAsWebResource(new StringAsset("C"), "include/C.jsp");
         var container = new PagesContainer(); container.setup(new PagesConfiguration());
         try {
-            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
-            var response = HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort()
-                    + "/nested-prefix-group/dynamic.jsp")).GET().build(), HttpResponse.BodyHandlers.ofString());
-            assertEquals(200, response.statusCode(), response.body());
-            assertEquals("A:B:C", response.body());
+            var http = http(container.deploy(war));
+            try (var client = HttpClient.newHttpClient()) {
+                var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort()
+                        + "/nested-prefix-group/dynamic.jsp")).GET().build(), HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, response.statusCode(), response.body());
+                assertEquals("A:B:C", response.body());
+            }
         } finally { container.stop(); }
     }
 
@@ -508,7 +517,7 @@ class PagesContainerTest {
                 .addAsWebResource(new StringAsset("${param.name}"), "index.jsp");
         var container = new PagesContainer(); container.setup(new PagesConfiguration());
         try {
-            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http = http(container.deploy(war));
             try (var client = HttpClient.newHttpClient()) {
                 var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/legacy/index.jsp?name=compiled")).build(), HttpResponse.BodyHandlers.ofString());
                 assertEquals(200, response.statusCode(), response.body()); assertEquals("${param.name}", response.body());
@@ -525,14 +534,15 @@ class PagesContainerTest {
         container.start();
         try {
             var metadata = container.deploy(war);
-            var http = metadata.getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http = http(metadata);
             try (var client = HttpClient.newHttpClient()) {
                 var response = client.send(HttpRequest.newBuilder(URI.create("http://" + http.getHost() + ":" + http.getPort() + "/pages-probe/index.jsp?name=compiled")).build(), HttpResponse.BodyHandlers.ofString());
                 assertEquals(200, response.statusCode(), response.body());
                 assertEquals("4.0|compiled", response.body());
             }
             container.undeploy(war);
-            assertThrows(IllegalArgumentException.class, () -> container.deploy(ShrinkWrap.create(org.jboss.shrinkwrap.api.spec.JavaArchive.class)));
+            var jar = ShrinkWrap.create(org.jboss.shrinkwrap.api.spec.JavaArchive.class);
+            assertThrows(IllegalArgumentException.class, () -> container.deploy(jar));
         } finally { container.stop(); }
     }
 
@@ -543,7 +553,7 @@ class PagesContainerTest {
                 .addAsWebResource(new StringAsset("archive-resource"), "answer.txt");
         var container = new PagesContainer(); container.setup(new PagesConfiguration());
         try {
-            var http = container.deploy(war).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var http = http(container.deploy(war));
             try (var client = HttpClient.newHttpClient()) {
                 var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + http.getPort() + "/resources/index.jsp")).build(), HttpResponse.BodyHandlers.ofString());
                 assertEquals(200, response.statusCode(), response.body()); assertEquals("archive-resource", response.body());
@@ -560,8 +570,8 @@ class PagesContainerTest {
         var second = ShrinkWrap.create(WebArchive.class, "second.war").addAsWebResource(new StringAsset("second"), "index.jsp");
         var container = new PagesContainer(); container.setup(new PagesConfiguration());
         try {
-            var one = container.deploy(first).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
-            var two = container.deploy(second).getContext(org.jboss.arquillian.container.spi.client.protocol.metadata.HTTPContext.class);
+            var one = http(container.deploy(first));
+            var two = http(container.deploy(second));
             assertNotEquals(one.getPort(), two.getPort());
             container.undeploy(first);
             try (var client = HttpClient.newHttpClient()) {
@@ -592,4 +602,8 @@ class PagesContainerTest {
 
     @jakarta.servlet.annotation.WebServlet("/annotated")
     public static class AnnotatedServlet extends jakarta.servlet.http.HttpServlet { }
+
+    private static HTTPContext http(ProtocolMetaData metadata) {
+        return metadata.getContexts(HTTPContext.class).iterator().next();
+    }
 }

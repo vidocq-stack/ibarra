@@ -26,10 +26,15 @@ import java.nio.file.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 import io.vidocq.ibarra.compiler.internal.TagFileCompiler;
 import io.vidocq.ibarra.compiler.internal.TldReferences;
 import io.vidocq.ibarra.compiler.internal.TranslationUnit;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.api.io.TempDir;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -48,8 +53,8 @@ class TagGenerationTest {
         var options = rawOptions();
         assertEquals("[null:a<x:raw>inside]b", render("<x:raw>a<x:raw>inside</x:raw >b", false, options));
         assertEquals("[null:<!-- literal]tail -->", render("<x:raw><!-- literal</x:raw>tail -->", false, options));
-        var failure = assertThrows(PageParseException.class, () -> generator().generate("/raw.jsp",
-                prefix()+"\n<x:raw>missing", "fixture.GeneratedPage", options));
+        var failure = assertThrows(PageParseException.class, generation("/raw.jsp",
+                prefix()+"\n<x:raw>missing", options));
         assertEquals(2, failure.location().line());
         assertTrue(failure.getMessage().contains("Unclosed"));
     }
@@ -117,7 +122,7 @@ class TagGenerationTest {
         assertTrue(generator().generate("/page.jsp", bytes.getBytes(StandardCharsets.ISO_8859_1), "fixture.GeneratedPage", configured).source().contains("é"));
     }
 
-    private GenerationOptions rawOptions() throws Exception {
+    private GenerationOptions rawOptions() {
         var options = options();
         var library = options.tagLibraries().get("urn:test");
         var tags = new LinkedHashMap<>(library.tags());
@@ -179,8 +184,8 @@ class TagGenerationTest {
                 "<jsp:body>a</jsp:body><jsp:attribute name='label'>late</jsp:attribute>",
                 "<jsp:attribute name='label'>a</jsp:attribute><jsp:attribute name='label'>b</jsp:attribute>",
                 "<jsp:attribute name='label'>a</jsp:attribute>unwrapped", "<jsp:body>missing")) {
-            var failure = assertThrows(PageParseException.class, () -> generator().generate("/bad.jsp",
-                    prefix() + "\n<x:raw>" + content + "</x:raw>", "fixture.GeneratedPage", options));
+            var failure = assertThrows(PageParseException.class, generation("/bad.jsp",
+                    prefix() + "\n<x:raw>" + content + "</x:raw>", options));
             assertEquals("/bad.jsp", failure.location().source()); assertEquals(2, failure.location().line());
             assertFalse(failure.getMessage().contains("absent from the build module path"), failure.getMessage());
         }
@@ -209,9 +214,9 @@ class TagGenerationTest {
                 + "<jsp:body><%@ page pageEncoding='ISO-8859-1' %></jsp:body></x:raw>";
         assertTrue(generator().generate("/named-bytes.jsp", namedEncoding.getBytes(StandardCharsets.UTF_8),
                 "fixture.GeneratedPage", options).source().contains("é"));
-        var failure = assertThrows(PageParseException.class, () -> generator().generate("/scope.jsp", prefix()
+        var failure = assertThrows(PageParseException.class, generation("/scope.jsp", prefix()
                 + "<x:raw><jsp:body><jsp:useBean id='bean' class='missing.Bean'/></jsp:body></x:raw>"
-                + "<jsp:getProperty name='bean' property='value'/>", "fixture.GeneratedPage", options));
+                + "<jsp:getProperty name='bean' property='value'/>", options));
         assertTrue(failure.getMessage().contains("bean"));
     }
 
@@ -222,25 +227,23 @@ class TagGenerationTest {
             assertEquals(value.equals("true") || value.equals("yes") ? "body" : "<?xml version=\"1.0\" encoding=\"UTF-8\"?>body",
                     render(head + "<jsp:output omit-xml-declaration='" + value + "'/><jsp:text>body</jsp:text></jsp:root>", false, options()));
         for (String value : List.of("YES", "False", "1", ""))
-            assertThrows(PageParseException.class, () -> generator().generate("/output.jspx", head
-                    + "<jsp:output omit-xml-declaration='" + value + "'/></jsp:root>", "fixture.GeneratedPage", options()));
-        assertThrows(PageParseException.class, () -> generator().generate("/boolean.jspx",
-                "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page session='yes'/></jsp:root>",
-                "fixture.GeneratedPage", options()));
+            assertThrows(PageParseException.class, generation("/output.jspx", head
+                    + "<jsp:output omit-xml-declaration='" + value + "'/></jsp:root>", options()));
+        assertThrows(PageParseException.class, generation("/boolean.jspx",
+                "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'><jsp:directive.page session='yes'/></jsp:root>", options()));
     }
 
     @Test
     void xmlOutputRejectsNonemptyBodiesBeforeWritingADeclaration() {
         String head = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'>";
         for (String body : List.of("Test FAILED", "${1+2}", "<jsp:text>payload</jsp:text>", "<b/>", " ", "\n")) {
-            var failure = assertThrows(PageParseException.class, () -> generator().generate("/output-body.jspx",
-                    head + "\n<jsp:output omit-xml-declaration='yes'>" + body + "</jsp:output></jsp:root>",
-                    "fixture.GeneratedPage", options()));
+            var failure = assertThrows(PageParseException.class, generation("/output-body.jspx",
+                    head + "\n<jsp:output omit-xml-declaration='yes'>" + body + "</jsp:output></jsp:root>", options()));
             assertEquals(2, failure.location().line());
             assertTrue(failure.getMessage().contains("empty body"));
         }
-        assertThrows(PageParseException.class, () -> generator().generate("/standard.jsp",
-                "<jsp:output omit-xml-declaration='yes'/>", "fixture.GeneratedPage", options()));
+        assertThrows(PageParseException.class, generation("/standard.jsp",
+                "<jsp:output omit-xml-declaration='yes'/>", options()));
         assertDoesNotThrow(() -> generator().generate("/empty.jspx",
                 head + "<jsp:output omit-xml-declaration='yes'></jsp:output></jsp:root>", "fixture.GeneratedPage", options()));
     }
@@ -288,8 +291,8 @@ class TagGenerationTest {
                 + "<alias:output xmlns:alias='http://java.sun.com/JSP/Page' omit-xml-declaration='yes' doctype-root-element='p' doctype-system='${param.dtd}'/><p/></jsp:root>", false, options()));
         assertEquals("<!DOCTYPE p SYSTEM \"a\nb\rc.dtd\"><p/>", render(head
                 + "<output xmlns='http://java.sun.com/JSP/Page' omit-xml-declaration='yes' doctype-root-element='p' doctype-system='a&#10;b&#13;c.dtd'/><p/></jsp:root>", false, options()));
-        var failure = assertThrows(PageParseException.class, () -> generator().generate("/qualified.jspx", head
-                + "<jsp:output xmlns:foreign='urn:foreign' foreign:doctype-system='test.dtd'/><p/></jsp:root>", "fixture.GeneratedPage", options()));
+        var failure = assertThrows(PageParseException.class, generation("/qualified.jspx", head
+                + "<jsp:output xmlns:foreign='urn:foreign' foreign:doctype-system='test.dtd'/><p/></jsp:root>", options()));
         assertTrue(failure.getMessage().contains("Unsupported action attribute"));
     }
 
@@ -298,13 +301,13 @@ class TagGenerationTest {
         String head = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'>\n";
         for (String attributes : List.of("doctype-root-element='p'", "doctype-system='test.dtd'",
                 "doctype-public='public'", "doctype-root-element='p' doctype-public='public'")) {
-            var failure = assertThrows(PageParseException.class, () -> generator().generate("/doctype.jspx", head
-                    + "<jsp:output " + attributes + "/></jsp:root>", "fixture.GeneratedPage", options()));
+            var failure = assertThrows(PageParseException.class, generation("/doctype.jspx", head
+                    + "<jsp:output " + attributes + "/></jsp:root>", options()));
             assertEquals(2, failure.location().line());
             assertTrue(failure.getMessage().contains("requires"), failure.getMessage());
         }
-        var split = assertThrows(PageParseException.class, () -> generator().generate("/split.jspx", head
-                + "<jsp:output doctype-root-element='p'/><jsp:output doctype-system='test.dtd'/></jsp:root>", "fixture.GeneratedPage", options()));
+        var split = assertThrows(PageParseException.class, generation("/split.jspx", head
+                + "<jsp:output doctype-root-element='p'/><jsp:output doctype-system='test.dtd'/></jsp:root>", options()));
         assertTrue(split.getMessage().contains("requires"));
     }
 
@@ -326,8 +329,8 @@ class TagGenerationTest {
             var conflicting = new GenerationOptions(defaults.propertyGroups(), Map.of("/piece.jspx",
                     "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' version='4.0'>\n" + replacement + "</jsp:root>"), false,
                     defaults.byteSources(), defaults.tagLibraries());
-            var failure = assertThrows(PageParseException.class, () -> generator().generate("/doctype.jspx", head + original
-                    + "<jsp:directive.include file='piece.jspx'/><p/></jsp:root>", "fixture.GeneratedPage", conflicting));
+            var failure = assertThrows(PageParseException.class, generation("/doctype.jspx", head + original
+                    + "<jsp:directive.include file='piece.jspx'/><p/></jsp:root>", conflicting));
             assertEquals("/piece.jspx", failure.location().source());
             assertEquals(2, failure.location().line());
             assertTrue(failure.getMessage().contains(attribute));
@@ -379,7 +382,7 @@ class TagGenerationTest {
                 "<x:simple><jsp:attribute name='jspId'>caller</jsp:attribute></x:simple>",
                 "<x:simple><jsp:attribute name='x:JspId'>caller</jsp:attribute></x:simple>",
                 "<x:dynamic jspId='caller'/>", "<x:dynamic><jsp:attribute name='jspId'>caller</jsp:attribute></x:dynamic>")) {
-            var failure = assertThrows(PageParseException.class, () -> generator().generate("/tags.jsp", prefix()+source, "fixture.GeneratedPage", options));
+            var failure = assertThrows(PageParseException.class, generation("/tags.jsp", prefix()+source, options));
             assertTrue(failure.getMessage().contains("compiler-provided jspId"), failure.getMessage());
         }
     }
@@ -452,7 +455,7 @@ class TagGenerationTest {
         prepare();
         compile(List.of(new GeneratedPage("fixture.Ambiguous", "package fixture; public class Ambiguous extends jakarta.servlet.jsp.tagext.SimpleTagSupport { public void setValue(String value){} public void setValue(Integer value){} }", Map.of())));
         var library = new TldParser().parse("/WEB-INF/ambiguous.tld", "<taglib><uri>urn:test</uri><tag><name>ambiguous</name><tag-class>fixture.Ambiguous</tag-class><attribute><name>value</name><rtexprvalue>true</rtexprvalue></attribute></tag></taglib>".getBytes(StandardCharsets.UTF_8));
-        assertThrows(PageParseException.class, () -> generator().generate("/tags.jsp", prefix()+"<x:ambiguous value='x'/>", "fixture.GeneratedPage",
+        assertThrows(PageParseException.class, generation("/tags.jsp", prefix()+"<x:ambiguous value='x'/>",
                 GenerationOptions.DEFAULT.withTagLibraries(Map.of("urn:test", library))));
     }
 
@@ -515,7 +518,7 @@ class TagGenerationTest {
         var options = GenerationOptions.DEFAULT.withTagLibraries(Map.of("urn:test", library));
         assertEquals("string|boolean", render("<x:ReadObject value='text'/>|<x:BooleanRead value='true'/>", false, options));
         for (String name : List.of("ReadString", "Unique"))
-            assertThrows(PageParseException.class, () -> generator().generate("/tags.jsp", prefix()+"<x:"+name+" value='text'/>", "fixture.GeneratedPage", options));
+            assertThrows(PageParseException.class, generation("/tags.jsp", prefix()+"<x:"+name+" value='text'/>", options));
     }
 
     @Test
@@ -572,8 +575,7 @@ class TagGenerationTest {
                 "<x:fragment><jsp:attribute name='piece'><%=1%></jsp:attribute></x:fragment>",
                 "<x:fragment><jsp:attribute name='piece' trim='maybe'/></x:fragment>",
                 "<x:fail><jsp:body>body</jsp:body></x:fail>")) {
-            assertThrows(PageParseException.class, () -> generator().generate("/tags.jsp", prefix()+source,
-                    "fixture.GeneratedPage", options()), source);
+            assertThrows(PageParseException.class, generation("/tags.jsp", prefix()+source, options()), source);
         }
     }
     @Test void jspStringConversionsAcceptEmptyNumbersAndCharacterPrefixes() throws Exception {
@@ -583,8 +585,7 @@ class TagGenerationTest {
         prepare();
         for (String content : List.of("<x:spaced/>", "<b title='${1}'/>", "${1}")) {
             String xml = "<jsp:root xmlns:jsp='http://java.sun.com/JSP/Page' xmlns:x='urn:test' version='4.0'><x:echo><jsp:attribute name='label'>" + content + "</jsp:attribute></x:echo></jsp:root>";
-            assertThrows(PageParseException.class, () -> generator().generate("/tags.jspx", xml,
-                    "fixture.GeneratedPage", options()), content);
+            assertThrows(PageParseException.class, generation("/tags.jspx", xml, options()), content);
         }
     }
     @Test void classicIterationAndBufferedBodiesRestoreTheEnclosingWriter() throws Exception {
@@ -969,12 +970,21 @@ class TagGenerationTest {
         assertTrue(generated.contains("import java.util.Map;"), generated);
     }
 
-    @Test void rejectsDifferingRepeatedExampleDirectives() {
-        var tag = compileTagFile("<%@ tag example='a test, too' %><%@ tag example='a test' %>")
-                .libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
+    @ParameterizedTest
+    @MethodSource("conflictingTagFileDirectives")
+    void rejectsConflictingOrInvalidTagFileDirectives(String tagFile, String reason) {
+        var tag = compileTagFile(tagFile).libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
 
         assertTrue(tag.unsupportedMetadata());
-        assertTrue(tag.unsupportedReason().contains("Conflicting"), tag.unsupportedReason());
+        assertTrue(tag.unsupportedReason().contains(reason), tag.unsupportedReason());
+    }
+
+    static Stream<Arguments> conflictingTagFileDirectives() {
+        return Stream.of(
+                Arguments.of("<%@ tag example='a test, too' %><%@ tag example='a test' %>", "Conflicting"),
+                Arguments.of("<%@ attribute name=\"value\" type=\"double\" %>", "Invalid tag-file attribute type"),
+                Arguments.of("<%@ variable name-given=\"value\" alias=\"other\" %>", "alias"),
+                Arguments.of("<%@ attribute name=\"value\" %><%@ variable name-given=\"value\" %>", "conflict"));
     }
 
     @Test void ignoresNamespacedDynamicAttributesInTagFileDynamicAttributeMap() {
@@ -1285,8 +1295,10 @@ class TagGenerationTest {
         var page = new TranslationUnit(options).read("/index.jsp",
                 "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>");
 
+        var pages = List.of(page);
+        List<Path> modulePath = List.of();
         var failure = assertThrows(PageParseException.class,
-                () -> TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of()));
+                () -> TagFileCompiler.compile(pages, options, "fixture.tagfiles", modulePath));
 
         assertTrue(failure.getMessage().contains("implicit.tld"));
     }
@@ -1300,8 +1312,10 @@ class TagGenerationTest {
         var page = new TranslationUnit(options).read("/index.jsp",
                 "<%@ taglib prefix='t' tagdir='/WEB-INF/tags' %><t:sample/>");
 
+        var pages = List.of(page);
+        List<Path> modulePath = List.of();
         var failure = assertThrows(PageParseException.class,
-                () -> TagFileCompiler.compile(List.of(page), options, "fixture.tagfiles", List.of()));
+                () -> TagFileCompiler.compile(pages, options, "fixture.tagfiles", modulePath));
 
         assertTrue(failure.getMessage().contains("implicit.tld"));
     }
@@ -1415,13 +1429,6 @@ class TagGenerationTest {
         assertTrue(tag.unsupportedReason().contains("Conflicting"), tag.unsupportedReason());
     }
 
-    @Test void rejectsPrimitiveTagFileAttributeTypes() {
-        var tag = compileTagFile("<%@ attribute name=\"value\" type=\"double\" %>")
-                .libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
-        assertTrue(tag.unsupportedMetadata());
-        assertTrue(tag.unsupportedReason().contains("Invalid tag-file attribute type"), tag.unsupportedReason());
-    }
-
     @Test void rejectsExplicitFalseRtexprvalueForFragmentTagFileAttributes() {
         var tag = compileTagFile("<%@ attribute name='piece' fragment='true' rtexprvalue='false' %>")
                 .libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
@@ -1496,20 +1503,6 @@ class TagGenerationTest {
         assertTrue(output.contains("<element1>body</element1>"), output);
     }
 
-    @Test void rejectsTagFileVariableAliasWithoutNameFromAttribute() {
-        var tag = compileTagFile("<%@ variable name-given=\"value\" alias=\"other\" %>")
-                .libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
-        assertTrue(tag.unsupportedMetadata());
-        assertTrue(tag.unsupportedReason().contains("alias"), tag.unsupportedReason());
-    }
-
-    @Test void rejectsTagFileAttributeAndVariableNameCollisions() {
-        var tag = compileTagFile("<%@ attribute name=\"value\" %><%@ variable name-given=\"value\" %>")
-                .libraries().get("urn:jsptagdir:/WEB-INF/tags").tags().get("sample");
-        assertTrue(tag.unsupportedMetadata());
-        assertTrue(tag.unsupportedReason().contains("conflict"), tag.unsupportedReason());
-    }
-
     @Test void bufferedIterationsRetainContentUntilTheHandlerClearsIt() throws Exception {
         assertEquals("[ia][iaa]",render("<x:bufferedRepeat>a</x:bufferedRepeat>"));
     }
@@ -1517,8 +1510,7 @@ class TagGenerationTest {
         prepare();
         for (String source : List.of("<x:echo/>", "<x:echo label='a' count='bad'/>", "<x:echo label='a' unknown='b'/>",
                 "<x:echo label='a'><% out.print(1); %></x:echo>", "<x:missing/>")) {
-            assertThrows(PageParseException.class, () -> generator().generate("/tags.jsp", prefix()+source,
-                    "fixture.GeneratedPage", options()));
+            assertThrows(PageParseException.class, generation("/tags.jsp", prefix()+source, options()));
         }
     }
     private String prefix() { return "<%@ page session='false' %><%@ taglib prefix='x' uri='urn:test' %>"; }
@@ -1601,6 +1593,11 @@ class TagGenerationTest {
         var paths = new ArrayList<Path>(); paths.add(directory);
         for (String path : modulePath().split(java.util.regex.Pattern.quote(File.pathSeparator))) paths.add(Path.of(path));
         return new PageGenerator(paths);
+    }
+    /** Defers one generation, so that an expected failure can only come from {@code generate}. */
+    private Executable generation(String path, String source, GenerationOptions options) {
+        var pageGenerator = generator();
+        return () -> pageGenerator.generate(path, source, "fixture.GeneratedPage", options);
     }
     private String render(String source) throws Exception {
         return render(source, false);
