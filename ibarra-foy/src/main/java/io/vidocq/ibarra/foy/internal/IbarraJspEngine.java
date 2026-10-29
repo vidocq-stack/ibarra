@@ -38,16 +38,16 @@ public final class IbarraJspEngine implements JspEngine {
         var servlet = new Router(pages);
         return new Application() {
             private final AtomicBoolean closed = new AtomicBoolean();
-            public Servlet servlet() { return servlet; }
-            public java.util.List<JspEngine.Listener> listeners() {
+            @Override public Servlet servlet() { return servlet; }
+            @Override public java.util.List<JspEngine.Listener> listeners() {
                 return pages.listeners().stream().map(listener -> new JspEngine.Listener(listener.type(), listener::createListener)).toList();
             }
-            public Servlet servletFor(String path) {
+            @Override public Servlet servletFor(String path) {
                 if (closed.get()) throw new IllegalStateException("JSP application is closed");
                 var page = pages.createPage(path);
                 return page == null ? new MissingPage() : page;
             }
-            public void close() { if (closed.compareAndSet(false, true)) pages.close(); }
+            @Override public void close() { if (closed.compareAndSet(false, true)) pages.close(); }
         };
     }
 
@@ -58,7 +58,7 @@ public final class IbarraJspEngine implements JspEngine {
     }
 
     static final class Router extends HttpServlet {
-        private final PageApplication application;
+        private final transient PageApplication application;
         private final ConcurrentHashMap<String, FutureTask<HttpJspPage>> pages = new ConcurrentHashMap<>();
         private final AtomicBoolean closed = new AtomicBoolean();
         Router(PageApplication application) { this.application = application; }
@@ -108,8 +108,8 @@ public final class IbarraJspEngine implements JspEngine {
             for (var task : pages.values()) {
                 if (!task.isDone() || task.isCancelled()) continue;
                 try { var page = task.get(); if (page != null) page.destroy(); }
-                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
-                catch (ExecutionException failure) { /* Failed initialization is not a live servlet. */ }
+                catch (InterruptedException _) { Thread.currentThread().interrupt(); }
+                catch (ExecutionException _) { /* Failed initialization is not a live servlet. */ }
                 catch (RuntimeException failure) { log("JSP page destruction failed", failure); }
             }
             pages.clear();

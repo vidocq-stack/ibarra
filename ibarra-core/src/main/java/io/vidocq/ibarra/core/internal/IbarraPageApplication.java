@@ -64,6 +64,7 @@ public final class IbarraPageApplication implements PageApplication {
         if (closed.get()) throw new IllegalStateException("JSP application is closed");
         return pages.find(path) != null;
     }
+    @Override
     public void close() {
         if (closed.compareAndSet(false, true)) factory.releaseApplicationContext(context);
     }

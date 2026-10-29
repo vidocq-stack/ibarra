@@ -20,10 +20,12 @@
 package io.vidocq.ibarra.maven;
 
 import io.vidocq.ibarra.compiler.JspPropertyGroup;
+import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 import org.w3c.dom.*;
 import org.xml.sax.*;
 
@@ -34,8 +36,25 @@ final class WebXmlProperties {
             "error-on-el-not-found", "error-on-undeclared-namespace");
     private WebXmlProperties() { }
 
-    static List<JspPropertyGroup> read(Path descriptor) throws Exception {
+    static List<JspPropertyGroup> read(Path descriptor) throws IOException, SAXException, ParserConfigurationException {
         if (!Files.exists(descriptor)) return List.of();
+        Element root = parse(descriptor);
+        if (!name(root).equals("web-app")) throw new IllegalArgumentException("Expected web-app in " + descriptor);
+        String namespace = root.getNamespaceURI();
+        if (namespace != null && !Set.of("https://jakarta.ee/xml/ns/jakartaee", "http://xmlns.jcp.org/xml/ns/javaee",
+                "http://java.sun.com/xml/ns/javaee", "http://java.sun.com/xml/ns/j2ee").contains(namespace))
+            throw new IllegalArgumentException("Unsupported deployment descriptor namespace: " + namespace);
+        var groups = new ArrayList<JspPropertyGroup>();
+        for (var config : children(root)) {
+            if (name(config).equals("jsp-config")) {
+                requireNamespace(config, namespace);
+                for (var group : children(config)) groups.add(propertyGroup(group, namespace));
+            }
+        }
+        return List.copyOf(groups);
+    }
+
+    private static Element parse(Path descriptor) throws IOException, SAXException, ParserConfigurationException {
         var factory = DocumentBuilderFactory.newDefaultInstance();
         factory.setNamespaceAware(true);
         factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
@@ -48,41 +67,36 @@ final class WebXmlProperties {
             @Override public void error(SAXParseException failure) throws SAXException { throw failure; }
             @Override public void fatalError(SAXParseException failure) throws SAXException { throw failure; }
         });
-        Element root;
-        try (var input = Files.newInputStream(descriptor)) { root = builder.parse(input).getDocumentElement(); }
-        if (!name(root).equals("web-app")) throw new IllegalArgumentException("Expected web-app in " + descriptor);
-        String namespace = root.getNamespaceURI();
-        if (namespace != null && !Set.of("https://jakarta.ee/xml/ns/jakartaee", "http://xmlns.jcp.org/xml/ns/javaee",
-                "http://java.sun.com/xml/ns/javaee", "http://java.sun.com/xml/ns/j2ee").contains(namespace))
-            throw new IllegalArgumentException("Unsupported deployment descriptor namespace: " + namespace);
-        var groups = new ArrayList<JspPropertyGroup>();
-        for (var config : children(root)) if (name(config).equals("jsp-config")) {
-            requireNamespace(config, namespace);
-            for (var group : children(config)) {
-                requireNamespace(group, namespace);
-                if (!name(group).equals("jsp-property-group"))
-                    throw new IllegalArgumentException("Unsupported jsp-config element: " + name(group));
-                var patterns = new ArrayList<String>(); var preludes = new ArrayList<String>(); var codas = new ArrayList<String>();
-                var properties = new LinkedHashMap<String, String>();
-                for (var entry : children(group)) {
-                    requireNamespace(entry, namespace);
-                    String key = name(entry); String value = entry.getTextContent().trim();
-                    switch (key) {
-                        case "url-pattern" -> patterns.add(value);
-                        case "include-prelude" -> preludes.add(value);
-                        case "include-coda" -> codas.add(value);
-                        case "description", "display-name", "icon" -> { }
-                        default -> {
-                            if (!PROPERTIES.contains(key)) throw new IllegalArgumentException("Unknown JSP property: " + key);
-                            if (properties.putIfAbsent(key, value) != null) throw new IllegalArgumentException("Duplicate JSP property: " + key);
-                        }
-                    }
+        try (var input = Files.newInputStream(descriptor)) { return builder.parse(input).getDocumentElement(); }
+    }
+
+    private static JspPropertyGroup propertyGroup(Element group, String namespace) {
+        requireNamespace(group, namespace);
+        if (!name(group).equals("jsp-property-group"))
+            throw new IllegalArgumentException("Unsupported jsp-config element: " + name(group));
+        var patterns = new ArrayList<String>();
+        var preludes = new ArrayList<String>();
+        var codas = new ArrayList<String>();
+        var properties = new LinkedHashMap<String, String>();
+        for (var entry : children(group)) {
+            requireNamespace(entry, namespace);
+            String key = name(entry);
+            String value = entry.getTextContent().trim();
+            switch (key) {
+                case "url-pattern" -> patterns.add(value);
+                case "include-prelude" -> preludes.add(value);
+                case "include-coda" -> codas.add(value);
+                case "description", "display-name", "icon" -> {
+                    // Descriptive elements carry no JSP property.
                 }
-                if (patterns.isEmpty()) throw new IllegalArgumentException("JSP property group needs a URL pattern");
-                groups.add(new JspPropertyGroup(patterns, properties, preludes, codas));
+                default -> {
+                    if (!PROPERTIES.contains(key)) throw new IllegalArgumentException("Unknown JSP property: " + key);
+                    if (properties.putIfAbsent(key, value) != null) throw new IllegalArgumentException("Duplicate JSP property: " + key);
+                }
             }
         }
-        return List.copyOf(groups);
+        if (patterns.isEmpty()) throw new IllegalArgumentException("JSP property group needs a URL pattern");
+        return new JspPropertyGroup(patterns, properties, preludes, codas);
     }
     private static String name(Element element) { return element.getLocalName() == null ? element.getTagName() : element.getLocalName(); }
     private static void requireNamespace(Element element, String namespace) {

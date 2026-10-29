@@ -38,7 +38,7 @@ final class IbarraJspFactory extends JspFactory {
         try {
             page.initialize(servlet, request, response, errorPageURL, needsSession, buffer, autoFlush);
             return page;
-        } catch (IOException | IllegalArgumentException | IllegalStateException failure) {
+        } catch (IOException | IllegalArgumentException | IllegalStateException _) {
             page.release();
             return null;
         }

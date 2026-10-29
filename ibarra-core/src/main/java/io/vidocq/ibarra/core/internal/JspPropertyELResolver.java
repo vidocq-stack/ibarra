@@ -29,6 +29,8 @@ import jakarta.servlet.jsp.PageContext;
 
 /** Resolves standard JSP and Servlet properties through their public APIs. */
 final class JspPropertyELResolver extends ELResolver {
+    private static final String CONTEXT = "context";
+
     private static boolean resolves(Object base, Object property) {
         return property instanceof String name
                 && ((base instanceof PageContext && name.equals("request"))
@@ -37,7 +39,7 @@ final class JspPropertyELResolver extends ELResolver {
 
     @Override
     public Object getValue(ELContext context, Object base, Object property) {
-        Objects.requireNonNull(context, "context");
+        Objects.requireNonNull(context, CONTEXT);
         if (!resolves(base, property)) return null;
         context.setPropertyResolved(true);
         if (base instanceof PageContext page) return page.getRequest();
@@ -46,7 +48,7 @@ final class JspPropertyELResolver extends ELResolver {
 
     @Override
     public Class<?> getType(ELContext context, Object base, Object property) {
-        Objects.requireNonNull(context, "context");
+        Objects.requireNonNull(context, CONTEXT);
         if (!resolves(base, property)) return null;
         context.setPropertyResolved(true);
         return base instanceof PageContext ? ServletRequest.class : String.class;
@@ -54,7 +56,7 @@ final class JspPropertyELResolver extends ELResolver {
 
     @Override
     public void setValue(ELContext context, Object base, Object property, Object value) {
-        Objects.requireNonNull(context, "context");
+        Objects.requireNonNull(context, CONTEXT);
         if (resolves(base, property)) {
             context.setPropertyResolved(true);
             throw new PropertyNotWritableException("JSP and Servlet properties are read-only: " + property);
@@ -63,7 +65,7 @@ final class JspPropertyELResolver extends ELResolver {
 
     @Override
     public boolean isReadOnly(ELContext context, Object base, Object property) {
-        Objects.requireNonNull(context, "context");
+        Objects.requireNonNull(context, CONTEXT);
         if (!resolves(base, property)) return false;
         context.setPropertyResolved(true);
         return true;

@@ -38,7 +38,9 @@ final class NotFoundELResolver extends ELResolver {
     }
 
     @Override public Class<?> getType(ELContext context, Object base, Object property) { return null; }
-    @Override public void setValue(ELContext context, Object base, Object property, Object value) { }
+    @Override public void setValue(ELContext context, Object base, Object property, Object value) {
+        // Never resolves a property, so writes are left to the other resolvers.
+    }
     @Override public boolean isReadOnly(ELContext context, Object base, Object property) { return false; }
     @Override public Class<?> getCommonPropertyType(ELContext context, Object base) { return Object.class; }
     @Override

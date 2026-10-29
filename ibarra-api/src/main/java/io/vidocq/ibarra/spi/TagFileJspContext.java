@@ -54,6 +54,9 @@ import jakarta.servlet.jsp.tagext.BodyContent;
  * are delegated to the invoking page context.
  */
 public final class TagFileJspContext extends PageContext {
+    private static final String ATTRIBUTE_NAME = "attribute name";
+    private static final String IMPLICIT_PAGE_CONTEXT = "pageContext";
+    private static final String IMPLICIT_PAGE_SCOPE = "pageScope";
     private final PageContext invoking;
     private final boolean errorOnELNotFound;
     private final Map<String, Object> pageAttributes = new LinkedHashMap<>();
@@ -117,7 +120,7 @@ public final class TagFileJspContext extends PageContext {
 
     @Override
     public void setAttribute(String name, Object value, int scope) {
-        Objects.requireNonNull(name, "attribute name");
+        Objects.requireNonNull(name, ATTRIBUTE_NAME);
         if (scope == PAGE_SCOPE) {
             if (value == null) pageAttributes.remove(name);
             else pageAttributes.put(name, value);
@@ -126,7 +129,7 @@ public final class TagFileJspContext extends PageContext {
 
     @Override
     public Object getAttribute(String name) {
-        Objects.requireNonNull(name, "attribute name");
+        Objects.requireNonNull(name, ATTRIBUTE_NAME);
         Object value = pageAttributes.get(name);
         if (value != null) return value;
         value = invoking.getAttribute(name, REQUEST_SCOPE);
@@ -140,7 +143,7 @@ public final class TagFileJspContext extends PageContext {
 
     @Override
     public Object getAttribute(String name, int scope) {
-        Objects.requireNonNull(name, "attribute name");
+        Objects.requireNonNull(name, ATTRIBUTE_NAME);
         return scope == PAGE_SCOPE ? pageAttributes.get(name) : invoking.getAttribute(name, scope);
     }
 
@@ -148,7 +151,7 @@ public final class TagFileJspContext extends PageContext {
 
     @Override
     public int getAttributesScope(String name) {
-        Objects.requireNonNull(name, "attribute name");
+        Objects.requireNonNull(name, ATTRIBUTE_NAME);
         if (pageAttributes.containsKey(name)) return PAGE_SCOPE;
         if (invoking.getAttribute(name, REQUEST_SCOPE) != null) return REQUEST_SCOPE;
         if (invoking.getSession() != null && invoking.getAttribute(name, SESSION_SCOPE) != null) return SESSION_SCOPE;
@@ -165,7 +168,7 @@ public final class TagFileJspContext extends PageContext {
 
     @Override
     public void removeAttribute(String name) {
-        Objects.requireNonNull(name, "attribute name");
+        Objects.requireNonNull(name, ATTRIBUTE_NAME);
         pageAttributes.remove(name);
         invoking.removeAttribute(name, REQUEST_SCOPE);
         if (invoking.getSession() != null) invoking.removeAttribute(name, SESSION_SCOPE);
@@ -174,7 +177,7 @@ public final class TagFileJspContext extends PageContext {
 
     @Override
     public void removeAttribute(String name, int scope) {
-        Objects.requireNonNull(name, "attribute name");
+        Objects.requireNonNull(name, ATTRIBUTE_NAME);
         if (scope == PAGE_SCOPE) pageAttributes.remove(name);
         else invoking.removeAttribute(name, scope);
     }
@@ -248,11 +251,11 @@ public final class TagFileJspContext extends PageContext {
         @Override
         public Object getValue(ELContext context, Object base, Object property) {
             if (base != null || !(property instanceof String name)) return null;
-            if (name.equals("pageContext")) {
+            if (name.equals(IMPLICIT_PAGE_CONTEXT)) {
                 context.setPropertyResolved(true);
                 return TagFileJspContext.this;
             }
-            if (name.equals("pageScope")) {
+            if (name.equals(IMPLICIT_PAGE_SCOPE)) {
                 context.setPropertyResolved(true);
                 return pageScope;
             }
@@ -266,7 +269,7 @@ public final class TagFileJspContext extends PageContext {
         @Override
         public Class<?> getType(ELContext context, Object base, Object property) {
             if (base != null || !(property instanceof String name)) return null;
-            if (name.equals("pageContext") || name.equals("pageScope") || pageAttributes.containsKey(name)) {
+            if (name.equals(IMPLICIT_PAGE_CONTEXT) || name.equals(IMPLICIT_PAGE_SCOPE) || pageAttributes.containsKey(name)) {
                 context.setPropertyResolved(true);
                 return Object.class;
             }
@@ -284,7 +287,7 @@ public final class TagFileJspContext extends PageContext {
         @Override
         public boolean isReadOnly(ELContext context, Object base, Object property) {
             if (base == null && property instanceof String name) {
-                if (name.equals("pageContext") || name.equals("pageScope")) {
+                if (name.equals(IMPLICIT_PAGE_CONTEXT) || name.equals(IMPLICIT_PAGE_SCOPE)) {
                     context.setPropertyResolved(true);
                     return true;
                 }

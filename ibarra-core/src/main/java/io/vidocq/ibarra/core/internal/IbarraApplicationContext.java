@@ -44,8 +44,8 @@ final class IbarraApplicationContext implements JspApplicationContext {
     IbarraApplicationContext() { this(ExpressionFactory::newInstance); }
 
     IbarraApplicationContext(ExpressionFactory factory) {
-        this(() -> factory);
         Objects.requireNonNull(factory);
+        this(() -> factory);
     }
 
     IbarraApplicationContext(Supplier<ExpressionFactory> source) {
@@ -136,8 +136,10 @@ final class IbarraApplicationContext implements JspApplicationContext {
             @Override public ELResolver getELResolver() { return resolvers; }
             @Override public ImportHandler getImportHandler() { return imports == null ? super.getImportHandler() : imports; }
         };
-        if (imports == null) for (String name : java.util.List.of("jakarta.servlet", "jakarta.servlet.http", "jakarta.servlet.jsp"))
-            context.getImportHandler().importPackage(name);
+        if (imports == null) {
+            for (String name : java.util.List.of("jakarta.servlet", "jakarta.servlet.http", "jakarta.servlet.jsp"))
+                context.getImportHandler().importPackage(name);
+        }
         context.putContext(JspContext.class, page);
         context.putContext(PageContext.class, page);
         return context;

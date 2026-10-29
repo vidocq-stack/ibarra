@@ -26,8 +26,9 @@ import java.util.*;
 
 /** Request-owned views of the Pages implicit objects. */
 final class PagesImplicitObjectResolver extends ELResolver {
+    private static final String HEADER = "header";
     private static final Set<String> NAMES = Set.of("pageContext", "pageScope", "requestScope", "sessionScope",
-            "applicationScope", "param", "paramValues", "header", "headerValues", "cookie", "initParam");
+            "applicationScope", "param", "paramValues", HEADER, "headerValues", "cookie", "initParam");
     private final PageContext page;
 
     PagesImplicitObjectResolver(PageContext page) { this.page = page; }
@@ -43,43 +44,53 @@ final class PagesImplicitObjectResolver extends ELResolver {
             case "sessionScope" -> new ScopeMap(PageContext.SESSION_SCOPE);
             case "applicationScope" -> new ScopeMap(PageContext.APPLICATION_SCOPE);
             case "paramValues" -> Collections.unmodifiableMap(page.getRequest().getParameterMap());
-            case "param" -> {
-                var values = new LinkedHashMap<String, String>();
-                page.getRequest().getParameterMap().forEach((key, items) -> {
-                    if (items.length > 0) values.put(key, items[0]);
-                });
-                yield Collections.unmodifiableMap(values);
-            }
-            case "header", "headerValues" -> {
-                var values = new TreeMap<String, Object>(String.CASE_INSENSITIVE_ORDER);
-                if (page.getRequest() instanceof HttpServletRequest request) {
-                    var names = request.getHeaderNames();
-                    while (names.hasMoreElements()) {
-                        var header = names.nextElement();
-                        values.put(header, name.equals("header") ? request.getHeader(header)
-                                : Collections.list(request.getHeaders(header)).toArray(String[]::new));
-                    }
-                }
-                yield Collections.unmodifiableMap(values);
-            }
-            case "cookie" -> {
-                var values = new LinkedHashMap<String, Cookie>();
-                if (page.getRequest() instanceof HttpServletRequest request) {
-                    var cookies = request.getCookies();
-                    if (cookies != null) for (var cookie : cookies) values.putIfAbsent(cookie.getName(), cookie);
-                }
-                yield Collections.unmodifiableMap(values);
-            }
-            case "initParam" -> {
-                var values = new LinkedHashMap<String, String>();
-                var names = page.getServletContext().getInitParameterNames();
-                while (names.hasMoreElements()) {
-                    var key = names.nextElement(); values.put(key, page.getServletContext().getInitParameter(key));
-                }
-                yield Collections.unmodifiableMap(values);
-            }
+            case "param" -> firstParameters();
+            case HEADER -> headers(false);
+            case "headerValues" -> headers(true);
+            case "cookie" -> cookies();
+            case "initParam" -> initParameters();
             default -> throw new AssertionError(name);
         };
+    }
+
+    private Map<String, String> firstParameters() {
+        var values = new LinkedHashMap<String, String>();
+        page.getRequest().getParameterMap().forEach((key, items) -> {
+            if (items.length > 0) values.put(key, items[0]);
+        });
+        return Collections.unmodifiableMap(values);
+    }
+
+    private Map<String, Object> headers(boolean allValues) {
+        var values = new TreeMap<String, Object>(String.CASE_INSENSITIVE_ORDER);
+        if (page.getRequest() instanceof HttpServletRequest request) {
+            var names = request.getHeaderNames();
+            while (names.hasMoreElements()) {
+                var header = names.nextElement();
+                values.put(header, allValues ? Collections.list(request.getHeaders(header)).toArray(String[]::new)
+                        : request.getHeader(header));
+            }
+        }
+        return Collections.unmodifiableMap(values);
+    }
+
+    private Map<String, Cookie> cookies() {
+        var values = new LinkedHashMap<String, Cookie>();
+        if (page.getRequest() instanceof HttpServletRequest request) {
+            var cookies = request.getCookies();
+            if (cookies != null) for (var cookie : cookies) values.putIfAbsent(cookie.getName(), cookie);
+        }
+        return Collections.unmodifiableMap(values);
+    }
+
+    private Map<String, String> initParameters() {
+        var values = new LinkedHashMap<String, String>();
+        var names = page.getServletContext().getInitParameterNames();
+        while (names.hasMoreElements()) {
+            var key = names.nextElement();
+            values.put(key, page.getServletContext().getInitParameter(key));
+        }
+        return Collections.unmodifiableMap(values);
     }
 
     private boolean resolves(ELContext context, Object base, Object property) {
