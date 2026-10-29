@@ -68,6 +68,7 @@ public final class IbarraPageApplication implements PageApplication {
     public void close() {
         if (closed.compareAndSet(false, true)) factory.releaseApplicationContext(context);
     }
+    @Override
     public java.util.List<io.vidocq.ibarra.spi.ListenerDescriptor> listeners() {
         if (closed.get()) throw new IllegalStateException("JSP application is closed");
         return pages.listeners();
