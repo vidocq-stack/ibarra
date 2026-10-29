@@ -29,6 +29,10 @@ import org.w3c.dom.*;
 public final class TldParser {
     private static final Set<String> NAMESPACES = Set.of("", "https://jakarta.ee/xml/ns/jakartaee",
             "http://xmlns.jcp.org/xml/ns/javaee", "http://java.sun.com/xml/ns/javaee", "http://java.sun.com/xml/ns/j2ee");
+    private static final String TLIB_VERSION = "tlib-version";
+    private static final String JSP_VERSION = "jsp-version";
+    private static final String SHORT_NAME = "short-name";
+    private static final String DISPLAY_NAME = "display-name";
     private static final String DESCRIPTION = "description";
     private static final String TAG_FILE = "tag-file";
     private static final String LISTENER_CLASS = "listener-class";
@@ -41,7 +45,7 @@ public final class TldParser {
     private static final String DEFERRED_VALUE = "deferred-value";
     private static final String RTEXPRVALUE = "rtexprvalue";
     private static final String JAVA_STRING = "java.lang.String";
-    private static final Set<String> TAGLIB_CHILDREN = Set.of(DESCRIPTION, "tlib-version", "jsp-version", "short-name", "uri",
+    private static final Set<String> TAGLIB_CHILDREN = Set.of(DESCRIPTION, TLIB_VERSION, JSP_VERSION, SHORT_NAME, "uri",
             "listener", "tag", TAG_FILE, "validator", "function");
     private static final Set<String> TAG_FIELDS = Set.of("name", "tag-class", "tei-class", "body-content", "dynamic-attributes", "path");
     private static final Set<String> ATTRIBUTE_FIELDS = Set.of("name", "type", "required", RTEXPRVALUE, "fragment");
@@ -63,7 +67,7 @@ public final class TldParser {
             if (!TAGLIB_CHILDREN.contains(name)) continue;
             requireNamespace(child, namespace, at);
             switch (name) {
-                case DESCRIPTION, "short-name", "tlib-version", "jsp-version" -> header.putIfAbsent(name, text(child));
+                case DESCRIPTION, SHORT_NAME, TLIB_VERSION, JSP_VERSION -> header.putIfAbsent(name, text(child));
                 case "function" -> {
                     var function = function(child, namespace, at);
                     putOnce(functions, function.name(), function, at, "Duplicate function: " + function.name());
@@ -83,13 +87,13 @@ public final class TldParser {
         String uri = header.get("uri");
         if (uri != null && uri.isEmpty()) throw new PageParseException(at, "Empty taglib URI");
         return new TagLibraryDescriptor(path, uri, listeners, tags, validators.isEmpty() ? null : validators.getFirst(), functions,
-                header.get(DESCRIPTION), header.get("short-name"), header.get("tlib-version"), requiredVersion(root, header));
+                header.get(DESCRIPTION), header.get(SHORT_NAME), header.get(TLIB_VERSION), requiredVersion(root, header));
     }
 
     /** The taglib version attribute, or the first jsp-version element when the attribute is absent or empty. */
     private static String requiredVersion(Element root, Map<String, String> header) {
         String version = root.hasAttribute("version") ? root.getAttribute("version").trim() : null;
-        if (version == null || version.isEmpty()) return header.getOrDefault("jsp-version", version);
+        if (version == null || version.isEmpty()) return header.getOrDefault(JSP_VERSION, version);
         return version;
     }
 
@@ -98,7 +102,7 @@ public final class TldParser {
         for (var field : DeploymentXml.children(element)) {
             requireNamespace(field, namespace, at);
             String key = field.getLocalName();
-            if (Set.of(DESCRIPTION, "display-name", "icon", "example", "function-extension").contains(key)) continue;
+            if (Set.of(DESCRIPTION, DISPLAY_NAME, "icon", "example", "function-extension").contains(key)) continue;
             if (!Set.of("name", "function-class", "function-signature").contains(key) || values.putIfAbsent(key, text(field)) != null)
                 throw new PageParseException(at, "Invalid function field: " + key);
         }
@@ -176,7 +180,7 @@ public final class TldParser {
             requireNamespace(child, namespace, at);
             String key = child.getLocalName();
             switch (key) {
-                case DESCRIPTION, "display-name" -> info.putIfAbsent(key, text(child));
+                case DESCRIPTION, DISPLAY_NAME -> info.putIfAbsent(key, text(child));
                 case "icon" -> {
                     var icons = icons(child, namespace, at);
                     info.putIfAbsent(SMALL_ICON, icons.smallIcon());
@@ -208,7 +212,7 @@ public final class TldParser {
         requireNameFromAttributes(variables, attributes, at);
         return new TagDescriptor(name, handler, content, attributes, bool(fields, "dynamic-attributes", false, at),
                 tagFile, tagFile, null, false, tei, variables, tagFilePath,
-                info.get(DESCRIPTION), info.get("display-name"), info.get(SMALL_ICON), info.get(LARGE_ICON));
+                info.get(DESCRIPTION), info.get(DISPLAY_NAME), info.get(SMALL_ICON), info.get(LARGE_ICON));
     }
 
     private static void requireClassName(String className, SourceLocation at, String message) {
