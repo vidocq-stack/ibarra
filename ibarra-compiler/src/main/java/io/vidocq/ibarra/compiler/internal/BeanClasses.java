@@ -21,7 +21,6 @@ package io.vidocq.ibarra.compiler.internal;
 import io.vidocq.ibarra.compiler.*;
 import java.io.IOException;
 import java.lang.classfile.*;
-import java.lang.constant.MethodTypeDesc;
 import java.nio.file.*;
 import java.util.*;
 import java.util.jar.JarFile;
