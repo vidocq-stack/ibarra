@@ -34,18 +34,19 @@ public final class SourceDocument {
         this.text = text;
         var starts = new ArrayList<Integer>();
         starts.add(0);
-        for (int i = 0; i < text.length(); i++) {
+        int i = 0;
+        while (i < text.length()) {
             char c = text.charAt(i);
-            if (c == '\r' || c == '\n') {
-                if (c == '\r' && i + 1 < text.length() && text.charAt(i + 1) == '\n') i++;
-                starts.add(i + 1);
-            }
+            boolean crlf = c == '\r' && i + 1 < text.length() && text.charAt(i + 1) == '\n';
+            int next = crlf ? i + 2 : i + 1;
+            if (c == '\r' || c == '\n') starts.add(next);
+            i = next;
         }
         lines = starts.stream().mapToInt(Integer::intValue).toArray();
     }
 
     public SourceLocation at(int offset) {
-        offset = Math.max(0, Math.min(offset, text.length()));
+        offset = Math.clamp(offset, 0, text.length());
         int line = Arrays.binarySearch(lines, offset);
         if (line < 0) line = -line - 2;
         return new SourceLocation(name, line + 1, offset - lines[line] + 1);

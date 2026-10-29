@@ -29,6 +29,7 @@ final class TagExtraInfoVariables {
     private static final String TAG_EXTRA_INFO = "jakarta/servlet/jsp/tagext/TagExtraInfo";
     private static final String DEBUG = "ee/jakarta/tck/pages/common/util/JspTestUtil";
     private static final Object NULL = new Object();
+    private static final Object CONTINUE = new Object();
 
     record Variable(String name, String className, boolean declare, int scope) { }
 
@@ -54,7 +55,7 @@ final class TagExtraInfoVariables {
         int flags = method.orElseThrow().flags().flagsMask();
         if ((flags & ClassFile.ACC_PUBLIC) == 0 || (flags & (ClassFile.ACC_STATIC | ClassFile.ACC_ABSTRACT)) != 0)
             throw new IllegalArgumentException("getVariableInfo must be a public instance method");
-        Object returned = new TagExtraInfoVariables().evaluate(model, method.orElseThrow());
+        Object returned = new TagExtraInfoVariables().evaluate(method.orElseThrow());
         if (returned == NULL) return Optional.of(List.of());
         if (!(returned instanceof Object[] values)) throw new IllegalArgumentException("Invalid variable metadata result");
         var result = new ArrayList<Variable>(values.length);
@@ -68,43 +69,67 @@ final class TagExtraInfoVariables {
         return Optional.of(List.copyOf(result));
     }
 
-    private Object evaluate(ClassModel model, MethodModel method) {
+    private Object evaluate(MethodModel method) {
         var elements = method.code().orElseThrow(() -> new IllegalArgumentException("getVariableInfo has no bytecode")).elementList();
         var stack = new ArrayList<Object>();
         var locals = new HashMap<Integer, Object>();
         locals.put(0, instance);
         locals.put(1, new Object());
         for (var element : elements) {
-            if (!(element instanceof Instruction instruction)) continue;
-            var opcode = instruction.opcode();
-            if (opcode == Opcode.ACONST_NULL) stack.add(NULL);
-            else if (instruction instanceof ConstantInstruction constant) {
-                Object value = constant.constantValue();
-                if (!(value instanceof String || value instanceof Integer)) throw new IllegalArgumentException("Nonliteral variable metadata");
-                stack.add(value);
-            } else if (instruction instanceof LoadInstruction load) stack.add(Objects.requireNonNull(locals.get(load.slot())));
-            else if (instruction instanceof StoreInstruction store) locals.put(store.slot(), pop(stack));
-            else if (opcode == Opcode.DUP) stack.add(stack.getLast());
-            else if (instruction instanceof NewObjectInstruction allocation) {
-                if (!allocation.className().asInternalName().equals(VARIABLE_INFO)) throw new IllegalArgumentException("Dynamic variable allocation");
-                stack.add(new Value(null, null, false, -1));
-            } else if (instruction instanceof NewReferenceArrayInstruction allocation) {
-                if (!allocation.componentType().asInternalName().equals(VARIABLE_INFO)) throw new IllegalArgumentException("Unsupported variable array");
-                int size = (Integer) pop(stack);
-                if (size < 0 || size > 4096) throw new IllegalArgumentException("Invalid variable count");
-                stack.add(new Object[size]);
-            } else if (opcode == Opcode.AASTORE) {
-                Object value = pop(stack); int index = (Integer) pop(stack); Object[] array = (Object[]) pop(stack);
-                array[index] = value;
-            } else if (instruction instanceof InvokeInstruction invoke) invoke(invoke, stack);
-            else if (opcode == Opcode.ARETURN) return pop(stack);
-            else throw new IllegalArgumentException("Unsupported variable metadata instruction: " + opcode);
+            if (element instanceof Instruction instruction) {
+                Object returned = execute(instruction, stack, locals);
+                if (returned != CONTINUE) return returned;
+            }
         }
         throw new IllegalArgumentException("getVariableInfo did not return");
     }
 
+    /** Executes one instruction; returns the method result for {@code areturn}, otherwise {@link #CONTINUE}. */
+    private Object execute(Instruction instruction, List<Object> stack, Map<Integer, Object> locals) {
+        var opcode = instruction.opcode();
+        if (opcode == Opcode.ARETURN) return pop(stack);
+        if (opcode == Opcode.ACONST_NULL) stack.add(NULL);
+        else if (opcode == Opcode.DUP) stack.add(stack.getLast());
+        else if (opcode == Opcode.AASTORE) arrayStore(stack);
+        else if (instruction instanceof ConstantInstruction constant) stack.add(literal(constant));
+        else if (instruction instanceof LoadInstruction load) stack.add(Objects.requireNonNull(locals.get(load.slot())));
+        else if (instruction instanceof StoreInstruction store) locals.put(store.slot(), pop(stack));
+        else if (instruction instanceof NewObjectInstruction allocation) stack.add(allocate(allocation));
+        else if (instruction instanceof NewReferenceArrayInstruction allocation) stack.add(allocateArray(allocation, stack));
+        else if (instruction instanceof InvokeInstruction invoke) invoke(invoke, stack);
+        else throw new IllegalArgumentException("Unsupported variable metadata instruction: " + opcode);
+        return CONTINUE;
+    }
+
+    private static Object literal(ConstantInstruction constant) {
+        Object value = constant.constantValue();
+        if (!(value instanceof String || value instanceof Integer)) throw new IllegalArgumentException("Nonliteral variable metadata");
+        return value;
+    }
+
+    private static Value allocate(NewObjectInstruction allocation) {
+        if (!allocation.className().asInternalName().equals(VARIABLE_INFO)) throw new IllegalArgumentException("Dynamic variable allocation");
+        return new Value(null, null, false, -1);
+    }
+
+    private static Object[] allocateArray(NewReferenceArrayInstruction allocation, List<Object> stack) {
+        if (!allocation.componentType().asInternalName().equals(VARIABLE_INFO)) throw new IllegalArgumentException("Unsupported variable array");
+        int size = (Integer) pop(stack);
+        if (size < 0 || size > 4096) throw new IllegalArgumentException("Invalid variable count");
+        return new Object[size];
+    }
+
+    private static void arrayStore(List<Object> stack) {
+        Object value = pop(stack);
+        int index = (Integer) pop(stack);
+        Object[] array = (Object[]) pop(stack);
+        array[index] = value;
+    }
+
     private void invoke(InvokeInstruction call, List<Object> stack) {
-        String owner = call.owner().asInternalName(), name = call.name().stringValue(), type = call.type().stringValue();
+        String owner = call.owner().asInternalName();
+        String name = call.name().stringValue();
+        String type = call.type().stringValue();
         if (owner.equals(VARIABLE_INFO) && name.equals("<init>")
                 && type.equals("(Ljava/lang/String;Ljava/lang/String;ZI)V")) {
             int scope = (Integer) pop(stack);

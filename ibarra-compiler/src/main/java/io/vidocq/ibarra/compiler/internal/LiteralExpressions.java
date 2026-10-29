@@ -41,17 +41,17 @@ public final class LiteralExpressions {
                     .withVersion(ClassFile.JAVA_25_VERSION, 0).withSuperclass(parent);
             builder.withField("serialVersionUID", CD_long, field -> field.withFlags(ClassFile.ACC_PRIVATE | ClassFile.ACC_STATIC | ClassFile.ACC_FINAL)
                     .with(ConstantValueAttribute.of(Long.parseUnsignedLong(identity.substring(identity.length() - 16), 16))));
-            builder.withMethodBody("<init>", method ? MethodTypeDesc.of(CD_void, type, types) : MethodTypeDesc.of(CD_void, type),
+            builder.withMethodBody(INIT_NAME, method ? MethodTypeDesc.of(CD_void, type, types) : MethodTypeDesc.of(CD_void, type),
                     ClassFile.ACC_PUBLIC, code -> {
                         code.aload(0); string(code, literal); code.ldc(identity);
                         if (method) {
                             code.aconst_null().aload(1).aload(2).iconst_0();
                             code.iconst_0().anewarray(CD_String).iconst_0().anewarray(CD_String);
-                            code.invokespecial(parent, "<init>", MethodTypeDesc.of(CD_void, CD_String, CD_String, context, type, types, CD_int,
+                            code.invokespecial(parent, INIT_NAME, MethodTypeDesc.of(CD_void, CD_String, CD_String, context, type, types, CD_int,
                                     CD_String.arrayType(), CD_String.arrayType()));
                         } else {
                             code.aload(1).iconst_1().ldc(CD_String);
-                            code.invokespecial(parent, "<init>", MethodTypeDesc.of(CD_void, CD_String, CD_String, type, CD_boolean, type));
+                            code.invokespecial(parent, INIT_NAME, MethodTypeDesc.of(CD_void, CD_String, CD_String, type, CD_boolean, type));
                         }
                         code.return_();
                     });
@@ -63,7 +63,7 @@ public final class LiteralExpressions {
     private static void string(CodeBuilder code, String value) {
         if (value.length() < 8192) { code.ldc(value); return; }
         var builder = ClassDesc.of("java.lang.StringBuilder");
-        code.new_(builder).dup().invokespecial(builder, "<init>", MethodTypeDesc.of(CD_void));
+        code.new_(builder).dup().invokespecial(builder, INIT_NAME, MethodTypeDesc.of(CD_void));
         for (int start = 0; start < value.length(); start += 8192)
             code.ldc(value.substring(start, Math.min(value.length(), start + 8192)))
                     .invokevirtual(builder, "append", MethodTypeDesc.of(builder, CD_String));

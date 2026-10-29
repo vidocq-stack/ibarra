@@ -30,38 +30,52 @@ import java.util.Map;
 
 /** Translation-time output metadata; identifiers are literals, never external resources. */
 public record XmlDoctype(String declaration, SourceLocation location) {
-    private static final List<String> ATTRIBUTES = List.of("doctype-root-element", "doctype-system", "doctype-public");
+    private static final String ROOT_ELEMENT = "doctype-root-element";
+    private static final String SYSTEM_ID = "doctype-system";
+    private static final String PUBLIC_ID = "doctype-public";
+    private static final List<String> ATTRIBUTES = List.of(ROOT_ELEMENT, SYSTEM_ID, PUBLIC_ID);
 
     public static XmlDoctype collect(Page page) {
         var values = new LinkedHashMap<String, String>();
         var locations = new LinkedHashMap<String, SourceLocation>();
         collect(page.nodes(), values, locations);
-        if (!values.containsKey("doctype-system")) return new XmlDoctype("", null);
-        String declaration = "<!DOCTYPE " + values.get("doctype-root-element")
-                + (values.containsKey("doctype-public") ? " PUBLIC " + quoted(values.get("doctype-public"), locations.get("doctype-public")) : " SYSTEM")
-                + " " + quoted(values.get("doctype-system"), locations.get("doctype-system")) + ">";
-        return new XmlDoctype(declaration, locations.get("doctype-system"));
+        if (!values.containsKey(SYSTEM_ID)) return new XmlDoctype("", null);
+        String declaration = "<!DOCTYPE " + values.get(ROOT_ELEMENT)
+                + (values.containsKey(PUBLIC_ID) ? " PUBLIC " + quoted(values.get(PUBLIC_ID), locations.get(PUBLIC_ID)) : " SYSTEM")
+                + " " + quoted(values.get(SYSTEM_ID), locations.get(SYSTEM_ID)) + ">";
+        return new XmlDoctype(declaration, locations.get(SYSTEM_ID));
     }
 
     private static void collect(List<PageNode> nodes, Map<String, String> values, Map<String, SourceLocation> locations) {
-        for (var node : nodes) if (node instanceof PageNode.Element element) {
-            if (element.namespace().equals(PageParser.JSP_NAMESPACE)
-                    && element.name().substring(element.name().lastIndexOf(':') + 1).equals("output")) {
-                var attributes = element.attributes();
-                boolean root = attributes.containsKey("doctype-root-element"), system = attributes.containsKey("doctype-system");
-                if (root != system) throw new PageParseException(element.location(),
-                        "doctype-root-element requires doctype-system and doctype-system requires doctype-root-element");
-                if (attributes.containsKey("doctype-public") && !system)
-                    throw new PageParseException(element.location(), "doctype-public requires doctype-system");
-                for (String attribute : ATTRIBUTES) if (attributes.containsKey(attribute)) {
-                    String value = attributes.get(attribute);
-                    String previous = values.putIfAbsent(attribute, value);
-                    if (previous != null && !previous.equals(value)) throw new PageParseException(element.location(),
-                            "Conflicting " + attribute + " in translation unit");
-                    locations.putIfAbsent(attribute, element.location());
-                }
+        for (var node : nodes) {
+            if (node instanceof PageNode.Element element) {
+                if (isOutput(element)) collectOutput(element, values, locations);
+                collect(element.children(), values, locations);
             }
-            collect(element.children(), values, locations);
+        }
+    }
+
+    private static boolean isOutput(PageNode.Element element) {
+        return element.namespace().equals(PageParser.JSP_NAMESPACE)
+                && element.name().substring(element.name().lastIndexOf(':') + 1).equals("output");
+    }
+
+    private static void collectOutput(PageNode.Element element, Map<String, String> values, Map<String, SourceLocation> locations) {
+        var attributes = element.attributes();
+        boolean root = attributes.containsKey(ROOT_ELEMENT);
+        boolean system = attributes.containsKey(SYSTEM_ID);
+        if (root != system) throw new PageParseException(element.location(),
+                "doctype-root-element requires doctype-system and doctype-system requires doctype-root-element");
+        if (attributes.containsKey(PUBLIC_ID) && !system)
+            throw new PageParseException(element.location(), "doctype-public requires doctype-system");
+        for (String attribute : ATTRIBUTES) {
+            if (attributes.containsKey(attribute)) {
+                String value = attributes.get(attribute);
+                String previous = values.putIfAbsent(attribute, value);
+                if (previous != null && !previous.equals(value)) throw new PageParseException(element.location(),
+                        "Conflicting " + attribute + " in translation unit");
+                locations.putIfAbsent(attribute, element.location());
+            }
         }
     }
 

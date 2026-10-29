@@ -48,7 +48,9 @@ public final class DeploymentXml {
             var builder = factory.newDocumentBuilder();
             builder.setEntityResolver((publicId, systemId) -> new InputSource(new java.io.StringReader("")));
             builder.setErrorHandler(new ErrorHandler() {
-                public void warning(SAXParseException failure) { }
+                public void warning(SAXParseException failure) {
+                    // Warnings never invalidate a descriptor: only errors and fatal errors fail parsing.
+                }
                 public void error(SAXParseException failure) throws SAXException { throw failure; }
                 public void fatalError(SAXParseException failure) throws SAXException { throw failure; }
             });

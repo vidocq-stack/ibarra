@@ -34,6 +34,7 @@ public final class TldListeners {
     public record Catalog(List<String> listeners, Map<String, TagLibraryDescriptor> libraries) {
         public Catalog { listeners = List.copyOf(listeners); libraries = Map.copyOf(libraries); }
     }
+    private static final String WEB_XML = "/WEB-INF/web.xml";
     private TldListeners() { }
 
     /** Adds directly declared resources and their build-validated listener factories. */
@@ -55,11 +56,42 @@ public final class TldListeners {
         var parser = new TldParser();
         configured(web, configuredLibraries, mappings);
         Path applicationPath = output.toAbsolutePath().normalize();
+        applicationLibraries(applicationPath, application, parser, libraries);
+        moduleLibraries(dependencies, applicationPath, application, parser, libraries);
+        // Library META-INF entries have precedence over loose WEB-INF entries.
+        for (var entry : web.entrySet()) {
+            String name = entry.getKey();
+            if (name.startsWith("/WEB-INF/") && !name.startsWith("/WEB-INF/classes/")
+                    && !name.startsWith("/WEB-INF/lib/") && name.endsWith(".tld"))
+                libraries.add(parser.parse(name, entry.getValue()));
+        }
+        var paths = new ArrayList<Path>();
+        paths.add(applicationPath);
+        paths.addAll(dependencies);
+        var classes = new BeanClasses(paths);
+        var listeners = new LinkedHashMap<String, String>();
+        for (var library : libraries) {
+            mappings.putIfAbsent(library.resourcePath(), library);
+            if (library.uri() != null) mappings.putIfAbsent(library.uri(), library);
+        }
+        configuredLibraries.addAll(libraries);
+        for (var library : configuredLibraries) {
+            var at = new SourceLocation(library.resourcePath(), 1, 1);
+            for (String type : library.listenerClasses()) listeners.computeIfAbsent(type, name -> classes.listener(name, at));
+        }
+        return new Catalog(List.copyOf(listeners.values()), mappings);
+    }
+    private static void applicationLibraries(Path applicationPath, ModuleDescriptor application, TldParser parser,
+            List<TagLibraryDescriptor> libraries) throws IOException {
         Path metadata = applicationPath.resolve("META-INF");
-        if (Files.isDirectory(metadata)) try (var resources = Files.walk(metadata)) {
+        if (!Files.isDirectory(metadata)) return;
+        try (var resources = Files.walk(metadata)) {
             for (Path file : resources.filter(Files::isRegularFile).filter(path -> path.toString().endsWith(".tld")).sorted().toList())
                 libraries.add(parser.parse(application.name() + "!/" + applicationPath.relativize(file).toString().replace('\\', '/'), Files.readAllBytes(file)));
         }
+    }
+    private static void moduleLibraries(List<Path> dependencies, Path applicationPath, ModuleDescriptor application, TldParser parser,
+            List<TagLibraryDescriptor> libraries) throws IOException {
         // Previous generated providers may be partly deleted; do not make ModuleFinder
         // validate that stale application descriptor before the precompiler repairs it.
         var finder = ModuleFinder.of(dependencies.stream().filter(path -> !path.toAbsolutePath().normalize().equals(applicationPath)).toArray(Path[]::new));
@@ -69,70 +101,62 @@ public final class TldListeners {
         reachable(application, modules, reachable);
         for (String name : reachable) {
             var reference = modules.get(name);
-            if (reference == null) continue;
-            try (var reader = reference.open(); var resources = reader.list()) {
-                for (String resource : resources.filter(path -> path.startsWith("META-INF/") && path.endsWith(".tld")).sorted().toList()) {
-                    try (var input = reader.open(resource).orElseThrow()) {
-                        libraries.add(parser.parse(name + "!/" + resource, input.readAllBytes()));
-                    }
+            if (reference != null) moduleLibraries(name, reference, parser, libraries);
+        }
+    }
+    private static void moduleLibraries(String name, ModuleReference reference, TldParser parser,
+            List<TagLibraryDescriptor> libraries) throws IOException {
+        try (var reader = reference.open(); var resources = reader.list()) {
+            for (String resource : resources.filter(path -> path.startsWith("META-INF/") && path.endsWith(".tld")).sorted().toList()) {
+                try (var input = reader.open(resource).orElseThrow()) {
+                    libraries.add(parser.parse(name + "!/" + resource, input.readAllBytes()));
                 }
             }
         }
-        // Library META-INF entries have precedence over loose WEB-INF entries.
-        for (var entry : web.entrySet()) {
-            String name = entry.getKey();
-            if (name.startsWith("/WEB-INF/") && !name.startsWith("/WEB-INF/classes/")
-                    && !name.startsWith("/WEB-INF/lib/") && name.endsWith(".tld"))
-                libraries.add(parser.parse(name, entry.getValue()));
-        }
-        var paths = new ArrayList<Path>(); paths.add(applicationPath); paths.addAll(dependencies);
-        var classes = new BeanClasses(paths);
-        var listeners = new LinkedHashMap<String, String>();
-        for (var library : libraries) {
-            mappings.putIfAbsent(library.resourcePath(), library);
-            if (library.uri() != null) mappings.putIfAbsent(library.uri(), library);
-        }
-        configuredLibraries.addAll(libraries);
-        for (var library : configuredLibraries) {
-            for (String type : library.listenerClasses())
-                if (!listeners.containsKey(type)) listeners.put(type, classes.listener(type, new SourceLocation(library.resourcePath(), 1, 1)));
-        }
-        return new Catalog(List.copyOf(listeners.values()), mappings);
     }
     private static void configured(Map<String, byte[]> web, List<TagLibraryDescriptor> libraries,
-            Map<String, TagLibraryDescriptor> mappings) throws IOException {
-        byte[] xml = web.get("/WEB-INF/web.xml");
+            Map<String, TagLibraryDescriptor> mappings) {
+        byte[] xml = web.get(WEB_XML);
         if (xml == null) return;
-        var at = new SourceLocation("/WEB-INF/web.xml", 1, 1);
-        var root = DeploymentXml.read("/WEB-INF/web.xml", xml).getDocumentElement();
+        var at = new SourceLocation(WEB_XML, 1, 1);
+        var root = DeploymentXml.read(WEB_XML, xml).getDocumentElement();
         String namespace = Objects.toString(root.getNamespaceURI(), "");
         if (!DeploymentXml.name(root).equals("web-app") || !Set.of("", "https://jakarta.ee/xml/ns/jakartaee",
                 "http://xmlns.jcp.org/xml/ns/javaee", "http://java.sun.com/xml/ns/javaee", "http://java.sun.com/xml/ns/j2ee").contains(namespace))
             throw new PageParseException(at, "Expected a standard web-app root");
         var uris = new HashSet<String>();
-        for (var config : DeploymentXml.children(root)) if (DeploymentXml.name(config).equals("jsp-config")) {
-            requireNamespace(config, namespace, at);
-            for (var entry : DeploymentXml.children(config)) if (DeploymentXml.name(entry).equals("taglib")) {
-                requireNamespace(entry, namespace, at);
-                var fields = new HashMap<String, String>();
-                for (var field : DeploymentXml.children(entry)) {
-                    requireNamespace(field, namespace, at);
-                    if (!Set.of("taglib-uri", "taglib-location").contains(DeploymentXml.name(field))
-                            || fields.putIfAbsent(DeploymentXml.name(field), field.getTextContent().trim()) != null)
-                        throw new PageParseException(at, "Invalid or duplicate taglib mapping field");
+        for (var config : DeploymentXml.children(root)) {
+            if (DeploymentXml.name(config).equals("jsp-config")) {
+                requireNamespace(config, namespace, at);
+                for (var entry : DeploymentXml.children(config)) {
+                    if (DeploymentXml.name(entry).equals("taglib")) mapping(entry, namespace, at, uris, web, libraries, mappings);
                 }
-                String uri = fields.get("taglib-uri"), location = fields.get("taglib-location");
-                if (uri == null || uri.isEmpty() || !uris.add(uri) || location == null || location.isEmpty())
-                    throw new PageParseException(at, "Invalid or duplicate taglib mapping");
-                location = TranslationUnit.resolve("/WEB-INF/web.xml", location);
-                try { PageDescriptor.validatePath(location); }
-                catch (IllegalArgumentException failure) { throw new PageParseException(at, "Invalid taglib location", failure); }
-                byte[] resource = web.get(location);
-                if (resource == null) throw new PageParseException(at, "Taglib location is absent: " + location);
-                var library = TldReferences.read(location, resource, at);
-                libraries.add(library); mappings.put(uri, library); mappings.put(location, library);
             }
         }
+    }
+    private static void mapping(Element entry, String namespace, SourceLocation at, Set<String> uris, Map<String, byte[]> web,
+            List<TagLibraryDescriptor> libraries, Map<String, TagLibraryDescriptor> mappings) {
+        requireNamespace(entry, namespace, at);
+        var fields = new HashMap<String, String>();
+        for (var field : DeploymentXml.children(entry)) {
+            requireNamespace(field, namespace, at);
+            if (!Set.of("taglib-uri", "taglib-location").contains(DeploymentXml.name(field))
+                    || fields.putIfAbsent(DeploymentXml.name(field), field.getTextContent().trim()) != null)
+                throw new PageParseException(at, "Invalid or duplicate taglib mapping field");
+        }
+        String uri = fields.get("taglib-uri");
+        String location = fields.get("taglib-location");
+        if (uri == null || uri.isEmpty() || !uris.add(uri) || location == null || location.isEmpty())
+            throw new PageParseException(at, "Invalid or duplicate taglib mapping");
+        location = TranslationUnit.resolve(WEB_XML, location);
+        try { PageDescriptor.validatePath(location); }
+        catch (IllegalArgumentException failure) { throw new PageParseException(at, "Invalid taglib location", failure); }
+        byte[] resource = web.get(location);
+        if (resource == null) throw new PageParseException(at, "Taglib location is absent: " + location);
+        var library = TldReferences.read(location, resource, at);
+        libraries.add(library);
+        mappings.put(uri, library);
+        mappings.put(location, library);
     }
     private static void requireNamespace(Element element, String namespace, SourceLocation at) {
         if (!Objects.toString(element.getNamespaceURI(), "").equals(namespace))

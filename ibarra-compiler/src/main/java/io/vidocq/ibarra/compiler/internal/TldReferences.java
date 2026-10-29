@@ -65,22 +65,33 @@ public final class TldReferences {
     public static Resolved discover(Collection<TranslationUnit.Result> units, GenerationOptions options,
             Map<String, TagLibraryDescriptor> suppliedResources) {
         var resources = new LinkedHashMap<String, TagLibraryDescriptor>();
-        for (var unit : units) for (var reference : unit.tagLibraries()) {
-            String uri = reference.uri();
-            if (!reference.forced() && (options.tagLibraries().containsKey(uri) || uri.contains(":"))) continue;
-            String path = path(uri, reference.location());
-            if (resources.containsKey(path)) continue;
-            byte[] bytes = options.byteSource(path);
-            if (bytes == null) {
-                var supplied = suppliedResources.get(path);
-                if (supplied != null && (!reference.forced() || supplied.resourcePath().equals(path))) {
-                    resources.put(path, supplied); continue;
-                }
-                throw new PageParseException(reference.location(), "TLD resource is absent: " + path);
+        for (var unit : units) {
+            for (var reference : unit.tagLibraries()) {
+                if (direct(reference, options)) discover(reference, options, suppliedResources, resources);
             }
-            resources.put(path, read(path, bytes, reference.location()));
         }
         return new Resolved(options.tagLibraries(), resources);
+    }
+
+    /** Whether a reference names a web resource rather than a URI alias. */
+    private static boolean direct(Reference reference, GenerationOptions options) {
+        String uri = reference.uri();
+        return reference.forced() || !(options.tagLibraries().containsKey(uri) || uri.contains(":"));
+    }
+
+    private static void discover(Reference reference, GenerationOptions options,
+            Map<String, TagLibraryDescriptor> suppliedResources, Map<String, TagLibraryDescriptor> resources) {
+        String path = path(reference.uri(), reference.location());
+        if (resources.containsKey(path)) return;
+        byte[] bytes = options.byteSource(path);
+        if (bytes != null) {
+            resources.put(path, read(path, bytes, reference.location()));
+            return;
+        }
+        var supplied = suppliedResources.get(path);
+        if (supplied == null || (reference.forced() && !supplied.resourcePath().equals(path)))
+            throw new PageParseException(reference.location(), "TLD resource is absent: " + path);
+        resources.put(path, supplied);
     }
 
     /** Performs application-level validation for absolute taglib declarations. */

@@ -59,27 +59,30 @@ public final class XmlDeclaration {
 
     private void collect(List<PageNode> nodes) {
         for (var node : nodes) {
-            if (!(node instanceof PageNode.Element element)) continue;
-            if (jsp(element, "output")) {
-                for (var name : element.attributes().keySet()) {
-                    if (!name.equals("xmlns") && !name.startsWith("xmlns:") && !ATTRIBUTES.contains(name))
-                        throw new PageParseException(element.location(), "Unsupported action attribute: " + name);
-                }
-                String value = element.attributes().get("omit-xml-declaration");
-                if (value != null) {
-                    boolean parsed = switch (value) {
-                        case "yes", "true" -> true;
-                        case "no", "false" -> false;
-                        default -> throw new PageParseException(element.location(),
-                                "omit-xml-declaration requires yes, no, true or false");
-                    };
-                    if (omissionLiteral != null && !omissionLiteral.equals(value))
-                        throw new PageParseException(element.location(), "Conflicting omit-xml-declaration values");
-                    omission = parsed;
-                    omissionLiteral = value;
-                }
+            if (node instanceof PageNode.Element element) {
+                if (jsp(element, "output")) collectOutput(element);
+                collect(element.children());
             }
-            collect(element.children());
+        }
+    }
+
+    private void collectOutput(PageNode.Element element) {
+        for (var name : element.attributes().keySet()) {
+            if (!name.equals("xmlns") && !name.startsWith("xmlns:") && !ATTRIBUTES.contains(name))
+                throw new PageParseException(element.location(), "Unsupported action attribute: " + name);
+        }
+        String value = element.attributes().get("omit-xml-declaration");
+        if (value != null) {
+            boolean parsed = switch (value) {
+                case "yes", "true" -> true;
+                case "no", "false" -> false;
+                default -> throw new PageParseException(element.location(),
+                        "omit-xml-declaration requires yes, no, true or false");
+            };
+            if (omissionLiteral != null && !omissionLiteral.equals(value))
+                throw new PageParseException(element.location(), "Conflicting omit-xml-declaration values");
+            omission = parsed;
+            omissionLiteral = value;
         }
     }
 
