@@ -26,7 +26,7 @@ import java.beans.Introspector;
  *
  * <p>The API {@code BeanELResolver} introspects every bean class it reads and the JDK keeps the result for the life of
  * the JVM, in a cache per thread group: each bean class of an application layer {@code vidocq dev} discards stays in
- * it, and so does the layer's class loader (BUG-20261102-02). The resolver cannot be asked to forget a class, so the
+ * it, and so does the layer's class loader (IBARRA-158). The resolver cannot be asked to forget a class, so the
  * caches are flushed when the page application of a layer closes.
  */
 final class IntrospectionCaches {
@@ -44,7 +44,7 @@ final class IntrospectionCaches {
         worker.start();
         try {
             worker.join();
-        } catch (InterruptedException e) {
+        } catch (InterruptedException _) {
             Thread.currentThread().interrupt();
         }
     }

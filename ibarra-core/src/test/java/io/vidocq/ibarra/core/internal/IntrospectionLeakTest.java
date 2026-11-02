@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import io.vidocq.ibarra.core.internal.leak.LeakedBean;
-import io.vidocq.ibarra.spi.PageDescriptor;
 import io.vidocq.ibarra.spi.PageIndex;
 import jakarta.el.BeanELResolver;
 import jakarta.el.ELContext;
@@ -43,7 +42,7 @@ import org.junit.jupiter.api.Test;
 /**
  * The page expressions read beans with the API {@code BeanELResolver}, whose {@code java.beans} introspection caches
  * are JVM-wide: each bean class of a layer {@code vidocq dev} discards stays in them, and so does its class loader
- * (BUG-20261102-02). Closing the page application of a layer must drop them.
+ * (IBARRA-158). Closing the page application of a layer must drop them.
  */
 class IntrospectionLeakTest {
     @Test
@@ -51,7 +50,7 @@ class IntrospectionLeakTest {
         JspFactory previous = JspFactory.getDefaultFactory();
         JspFactory.setDefaultFactory(null);
         var application = IbarraPageApplication.open(new ServletDoubles.Context(),
-                new PrecompiledPages(List.of((PageIndex) () -> List.<PageDescriptor>of())));
+                new PrecompiledPages(List.of((PageIndex) List::of)));
         try {
             WeakReference<ClassLoader> layer = readABeanOfANewLayer();
             application.close();
