@@ -1,5 +1,20 @@
 # BUG.md — Ibarra
 
+## IBARRA-158 · 2026-11-02 · The java.beans introspection caches kept every application layer vidocq dev discarded
+
+- Symptom: after N hot reloads of `vidocq dev` on a page application, N+1 application class loaders stayed alive.
+  Heap dump of the static audit (vidocq-workspace#40 item 25): `com.sun.beans.introspect.ClassInfo.CACHE` and
+  `java.beans.ThreadGroupContext.contexts` (the per-thread-group `beanInfoCache`) held the bean classes the pages
+  read, and through them the layer's loader. The cache entries are only dropped under memory pressure.
+- Minimal reproduction: `IntrospectionLeakTest` (a bean of a fresh layer read with the API `BeanELResolver` on a
+  virtual thread, the page application closed, the layer's class loader still reachable after a collection loop).
+- Cause: the API `BeanELResolver` introspects each bean class with `java.beans.Introspector`, whose caches are
+  JVM-wide, and nothing flushed them when a page application was closed.
+- Status: FIXED (2026-11-02), branch `fix/layer-leak-ibarra`: closing an `IbarraPageApplication` flushes the
+  introspection caches of the closing thread's group and of the virtual threads' group (the request threads), through
+  the new `IntrospectionCaches`; `ibarra-core` now requires `java.desktop`, which `jakarta.el` needs at run time
+  anyway. The reflective fallback is unchanged.
+
 ## IBARRA-157 · 2026-10-29 · Equal generated classes print different textual forms
 
 - Symptom: two equal `GeneratedClass` values (same class name, same bytecode) print

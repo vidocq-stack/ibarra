@@ -31,6 +31,7 @@
  */
 module io.vidocq.ibarra.core {
     requires io.vidocq.ibarra.api;
+    requires java.desktop;
     requires transitive jakarta.servlet.jsp;
     uses io.vidocq.ibarra.spi.PageIndex;
     exports io.vidocq.ibarra.core.binding to io.vidocq.ibarra.foy;

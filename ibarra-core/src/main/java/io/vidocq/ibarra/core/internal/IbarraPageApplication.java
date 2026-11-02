@@ -66,7 +66,12 @@ public final class IbarraPageApplication implements PageApplication {
     }
     @Override
     public void close() {
-        if (closed.compareAndSet(false, true)) factory.releaseApplicationContext(context);
+        if (!closed.compareAndSet(false, true)) return;
+        try {
+            factory.releaseApplicationContext(context);
+        } finally {
+            IntrospectionCaches.flush();
+        }
     }
     @Override
     public java.util.List<io.vidocq.ibarra.spi.ListenerDescriptor> listeners() {
