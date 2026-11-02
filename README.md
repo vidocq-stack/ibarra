@@ -5,7 +5,7 @@
 </p>
 
 **Jakarta Pages 4.0** (formerly JavaServer Pages) implementation for the
-[Vidocq](https://codeberg.org/Vidocq/vidocq) runtime — Expression Language
+[Vidocq](https://codefloe.com/Vidocq/vidocq) runtime — Expression Language
 through [Peano](https://codefloe.com/Vidocq/peano), servlet container through
 [Foy](https://codefloe.com/Vidocq/foy).
 
