@@ -4,6 +4,47 @@
 [.lead]
 How Ibarra is designed to work inside. The runtime in `ibarra-core` implements milestone I1; the full design is `PLAN.md` in {repo-ibarra}[the repository].
 
+[#generated-code]
+== Generated code and reflective fallback [.tag-new]#NEW#
+
+Every brick of the suite documents, in a section of this name, what it generates, who generates it and when, what
+looks it up at run time, and what runs instead when it is missing. Ibarra generates every page at build time and has
+no compiler at run time, so a page itself has no fallback: what remains reflective is in the EL it evaluates, which
+is Peano's (xref:peano::internals.adoc#generated-code[Peano]).
+
+[cols="2,2,3,3"]
+|===
+| Generated | By, and when | Used at run time by | Without it
+
+| The servlet class of each page, its EL as static-final Peano expressions, its imports as class literals, its TLD
+  functions as direct static calls
+| `PagePrecompiler`, run by the `ibarra-maven-plugin` goal `precompile` (`process-classes`) or, on Vidocq, by
+  `vidocq:generate`; compiled in a staging area, the classes written into the application module
+| Foy, through Ibarra's `JspEngine`, which creates and initializes each page
+| The page is not served: there is no run-time JSP compiler in production packaging.
+
+| A `PageIndex` with a direct constructor reference per page, and the `provides` that declares it
+| `PagePrecompiler`, which updates the compiled module's descriptor with the Class-File API
+| `PrecompiledPages`, through the `ServiceLoader` of `PageIndex` in the application's module layer
+| No page is found.
+
+| The constructor factories of TLD listeners
+| `PagePrecompiler`
+| Foy's container lifecycle (xref:modules/foy-binding.adoc[Foy binding])
+| —
+|===
+
+=== What still reflects
+
+* `<jsp:useBean beanName="...">`: the specification names the class by a string, so the generated page loads it with
+  `Class.forName` and calls its no-argument constructor. A `class` attribute is constructed directly.
+* Property access on a type without a Peano accessor table, through the EL API's resolvers.
+
+=== Which path ran
+
+The Arquillian adapter runs pages with `-Dpeano.reflection=deny`, so a test suite fails on any reflective member
+access in their EL (xref:modules/arquillian-adapter.adoc[Arquillian adapter]).
+
 == Modules
 
 [cols="1,1,3",options="header"]

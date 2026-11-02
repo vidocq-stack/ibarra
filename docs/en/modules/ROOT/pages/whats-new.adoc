@@ -4,4 +4,5 @@
 [.lead]
 New in the `{project-version}` development line — everything listed here landed **after the {release-version} release** and is not part of it. Every entry links to the section that documents it, and those sections carry the [.tag-new]#NEW# badge. Each brick of the suite keeps its own page of this kind; xref:home::whats-new.adoc[the ecosystem index] gathers them. When the next release train ships, this page is frozen with it and restarts empty on the dev line.
 
+* xref:internals.adoc#generated-code[Generated code and reflective fallback] — one table lists what Ibarra generates at build (the page classes, the page index and its `provides`, the listener factories), what uses it at run time and what happens without it, followed by what still reflects and how the Arquillian adapter proves it does not.
 * `GeneratedClass.toString()` names the class, the bytecode length and its content hash, consistent with `equals`, instead of the array identity: two equal classes print the same, which makes compiler logs and test failures readable (IBARRA-157).
