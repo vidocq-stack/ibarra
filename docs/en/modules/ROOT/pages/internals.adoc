@@ -5,7 +5,7 @@
 How Ibarra is designed to work inside. The runtime in `ibarra-core` implements milestone I1; the full design is `PLAN.md` in {repo-ibarra}[the repository].
 
 [#generated-code]
-== Generated code and reflective fallback [.tag-new]#NEW#
+== Generated code and reflective fallback
 
 Every brick of the suite documents, in a section of this name, what it generates, who generates it and when, what
 looks it up at run time, and what runs instead when it is missing. Ibarra generates every page at build time and has
