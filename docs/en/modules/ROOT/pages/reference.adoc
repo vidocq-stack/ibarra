@@ -16,6 +16,7 @@ Reference data for Ibarra `{project-version}`. Entries marked _planned_ do not e
 | `io.vidocq.ibarra:ibarra-maven-plugin` | — | xref:modules/maven-plugin.adoc[`precompile` goal], build time only
 | `io.vidocq.ibarra:ibarra-foy` | `io.vidocq.ibarra.foy` | xref:modules/foy-binding.adoc[Initial Foy binding]
 | `io.vidocq.ibarra:ibarra-arquillian` | — (test class path) | xref:modules/arquillian-adapter.adoc[Arquillian adapter], test tooling only
+| `io.vidocq.ibarra:ibarra-architecture-tests` | — (unpublished, never released) | Test only: Ibarra's architecture rules (allowed dependencies per module, layers, `ibarra-api` never on `ibarra-core`, the core neutral to Foy and Peano, no reflection, no platform thread, no `ThreadLocal`) on the classes of `ibarra-api`, `ibarra-core`, `ibarra-compiler` and `ibarra-foy`. The rules come from `io.vidocq:vidocq-archrules`, the shared build and test library of `vidocq-parent`, in test scope; it brings ArchUnit (Apache-2.0), also test scope. No reflective fallback is needed: the Maven plugin and the Arquillian adapter are build-machine and test tooling and are not covered.
 |===
 
 == Runtime dependencies

@@ -101,6 +101,8 @@
         <module>ibarra-maven-plugin</module>
         <module>ibarra-foy</module>
         <module>ibarra-arquillian</module>
+        <!-- Test-only, last: it reads the classes of every module above (Vidocq/vidocq#289). -->
+        <module>ibarra-architecture-tests</module>
     </modules>
 
     <dependencyManagement>

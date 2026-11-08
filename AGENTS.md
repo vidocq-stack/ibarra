@@ -170,6 +170,13 @@ ibarra-tck    ← Official Pages 4.0 TCK runner, in-reactor behind `tck`
     Deferred named attributes accept text/EL; executable body capture and custom
     literal method return conversion remain explicit follow-up boundaries.
 
+**Architecture rules as tests** — **ArchUnit** (`com.tngtech.archunit:archunit`, Apache-2.0, through the shared
+`vidocq-archrules` library of `vidocq-parent`) is test scope, used only by the test-only module
+`ibarra-architecture-tests` (Vidocq/vidocq#289): its `ArchitectureRules` turn constraints 1 to 5 into tests on the
+classes of `ibarra-api`, `ibarra-core`, `ibarra-compiler` and `ibarra-foy`. `ArchitectureRules.REFLECTIVE_FALLBACKS`
+is empty and must stay so unless a fallback has a documented reason there. `ibarra-core` reads `java.desktop` for
+`java.beans.Introspector.flushCaches` only (IBARRA-158).
+
 ## Conventions
 
 - **Maven groupId**: `io.vidocq.ibarra`; version `0.4.0-SNAPSHOT` (workspace dev line,
