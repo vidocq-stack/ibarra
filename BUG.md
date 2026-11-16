@@ -623,9 +623,14 @@ is resolved.
   inspect BaseTCKExtraInfo.validate and GetNameTest.jsp in the unchanged 4.0.0 binary.
 - Hypothesis: build-side TEI execution alone cannot reproduce this cross-phase
   fixture state in the runner's separate compiler-free server process.
-- Status: OPEN; the evidence and required design follow-up are recorded in
-  [studies/tag-extra-info-aot.md](studies/tag-extra-info-aot.md). No challenge is filed
-  and no fixture rewrite, fake marker or request-time validation replay is used.
+- Status: FIXED (2026-10-14, `2e8954a`, `f9fa842`). The generated page initialization
+  builds the available `TagInfo` and `TagData` metadata and calls the tag's
+  `TagExtraInfo.validate(TagData)` once, in servlet `init()`: the state the fixtures
+  read is set in the server process, which the build side alone could not do.
+  `tagattributeinfo.URLClientIT` passes 7/7 (TCK-010 in
+  [ibarra-tck/FAILURES.md](ibarra-tck/FAILURES.md)). No challenge is filed and no
+  fixture is rewritten. The evidence stays in
+  [studies/tag-extra-info-aot.md](studies/tag-extra-info-aot.md).
 
 ## IBARRA-106 · 2026-10-13 · Private WAR bean properties have no direct EL accessors
 
@@ -737,8 +742,12 @@ is resolved.
 - Hypotheses: remaining tag files/metadata, bean/API access, translation validation,
   response semantics and runner component/library adaptation. Established causes
   retain their specific IBARRA-085–094 records; other cases need isolated responses.
-- Status: OPEN. The inventory tracks every currently failing class/method without
-  treating deployment error entries as executed methods or claiming certification.
+- Status: FIXED (2026-10-17). The full official run passes all 682 methods across 92
+  classes, with no method error, setup error, assertion failure or skip
+  ([ibarra-tck/FAILURES.md](ibarra-tck/FAILURES.md),
+  [ibarra-tck/BASELINE.md](ibarra-tck/BASELINE.md)); the check of 2026-10-23, after
+  the adapter extraction, gives the same counts. The figures above are those of
+  2026-10-14 and stay as history. Formal Jakarta certification is a separate process.
 
 ## IBARRA-095 · 2026-10-12 · Deployment translation mode masks invalid global properties
 
