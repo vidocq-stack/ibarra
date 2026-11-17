@@ -518,16 +518,25 @@ public final class PagePrecompiler {
             });
         }
 
-        /** The module attribute with {@code previous} replaced by {@code provider} among the page index providers. */
+        /**
+         * The module attribute with {@code previous} replaced by {@code provider} among the page index providers.
+         * The page index keeps its place among the services the module provides, so a run that changes no page
+         * writes the descriptor it read, byte for byte (IBARRA-159).
+         */
         private static ModuleAttribute withPageIndexProvider(ModuleAttribute attribute, String previous, String provider) {
             var entries = new ArrayList<ModuleProvideInfo>();
             var implementations = new ArrayList<ClassDesc>();
+            int place = -1;
             for (var entry : attribute.provides()) {
                 if (!entry.provides().asSymbol().equals(ClassDesc.of(SERVICE))) entries.add(entry);
-                else implementations.addAll(retainedImplementations(entry, previous));
+                else {
+                    place = entries.size();
+                    implementations.addAll(retainedImplementations(entry, previous));
+                }
             }
             if (provider != null && !implementations.contains(ClassDesc.of(provider))) implementations.add(ClassDesc.of(provider));
-            if (!implementations.isEmpty()) entries.add(ModuleProvideInfo.of(ClassDesc.of(SERVICE), implementations));
+            if (!implementations.isEmpty())
+                entries.add(place < 0 ? entries.size() : place, ModuleProvideInfo.of(ClassDesc.of(SERVICE), implementations));
             return ModuleAttribute.of(attribute.moduleName(), attribute.moduleFlagsMask(), attribute.moduleVersion().orElse(null),
                     attribute.requires(), attribute.exports(), attribute.opens(), attribute.uses(), entries);
         }

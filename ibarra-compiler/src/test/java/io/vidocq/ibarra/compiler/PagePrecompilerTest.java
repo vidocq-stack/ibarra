@@ -20,6 +20,11 @@
 package io.vidocq.ibarra.compiler;
 
 import java.io.File;
+import java.lang.classfile.Attributes;
+import java.lang.classfile.ClassFile;
+import java.lang.classfile.attribute.ModuleAttribute;
+import java.lang.classfile.attribute.ModuleProvideInfo;
+import java.lang.constant.ClassDesc;
 import java.lang.module.*;
 import java.nio.file.*;
 import java.util.*;
@@ -1161,6 +1166,32 @@ class PagePrecompilerTest {
                         java.lang.constant.PackageDesc.of("demo"), java.lang.constant.PackageDesc.of("demo.generated"))))));
         Files.delete(web.resolve("index.jsp")); precompile();
         assertEquals(Set.of("demo"), ModuleFinder.of(classes).find("demo.web").orElseThrow().descriptor().packages());
+    }
+
+    @Test
+    void aRunThatChangesNoPageLeavesTheDescriptorAsALaterBuildStepCompletedIt() throws Exception {
+        prepare(false); Files.writeString(web.resolve("index.jsp"), "page"); precompile();
+        Path worker = directory.resolve("original/demo/Worker.java");
+        Files.writeString(worker, "package demo; public class Worker implements Runnable { public void run() { } }");
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null, "--release", "25", "-proc:none",
+                "--module-path", modulePath(), "-d", classes.toString(), worker.toString()));
+        Path info = classes.resolve("module-info.class");
+        var cf = ClassFile.of();
+        // A later build step registers one more service after the page index, as Vidocq does for the Peano accessors.
+        Files.write(info, cf.transformClass(cf.parse(info), (builder, element) -> {
+            if (element instanceof ModuleAttribute module) {
+                var provides = new ArrayList<>(module.provides());
+                provides.add(ModuleProvideInfo.of(ClassDesc.of("java.lang.Runnable"), List.of(ClassDesc.of("demo.Worker"))));
+                builder.with(ModuleAttribute.of(module.moduleName(), module.moduleFlagsMask(), module.moduleVersion().orElse(null),
+                        module.requires(), module.exports(), module.opens(), module.uses(), provides));
+            } else builder.with(element);
+        }));
+        byte[] completed = Files.readAllBytes(info);
+        precompile();
+        assertEquals(List.of(ClassDesc.of("io.vidocq.ibarra.spi.PageIndex"), ClassDesc.of("java.lang.Runnable")),
+                cf.parse(info).findAttribute(Attributes.module()).orElseThrow().provides().stream()
+                        .map(entry -> entry.provides().asSymbol()).toList());
+        assertArrayEquals(completed, Files.readAllBytes(info));
     }
 
     @Test

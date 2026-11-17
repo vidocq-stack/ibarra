@@ -253,6 +253,9 @@ modules excluded. Initial I5 also verifies HTTP deployment on Foy/Chappe.
 `PagePrecompiler` emits application pages and a `PageIndex` with direct constructor
 references. The JDK Class-File API updates only the compiled module's service and
 package metadata; existing providers, exports, opens and requirements are preserved.
+The page index keeps its place among the services the module provides: a run that
+changes no page writes the descriptor it read, byte for byte, so a build tool that
+compares the classes by content sees no change.
 The core's `PrecompiledPages` catalogue discovers indexes in a supplied module
 layer without creating servlet instances. Deployment creates and initializes pages.
 

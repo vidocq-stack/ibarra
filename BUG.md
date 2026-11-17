@@ -1,5 +1,28 @@
 # BUG.md — Ibarra
 
+## IBARRA-159 · 2026-11-17 · A precompilation that changes no page moved the page index to the end of the module's services
+
+- Symptom: `vidocq:dev` reloaded an application whose recompile had compiled nothing:
+  `Hot reload signalled after 11216 ms (layer swap: module-info changed)`, 10 to 15 seconds for a save that changed
+  no class. Seen with Vidocq's Bistro example (4 JSP pages, 4 Peano accessor providers): after a compile, a
+  `mvn process-classes` with nothing to compile changed one file of `target/classes`, `module-info.class`. `javap`
+  shows the same module before and after, with its two `provides` in the other order: the page index first after the
+  compile, last after the next run. A third run changed nothing more.
+- Minimal reproduction: `PagePrecompilerTest.aRunThatChangesNoPageLeavesTheDescriptorAsALaterBuildStepCompletedIt`.
+  Precompile one page, add a `provides` of another service after the page index (what `vidocq:generate` does for the
+  Peano accessors, which it registers after the pages), precompile again with the same page: the descriptor then
+  listed the other service first, and its bytes differed.
+- Cause: `PagePrecompiler.withPageIndexProvider` rebuilt the list as "every other service, then the page index": it
+  took its own entry out and appended it again at the end. After a compile the descriptor javac writes has neither
+  service: Ibarra appends the page index, a later step appends its own, so the page index comes first. On the next
+  run without a compile Ibarra moved it to the end. The module was the same and its bytes were not, and a tool that
+  compares the classes by content, such as Vidocq's dev loop, saw a changed descriptor.
+- Status: FIXED (2026-11-17), branch `fix/page-index-provides-in-place`: the page index keeps its place among the
+  services the module provides, and goes to the end only when the module had none. A run that changes no page
+  writes the descriptor it read, byte for byte. Checked on the Bistro example with the fixed compiler: a compile,
+  then two runs with nothing to compile, leave every file of `target/classes` as it was (the build information
+  aside, which every Maven run rewrites).
+
 ## IBARRA-158 · 2026-11-02 · The java.beans introspection caches kept every application layer vidocq dev discarded
 
 - Symptom: after N hot reloads of `vidocq dev` on a page application, N+1 application class loaders stayed alive.
